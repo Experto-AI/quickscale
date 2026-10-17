@@ -1,7 +1,7 @@
 # Coherence Audit — Open Items
 
 Cross-module conformance drift against [decisions.md § Module Conventions](../technical/decisions.md#module-conventions).
-Last verified at `30b0b6b1` (2026-10-16), full census. Open items only: resolved items (38 of 41),
+Last verified at `30b0b6b1` (2026-10-16), full census. Open items only: resolved items (40 of 41),
 census tables and pass history are in git history. Cite an item by its slug ID, a proposed rule as "coherence proposal N", and a gap as "coherence
 gap N". These numbers come from the 2026-10-16 census and stay fixed until the entry closes.
 
@@ -23,24 +23,11 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
   fixture: `if "billing" in modules:`.
 - **Related:** arch watchlist `core-holds-module-vocabulary`.
 
-### `startup-presence-guard-copies` — checks re-test projected-setting presence
-**Class:** tax · **Confidence:** Medium
-
-- **Drift.** analytics, billing and notifications `checks.py` repeat the
-  `projected_setting_names` + `hasattr` guard that the generic settings check
-  (`runtime/conventions.py`) already enforces.
-- **Fix.** Rule: a module check MUST NOT re-test a projected setting's presence. Check: a
-  rule-6 AST scan.
-
 ## Proposed rules (pending merge into decisions.md § Module Conventions)
 
 51. **CLI module knowledge** [`cli-module-name-branches`]. ✅ The CLI reaches module-specific
     behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or
     equality branch on a module name in core or the CLI outside rule 37's list. (SA287)
-55. **Manifest owns validation and throttle rates** [`startup-presence-guard-copies`]. ✅ Adapters
-    evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a
-    `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
-    (SA291)
 
 ## Open enforcement gaps (SA296)
 
@@ -48,11 +35,12 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
     module-name order, yet `INSTALLED_APPS` and `MIDDLEWARE` compose in module-name order
     (`_sort_module_items`). No defect today: auth's `AccountMiddleware` happens to sort before
     orgs' `TenantMiddleware`. Fix: explicit `before`/`after`, or the rule names the exception.
-21. **Rule 17's destructive duty keys on command-name keywords.** `--dry-run` is matched as a
-    substring, so a command named `_reset` or `_wipe` passes. `--json` is never required, and
-    `--trigger` is checked only when present (`_package_commands.py`).
-22. **Rules 5 and 34 skip a module missing from `MODULE_LAYERS`.** Only a pytest backstops
-    this, and the decisions.md layer table is never compared with `MODULE_LAYERS`.
+21. **Rule 17's remaining flag clauses.** `--json` is never required, and `--trigger` is
+    checked only when present (`_package_commands.py`). The destructive duty is now keyed on
+    the operation named in the command's own code and `--dry-run` is a declared-flag check
+    (SA296 (b)); a command that resolves its operation from a computed name (the backups DR
+    bridge's `ADAPTER_FUNCTIONS.get(function_name)`) stays outside that detector and remains
+    uncovered here.
 23. **Capability declarations are open-world.** A misspelled capability on an `AppConfig` is
     never flagged, and the harness and core each keep a literal set with no cross-check.
 24. **Clauses with no detector:** rule 13's `TenantModelAdmin` registration and rule 11's

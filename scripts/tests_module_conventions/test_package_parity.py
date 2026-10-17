@@ -214,6 +214,21 @@ CASE_BUILDERS = {
             checks="_PROJECTED_SECRETS = ('QUICKSCALE_DEMO_SECRET_KEY',)\n",
         )
     ),
+    "checks_projected_recheck": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            checks=(
+                "from django.conf import settings\n\n"
+                "from quickscale_core.runtime import projected_setting_names\n\n\n"
+                "def check_demo() -> list[str]:\n"
+                "    return [\n"
+                "        name\n"
+                "        for name in projected_setting_names('demo')\n"
+                "        if not hasattr(settings, name)\n"
+                "    ]\n"
+            ),
+        )
+    ),
     "format_flag": lambda: _corpus(
         _command_module(
             "report",
@@ -303,6 +318,80 @@ CASE_BUILDERS = {
             "        parser.add_argument('--slug')\n"
             "        parser.add_argument('--confirm')\n"
             "        parser.add_argument('--dry-run', action='store_true')\n",
+        )
+    ),
+    "reset_without_dry_run": lambda: _corpus(
+        _command_module(
+            "reset",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        Widget.objects.filter(stale=True).delete()\n",
+        )
+    ),
+    "wipe_without_dry_run": lambda: _corpus(
+        _command_module(
+            "wipe",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        Widget.objects.all().delete()\n",
+        )
+    ),
+    "dry_run_declared": lambda: _corpus(
+        _command_module(
+            "reset",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--dry-run', action='store_true')\n"
+            "\n"
+            "    def handle(self, *args, **options):\n"
+            "        Widget.objects.all().delete()\n",
+        )
+    ),
+    "purge_without_deleting": lambda: _corpus(
+        _command_module(
+            "purge",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--confirm')\n"
+            "\n"
+            "    def handle(self, *args, **options):\n"
+            "        self.stdout.write('nothing to purge')\n",
+        )
+    ),
+    "adapter_operation": lambda: _corpus(
+        _command_module(
+            "prune",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        ADAPTER_FUNCTIONS['prune_backups'](dry_run=False)\n",
+        )
+    ),
+    "lock_without_overwrite": lambda: _corpus(
+        _command_module(
+            "sweep",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        Widget.objects.select_for_update().first()\n",
         )
     ),
     "print_call": lambda: _corpus(
@@ -584,7 +673,15 @@ EXACT_FINDINGS = (
         "rule_6_no_legacy_names",
         (
             "rule 6: demo: checks.py:1 names setting QUICKSCALE_DEMO_SECRET_KEY; "
-            "read it from the manifest projection",
+            "the generic settings check validates it",
+        ),
+    ),
+    (
+        "checks_projected_recheck",
+        "rule_6_no_legacy_names",
+        (
+            "rule 6: demo: checks.py:9: re-tests a projected setting's presence; "
+            "the generic settings check validates it",
         ),
     ),
     (
@@ -647,6 +744,24 @@ EXACT_FINDINGS = (
             "a slug lookup is non-destructive preflight",
         ),
     ),
+    (
+        "reset_without_dry_run",
+        "rule_17_management_commands",
+        ("rule 17: demo: destructive quickscale_demo_reset takes no --dry-run",),
+    ),
+    (
+        "wipe_without_dry_run",
+        "rule_17_management_commands",
+        ("rule 17: demo: destructive quickscale_demo_wipe takes no --dry-run",),
+    ),
+    ("dry_run_declared", "rule_17_management_commands", ()),
+    ("purge_without_deleting", "rule_17_management_commands", ()),
+    (
+        "adapter_operation",
+        "rule_17_management_commands",
+        ("rule 17: demo: destructive quickscale_demo_prune takes no --dry-run",),
+    ),
+    ("lock_without_overwrite", "rule_17_management_commands", ()),
     (
         "print_call",
         "rule_17_management_commands",

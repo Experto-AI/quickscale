@@ -24,10 +24,15 @@ This module is the one implementation of the cross-module conventions:
   vocabulary, without coercion, and fails startup naming the setting and the
   fix.  It also refuses the retired setting names the module's own shipped
   ``module.yml`` declares as ``retired_settings`` beside ``retired_options``
-  (rule 6).  Core holds no per-module names; the schema comes from the
-  project and the refusal names from the module's manifest.  A module's own
-  checks ask :func:`module_settings_are_supplied` before reading a declared
-  setting, because Django runs every registered system check independently.
+  (rule 6), and requires the module's manifest-projected settings — the
+  ``_ENV_VAR`` secret settings and the unconditional derived settings
+  ``apply`` writes beyond the declared options — wherever the managed
+  ``MODULE_SETTINGS`` mapping is present, so no module check re-tests a
+  projected setting's presence (rule 10).  Core holds no per-module names;
+  the schema comes from the project and the refusal names from the module's
+  manifest.  A module's own checks ask
+  :func:`module_settings_are_supplied` before reading a declared setting,
+  because Django runs every registered system check independently.
 * :func:`exception_handler` — rule 9's single QuickScale HTTP error shape,
   installed as ``REST_FRAMEWORK["EXCEPTION_HANDLER"]`` by the generated
   settings.  It also renders a module error that is not a DRF ``APIException``
@@ -69,7 +74,10 @@ from django.conf import settings
 from django.core.checks import CheckMessage, Error, register
 from django.core.exceptions import ImproperlyConfigured
 
-from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
+from quickscale_core.contracts.resolvers import (
+    load_module_manifest_with_fallback,
+    projected_setting_names,
+)
 from quickscale_core.manifest.settings_schema import collect_setting_issues
 from quickscale_core.runtime._error_shape import (
     _VALIDATION_ERROR_CODE,
@@ -82,6 +90,12 @@ from quickscale_core.runtime._error_shape import (
 )
 from quickscale_core.runtime._scheduled_off import (
     require_scheduled_module_enabled as require_scheduled_module_enabled,
+)
+from quickscale_core.runtime._settings_supplied import (
+    _SETTINGS_SCHEMA_ATTRIBUTE,
+    _declared_setting_is_supplied,
+    _missing_projected_settings,
+    module_settings_are_supplied as module_settings_are_supplied,
 )
 
 if TYPE_CHECKING:
@@ -475,9 +489,6 @@ def register_module_checks(
         register(label)(cast("_RegisteredCheck", check))
 
 
-#: The managed-settings block ``quickscale apply`` writes and this check reads.
-_SETTINGS_SCHEMA_ATTRIBUTE = "MODULE_SETTINGS_SCHEMA"
-
 #: System-check ids for the failures the generic settings check reports.
 _SETTINGS_SCHEMA_MISSING_ID = "quickscale_settings.E001"
 _SETTINGS_MISSING_ID = "quickscale_settings.E002"
@@ -514,12 +525,19 @@ def register_module_settings_check(
     wrote is exactly the one still carried.  An explicit *retired_settings*
     mapping overrides the manifest read.
 
+    The check also requires the module's manifest-projected settings — the
+    ``_ENV_VAR`` secret settings and the unconditional derived settings
+    ``apply`` writes beyond the declared options — wherever the managed
+    ``MODULE_SETTINGS`` mapping is present.  ``apply`` writes the projected
+    settings and that mapping together, so a projected name absent from it
+    was not written by the apply that wrote the schema (rule 10).
+
     Args:
         app_config: The module's app config; its label tags the registered
             system check and names the module in aggregated failures.
         module_name: The module's name — the key its schema is stored under
             in ``MODULE_SETTINGS_SCHEMA``, and the manifest whose
-            ``retired_settings`` the check reads.
+            ``retired_settings`` and projected settings the check reads.
         retired_settings: Optional mapping of retired setting names to the
             messages naming their replacements; when omitted, the module's
             manifest declares them.
@@ -528,8 +546,9 @@ def register_module_settings_check(
         ValueError: when *module_name* is not a non-empty string, or when
             *retired_settings* is not a mapping of non-empty names to
             non-empty messages.
-        ImproperlyConfigured: when the project's schema or any declared
-            setting is missing or invalid, or a retired setting is present.
+        ImproperlyConfigured: when the project's schema or any declared or
+            projected setting is missing or invalid, or a retired setting is
+            present.
     """
     if not isinstance(module_name, str) or not module_name:
         raise ValueError(
@@ -557,82 +576,30 @@ def register_module_settings_check(
                     f"replacement message for retired setting {retired_name!r}."
                 )
     register_module_checks(
-        app_config, [_module_settings_check(module_name, retired_settings)]
+        app_config,
+        [
+            _module_settings_check(
+                module_name,
+                retired_settings,
+                projected_setting_names(module_name),
+            )
+        ],
     )
 
 
 def _module_settings_check(
     module_name: str,
     retired_settings: Mapping[str, str] | None = None,
+    projected_settings: Sequence[str] = (),
 ) -> CheckCallable:
     """Return the generic settings check bound to *module_name*."""
 
     def check(_app_configs: object = None, **kwargs: object) -> list[CheckMessage]:
-        return _module_settings_issues(module_name, retired_settings)
+        return _module_settings_issues(
+            module_name, retired_settings, projected_settings
+        )
 
     return check
-
-
-def _declared_setting_is_supplied(setting_name: str) -> bool:
-    """Return whether the managed wiring supplied *setting_name*.
-
-    In a generated project ``settings/modules.py`` contributes both the
-    ``MODULE_SETTINGS`` mapping and the schema, and ``settings/base.py``
-    applies the mapping; a declared setting absent from that mapping was not
-    written by ``apply``, even when a base template default or a library
-    default happens to define the name.  Without the managed mapping (module
-    test settings, standalone configurations) the configured settings must
-    explicitly set the name; Django's ``is_overridden`` distinguishes that
-    from a global or third-party default.
-    """
-    managed = getattr(settings, "MODULE_SETTINGS", None)
-    if isinstance(managed, Mapping):
-        return setting_name in managed and hasattr(settings, setting_name)
-    is_overridden = getattr(settings, "is_overridden", None)
-    if not callable(is_overridden):
-        return hasattr(settings, setting_name)
-    return bool(hasattr(settings, setting_name) and is_overridden(setting_name))
-
-
-def module_settings_are_supplied(module_name: str) -> bool:
-    """Return whether every declared setting of *module_name* is supplied.
-
-    Django invokes every registered system check independently, so a module's
-    own check may run even when the generic settings check reported a missing
-    setting.  The module check asks this helper before reading a declared
-    setting: the names come from the project's ``MODULE_SETTINGS_SCHEMA``,
-    never a hand-maintained list, and a missing or malformed schema reports
-    ``False`` so the generic check stays the one that names the fix.
-
-    Args:
-        module_name: The module whose declared settings are checked.
-
-    Returns:
-        ``True`` when the schema declares settings for *module_name* and every
-        one of them is supplied; ``False`` otherwise.
-
-    Raises:
-        ValueError: when *module_name* is not a non-empty string.
-    """
-    if not isinstance(module_name, str) or not module_name:
-        raise ValueError(
-            "module_settings_are_supplied() requires a non-empty module name."
-        )
-    schema_all = getattr(settings, _SETTINGS_SCHEMA_ATTRIBUTE, None)
-    if not isinstance(schema_all, Mapping):
-        return False
-    module_schema = schema_all.get(module_name)
-    if not isinstance(module_schema, Mapping) or not module_schema:
-        return False
-    for entry in module_schema.values():
-        if not isinstance(entry, Mapping):
-            return False
-        setting_name = entry.get("setting")
-        if not isinstance(setting_name, str) or not _declared_setting_is_supplied(
-            setting_name
-        ):
-            return False
-    return True
 
 
 def _retired_setting_issues(
@@ -656,8 +623,9 @@ def _retired_setting_issues(
 def _module_settings_issues(
     module_name: str,
     retired_settings: Mapping[str, str] | None = None,
+    projected_settings: Sequence[str] = (),
 ) -> list[CheckMessage]:
-    """Validate the project's declared settings for *module_name*."""
+    """Validate the project's declared and projected settings for *module_name*."""
     issues: list[CheckMessage] = _retired_setting_issues(retired_settings)
     schema_all = getattr(settings, _SETTINGS_SCHEMA_ATTRIBUTE, None)
     if not isinstance(schema_all, Mapping):
@@ -712,6 +680,13 @@ def _module_settings_issues(
                 id=_SETTINGS_INVALID_ID,
             )
         )
+    issues.extend(
+        Error(
+            f"{name} is not set. {_SETTINGS_APPLY_HINT}",
+            id=_SETTINGS_MISSING_ID,
+        )
+        for name in _missing_projected_settings(projected_settings)
+    )
     return issues
 
 

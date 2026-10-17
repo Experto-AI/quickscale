@@ -23,6 +23,8 @@ from typing import Any as Any
 from scripts.module_conventions._dependencies_layers import (
     _core_module_setting_findings,
     _module_layer_findings,
+    decisions_layer_table,
+    layer_table_findings,
 )
 from scripts.module_conventions._dependencies_manifests import (
     BASE_RUNTIME_DEPENDENCY_NAMES,
@@ -104,6 +106,8 @@ __all__ = (
     "_mypy_effective_option",
     "_mypy_glob_targets_module",
     "_pyproject_runtime_dependencies",
+    "decisions_layer_table",
+    "layer_table_findings",
     "rule_35_secrets",
     "rule_36_typecheck_config",
     "rule_39_module_dependencies",

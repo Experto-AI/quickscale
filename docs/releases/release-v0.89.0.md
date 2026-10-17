@@ -153,8 +153,9 @@ update the embedded billing module to this release first: from a clean tree, run
 `quickscale update --confirm-contract-adoption`, which updates the embedded billing module through
 its configured branch, regenerates the managed wiring including the projected secrets, and records
 the adoption; an unflagged `quickscale update` or `quickscale apply` is refused while the adoption
-is pending. Until then an enabled billing module refuses startup with `quickscale_billing.E001`
-naming the missing projected settings, and the credential values stay in the deployment environment
+is pending. Until then an enabled billing module refuses startup with
+`quickscale_settings.E002` from the generic settings check, naming the projected settings the
+managed wiring does not carry, and the credential values stay in the deployment environment
 under the same names.
 
 **Analytics identity.** The analytics module's outbound PostHog distinct ID is no longer derived

@@ -100,12 +100,13 @@ def resolve_manifest_module_options(
 def projected_setting_names(module_name: str) -> tuple[str, ...]:
     """Return the setting names ``apply`` projects beyond a module's options.
 
-    A module's startup check verifies these names exist in the project's
-    settings, so the module never re-lists them in its own ``checks.py``
-    (Module Conventions rule 6): the manifest is the one home, and a renamed
-    setting is renamed once, in ``module.yml``.  The projection is names-only
-    and reads the module's shipped manifest through the same fallback as the
-    other readers here — source tree first, bundled snapshot second:
+    The generic settings check requires these names wherever the managed
+    ``MODULE_SETTINGS`` wiring is present, so no module check re-lists or
+    re-tests them (Module Conventions rules 6 and 10): the manifest is the one
+    home, and a renamed setting is renamed once, in ``module.yml``.  The
+    projection is names-only and reads the module's shipped manifest through
+    the same fallback as the other readers here — source tree first, bundled
+    snapshot second:
 
     * every mapped option whose Django setting ends in ``_ENV_VAR``
       contributes its suffix-stripped secret setting (rule 35);

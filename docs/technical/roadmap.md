@@ -47,30 +47,27 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
-| SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
-| SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
+| SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | — | Optional |
 | SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin on v89) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA291 (a…c) ──► SA287 (a, b) ──► SA277
+Track 2: SA287 (a, b) ──► SA277
 Track 3: SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 repin ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA291 waited on SA288, which has landed (both rewrote
-the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
-SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waited on SA292, which has landed (both rewrite harness rule 17);
+SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA291 landed, so SA287 starts — it consumes the
+notifications adapter's validation copies at `apply_support.py:104`; SA296 waited on SA292, which has landed (both rewrite harness rule 17);
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA291 and SA296 have no unmet dependency; each track takes one at a time,
+**Parallel start.** SA296 has no unmet dependency, and SA287 starts now that SA291 has landed; each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site.
@@ -97,7 +94,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA291 | yes | yes | yes | yes | no |
+| 2 | SA287 | yes | yes | yes | yes | no |
 | 3 | SA296 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -449,42 +446,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA293 — One test-settings base, one pyproject template, no ticket ids in tests or manifests.**
 
-- [ ] **SA291 — The manifest owns option validation and throttle rates.**
-
-  Closes coherence `adapter-restates-manifest-validation`, `throttle-rate-merge-copies`, and
-  `startup-presence-guard-copies` and merges coherence proposal 55 into decisions rules 10, 12, and 32.
-
-  **Context:** notifications' `adapter.py:20–70` re-implements four manifest patterns, its domain
-  check by hand; five adapters hand-merge `DEFAULT_THROTTLE_RATES`; three `checks.py` re-test a
-  projected setting's presence that the generic settings check already enforces.
-
-  **Acceptance:** the decisions rules carry proposal 55. Adapter predicates evaluate the manifest's declared
-  validation; a manifest `throttle_scopes` projection is merged by core; no module check
-  re-tests a projected setting. The harness bans `re.compile` and `DEFAULT_THROTTLE_RATES` in
-  `adapter.py` and presence re-checks in `checks.py`, each with a control.
-
-  **Slices:**
-  - [x] (a) Notifications' predicates evaluate declared validation, with the `re.compile` ban
-    (Tier 2-fast). Landed: the adapter's live-delivery / runtime-backend predicate evaluates the
-    declared `validation` of the sender, domain, and API-key options through the shared engine
-    (`collect_resolved_option_validation_issues`); production-targeted keeps its
-    enabled/non-blank-domain meaning, the hand-written patterns and the placeholder constant are
-    gone, and harness rule 12 bans `re.compile` in `adapter.py` — alias spellings included — with
-    controls; decisions rule 12 carries the clause. (b) is next.
-  - [x] (b) The `throttle_scopes` projection merged in `compose_rest_framework`, five adapters
-    migrated, and the literal ban (Tier 2-full: the projection's schema and merge order with
-    project overrides need design; it serves five modules, so the
-    `manifest-dsl-vocabulary-growth` watch trigger does not fire). Landed: `module.yml` declares
-    `throttle_scopes` (scope → `_RATE_LIMIT` option; the loader refuses a non-stemmed scope or an
-    undeclared or non-string option), core resolves the declared rates into the managed
-    `MODULE_THROTTLE_SCOPES`, and `compose_rest_framework` merges conservative defaults, then the
-    declared scopes, then the project's own `REST_FRAMEWORK`; billing, blog, forms, listings, and
-    orgs hand-merge nothing, and harness rule 12 bans the `DEFAULT_THROTTLE_RATES` literal in
-    `adapter.py`, with controls. The generated settings templates change, so the
-    `sa291-declared-throttle-scopes` contract step and the release notes carry the adoption.
-    (c) is next.
-  - [ ] (c) Drop the presence re-checks in analytics, billing, and notifications, with the rule-6
-    scan (Tier 2-fast).
+- [x] **SA291 — The manifest owns option validation and throttle rates.**
 
 - [ ] **SA287 — The CLI reaches module behaviour through manifest fields and hooks.**
 
@@ -536,10 +498,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Closes coherence gaps 17 and 20–25, which no item carries.
 
-  **Context:** rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
-  module missing from `MODULE_LAYERS`; `AppConfig` capability declarations are open-world, with
-  literal sets in both the harness and core; rule 13's `TenantModelAdmin` registration and rule
-  11's compare-against-members clause have no detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
+  **Context:** `AppConfig` capability declarations are open-world, with literal sets in both
+  the harness and core; rule 13's `TenantModelAdmin` registration and rule 11's
+  compare-against-members clause have no detector;
+  [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
   these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
   rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
   order.
@@ -550,11 +512,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [x] (a): landed as the module-conventions harness's rule 17 `BaseCommand`/`CommandError`
     detector, with control cases and exact-findings rows; decisions rule 40 drops the unchecked
-    "unlisted core ports" claim. (b) is next.
-  - [ ] (b) Rule 17's destructive duty keyed on what the command deletes, not on its name, with
-    `_reset`/`_wipe` controls (Tier 2-full: detecting a destructive command needs design).
-  - [ ] (c) The harness fails on a module missing from `MODULE_LAYERS` and compares decisions'
-    layer table with it (Tier 1).
+    "unlisted core ports" claim.
+  - [x] (b): landed as the destructive duty keyed on the operation named in the command's own
+    code — a deleting, anonymizing, or overwriting operation, the adapter registry's callable
+    key included — with `--dry-run` checked as a declared flag; `_reset`/`_wipe` controls and
+    exact-findings rows pin it. A computed-name dispatch such as the backups DR bridge's stays
+    outside the detector, recorded in coherence gap 21.
+  - [x] (c): landed as the harness's layer-table check: a shipped module missing from
+    `MODULE_LAYERS`, an entry naming no module, and any disagreement with decisions' layer
+    table fail the check, with control cases and a fail-closed table parser. (d) is next.
   - [ ] (d) Capability declarations checked against core's `CAPABILITIES`, the harness reading
     core's set instead of its own literal (Tier 2-fast).
   - [ ] (e) Detectors for rule 13's admin registration and rule 11's compare-against-members

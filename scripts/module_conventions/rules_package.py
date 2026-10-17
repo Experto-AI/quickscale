@@ -21,7 +21,7 @@ from typing import Any as Any
 
 from scripts.module_conventions._package_commands import (
     CONFIRM_COMMAND_KEYWORDS,
-    DESTRUCTIVE_COMMAND_KEYWORDS,
+    DESTRUCTIVE_OPERATION_WORDS,
     ORGANIZATION_SELECTOR_FLAG,
     _command_findings,
     _command_flags,
@@ -45,6 +45,7 @@ from scripts.module_conventions._package_legacy import (
     _manifest_retired_settings,
     _mapping_entries,
     _module_legacy_findings,
+    _projected_recheck_findings,
     _retired_declaration_keys,
     _retired_name_reads,
     _setting_relist_findings,
@@ -141,7 +142,7 @@ from scripts.module_conventions.core import (
 #: facade.
 __all__ = (
     "CONFIRM_COMMAND_KEYWORDS",
-    "DESTRUCTIVE_COMMAND_KEYWORDS",
+    "DESTRUCTIVE_OPERATION_WORDS",
     "ORGANIZATION_SELECTOR_FLAG",
     "RETIRED_SETTINGS_NAME",
     "RULE_11_ONE_OFF_FILES",
@@ -196,8 +197,10 @@ def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
     option key is not also accepted as a live option, retired setting names
     live in the manifest (never a Python ``RETIRED_SETTINGS`` mapping), a
     module's declared retired setting names are read nowhere in shipped source
-    outside their refusal declaration, and a module's ``checks.py`` reads its
-    setting names from the manifest projection instead of re-listing them.
+    outside their refusal declaration, and a module's ``checks.py`` names none
+    of its setting names and calls no ``projected_setting_names``: the generic
+    settings check validates the declared settings and the manifest's
+    projected settings (rule 10).
     """
     violations: list[str] = []
     retired: set[str] = set()
@@ -205,6 +208,7 @@ def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
         retired.update(_manifest_retired_settings(module))
         violations.extend(_module_legacy_findings(module))
         violations.extend(_setting_relist_findings(module))
+        violations.extend(_projected_recheck_findings(module))
     if not retired:
         return violations
     populations: list[tuple[str, Mapping[str, str]]] = [
@@ -227,7 +231,7 @@ def rule_17_management_commands(corpus: Corpus) -> list[str]:
                 # Django discovers commands as non-underscore modules in the
                 # commands package, so a private support module is not a command.
                 continue
-            violations.extend(_command_findings(module.name, command, _parse(text), text))
+            violations.extend(_command_findings(module.name, command, _parse(text)))
     return violations
 
 

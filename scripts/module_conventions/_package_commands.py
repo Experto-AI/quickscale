@@ -53,14 +53,34 @@ def _constant_string(node: ast.expr | None) -> str | None:
     return None
 
 
-DESTRUCTIVE_COMMAND_KEYWORDS = (
-    "purge",
+#: Rule 17: the operation words that mark a command as one that deletes,
+#: anonymizes, or overwrites data.  Destructiveness is keyed on the operation
+#: a command calls, never on the command's own name: a command named
+#: ``..._reset`` or ``..._wipe`` is refused when its code performs a
+#: destructive operation, and a name-keyword command whose code performs none
+#: is not.  The first word of the operation's name carries the verb —
+#: ``delete_expired`` deletes, while ``select_for_update`` and ``bulk_update``
+#: do not — so a synonym this list does not name stays open-world, the
+#: detector's recorded boundary; an operation resolved from a computed name
+#: (the backups DR bridge's ``ADAPTER_FUNCTIONS.get(function_name)``) names no
+#: operation at its call site and stays outside the detector too.  ``save``
+#: and ``update`` are the repository's overwrite verbs; a create-only command
+#: that persists through a bare ``save()`` is over-refused, the fail-closed
+#: direction.
+DESTRUCTIVE_OPERATION_WORDS = (
     "anonymize",
-    "restore",
-    "prune",
     "delete",
-    "sync_media",
+    "overwrite",
     "promote",
+    "prune",
+    "purge",
+    "reset",
+    "restore",
+    "save",
+    "sync_media",
+    "truncate",
+    "update",
+    "wipe",
 )
 
 #: Rule 17: the one scheduled-off refusal.  A command whose ``--trigger``
@@ -226,8 +246,46 @@ def _raise_findings(
     return violations
 
 
-def _command_findings(module_name: str, command: str, tree: ast.Module, text: str) -> list[str]:
-    """Return one management command's rule 17 findings, in report order."""
+def _callee_operation_name(node: ast.Call) -> str:
+    """
+    Return the operation name a call invokes, or an empty string.
+
+    A call through the adapter registry names its operation in the registry
+    key — ``ADAPTER_FUNCTIONS["prune_backups"](...)`` — so the key is the
+    operation name rather than the mapping's uninformative attribute.
+    """
+    func = node.func
+    if isinstance(func, ast.Subscript) and isinstance(func.slice, ast.Constant):
+        if isinstance(func.slice.value, str):
+            return func.slice.value
+    return _call_func_name(node)
+
+
+def _is_destructive_operation(name: str) -> bool:
+    """Return True when an operation name begins with a destructive word."""
+    normalized = name.strip().lower().lstrip("_")
+    return any(
+        normalized == word or normalized.startswith(f"{word}_")
+        for word in DESTRUCTIVE_OPERATION_WORDS
+    )
+
+
+def _performs_a_destructive_operation(tree: ast.Module) -> bool:
+    """Return whether a command's own code calls a data-destroying operation."""
+    return any(
+        isinstance(node, ast.Call) and _is_destructive_operation(_callee_operation_name(node))
+        for node in ast.walk(tree)
+    )
+
+
+def _command_findings(module_name: str, command: str, tree: ast.Module) -> list[str]:
+    """
+    Return one management command's rule 17 findings, in report order.
+
+    The destructive duty is keyed on the operation the command calls, and
+    ``--dry-run`` must be a declared flag: a mention in a help string does not
+    satisfy it.
+    """
     bindings = _import_bindings(tree)
     flags = _command_flags(tree)
     violations = _command_base_findings(module_name, command, tree, bindings)
@@ -239,7 +297,6 @@ def _command_findings(module_name: str, command: str, tree: ast.Module, text: st
         )
     violations.extend(_call_findings(module_name, command, tree))
     violations.extend(_raise_findings(module_name, command, tree, bindings))
-    if any(keyword in command for keyword in DESTRUCTIVE_COMMAND_KEYWORDS):
-        if "--dry-run" not in text:
-            violations.append(f"rule 17: {module_name}: destructive {command} takes no --dry-run")
+    if _performs_a_destructive_operation(tree) and "--dry-run" not in flags:
+        violations.append(f"rule 17: {module_name}: destructive {command} takes no --dry-run")
     return violations

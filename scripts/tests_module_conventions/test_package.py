@@ -54,24 +54,155 @@ def test_command_output_control() -> None:
 
 
 def test_destructive_command_dry_run_control() -> None:
+    """Rule 17: the destructive duty is keyed on what the command deletes."""
     module = _golden_module()
-    broken = _with_files(
-        module,
-        **{
-            "management/commands/quickscale_demo_purge.py": (
-                "from django.core.management.base import BaseCommand\n"
-                "\n"
-                "\n"
-                "class Command(BaseCommand):\n"
-                "    def handle(self, *args, **options):\n"
-                "        return None\n"
-            )
-        },
+    assert _violations(checker.rule_17_management_commands, module) == []
+
+    def _command(name: str, source: str) -> Module:
+        return _with_files(module, **{f"management/commands/quickscale_demo_{name}.py": source})
+
+    reset = _command(
+        "reset",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.filter(stale=True).delete()\n",
     )
     assert any(
-        "dry-run" in violation
-        for violation in _violations(checker.rule_17_management_commands, broken)
+        "destructive quickscale_demo_reset takes no --dry-run" in violation
+        for violation in _violations(checker.rule_17_management_commands, reset)
     )
+    wipe = _command(
+        "wipe",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        manager = Widget.objects.all()\n"
+        "        manager.delete()\n",
+    )
+    assert any(
+        "destructive quickscale_demo_wipe takes no --dry-run" in violation
+        for violation in _violations(checker.rule_17_management_commands, wipe)
+    )
+    declared = _command(
+        "reset",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def add_arguments(self, parser):\n"
+        "        parser.add_argument('--dry-run', action='store_true')\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.all().delete()\n",
+    )
+    assert _violations(checker.rule_17_management_commands, declared) == []
+    mention_only = _command(
+        "reset",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        '    help = "Use --dry-run to preview the purge."\n'
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.all().delete()\n",
+    )
+    assert any(
+        "takes no --dry-run" in violation
+        for violation in _violations(checker.rule_17_management_commands, mention_only)
+    )
+    name_only = _command(
+        "purge",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def add_arguments(self, parser):\n"
+        "        parser.add_argument('--confirm')\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        self.stdout.write('nothing to purge')\n",
+    )
+    assert _violations(checker.rule_17_management_commands, name_only) == []
+
+
+def test_destructive_operation_evidence_control() -> None:
+    """Rule 17: an operation the command calls carries the destructiveness."""
+    module = _golden_module()
+
+    def _sweep(source: str) -> list[str]:
+        return _violations(
+            checker.rule_17_management_commands,
+            _with_files(module, **{"management/commands/quickscale_demo_sweep.py": source}),
+        )
+
+    anonymizing = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from demo.services import anonymize_expired_submissions\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        anonymize_expired_submissions(dry_run=False)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in anonymizing)
+    adapter = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        ADAPTER_FUNCTIONS['prune_backups'](dry_run=False)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in adapter)
+    overwriting = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.filter(stale=True).update(flagged=True)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in overwriting)
+    saving = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        widget = Widget.objects.first()\n"
+        "        widget.save()\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in saving)
+    helper = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def _purge_stale_rows(self):\n"
+        "        return Widget.objects.none()\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        self._purge_stale_rows()\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in helper)
+    locking = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.select_for_update().first()\n"
+    )
+    assert locking == []
 
 
 def test_command_base_control() -> None:
@@ -1223,6 +1354,69 @@ def test_checks_setting_relist_control() -> None:
     violations = _violations(checker.rule_6_no_legacy_names, retired_mapping)
     assert any("declare them in module.yml" in violation for violation in violations)
     assert not any("names setting" in violation for violation in violations)
+
+
+def test_checks_projected_recheck_control() -> None:
+    """Rule 6: checks delegate the projected presence to the generic check."""
+    module = _golden_module()
+    direct = _with_files(
+        module,
+        checks=(
+            "from django.conf import settings\n\n"
+            "from quickscale_core.runtime import projected_setting_names\n\n\n"
+            "def check_demo() -> list[str]:\n"
+            "    return [\n"
+            "        name\n"
+            "        for name in projected_setting_names('demo')\n"
+            "        if not hasattr(settings, name)\n"
+            "    ]\n"
+        ),
+    )
+    assert any(
+        "checks.py:9: re-tests a projected setting's presence" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, direct)
+    )
+    aliased = _with_files(
+        module,
+        checks=(
+            "from quickscale_core.runtime import projected_setting_names as projection\n"
+            "\n"
+            "\n"
+            "def check_demo():\n"
+            "    return projection('demo')\n"
+        ),
+    )
+    assert any(
+        "checks.py:5: re-tests a projected setting's presence" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, aliased)
+    )
+    attribute = _with_files(
+        module,
+        checks=(
+            "import quickscale_core.runtime as runtime\n"
+            "\n"
+            "\n"
+            "def check_demo():\n"
+            "    return runtime.projected_setting_names('demo')\n"
+        ),
+    )
+    assert any(
+        "checks.py:5: re-tests a projected setting's presence" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, attribute)
+    )
+    sanctioned = _with_files(
+        module,
+        checks=(
+            "from quickscale_core.runtime import module_settings_are_supplied\n"
+            "\n"
+            "\n"
+            "def check_demo() -> list[str]:\n"
+            "    if not module_settings_are_supplied('demo'):\n"
+            "        return []\n"
+            "    return []\n"
+        ),
+    )
+    assert _violations(checker.rule_6_no_legacy_names, sanctioned) == []
 
 
 def test_package_file_controls() -> None:
