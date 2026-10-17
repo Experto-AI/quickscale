@@ -36,10 +36,9 @@ rules that shipped surface must obey; it is not a description of it.
 ## Critical Rules
 
 **Documentation Hierarchy:**
-- ✅ decisions.md is authoritative - always wins conflicts
-- ✅ `docs/technical/implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, and `repository_layout.md` are the narrow-owner companion docs for current contract, validation, and structure detail
-- ✅ Update decisions.md FIRST, then other docs
-- ✅ Contributing guides: `docs/contrib/*.md`
+- ✅ decisions.md is authoritative and wins every conflict; [§ Document Responsibilities](#document-responsibilities) names the single owner of each other topic
+- ✅ A change updates the owning document first, and decisions.md in the same change when policy, a tie-breaker or the ownership map changes
+- ✅ Contributor engineering rules: `docs/contrib/rules.md`; stage guides: `docs/contrib/{plan,code,review,testing,debug}.md`
 - ✅ `CHANGELOG.md` is the canonical release history index for all versions
 - ✅ Release notes: `docs/releases/release-vX.XX.X.md` are the single public-facing release document for a version and may exist either as a clearly labeled release-prepared artifact before publish or as the linked note after tag/release publication
 - ✅ Every public release note follows [publish_procedure.md §1.3.1](publish_procedure.md#131-release-note-format), including prepared artifacts awaiting manual publish
@@ -1816,7 +1815,8 @@ MUST / MUST NOT (enforced by `quickscale_core/tests/test_doc_phrasing.py`).
 | docs/releases/ | one public note per version | |
 | docs/others/*-audit.md | open findings only; finding numbers are pass-local and MUST NOT be cited elsewhere | |
 | ai_context.md | derived AI baseline; on conflict the owner above wins | |
-| README.md, START_HERE.md, docs/index.md | navigation and overview | |
+| README.md | overview, quick start, package table; wins over package READMEs | |
+| START_HERE.md, docs/index.md | navigation | |
 | package and module README.md | package-local install and surface; never contradicts an **A** doc | |
 
 **Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.

@@ -1,8 +1,7 @@
 # Architecture Audit — Open Findings
 
 Last verified at `30b0b6b1` (2026-10-16). Open items only. Resolved findings and pass history
-are in git history (`git log -- docs/others/arch-audit.md`). Finding IDs are slugs. Never cite
-them from code, tests or other docs.
+are in git history (`git log -- docs/others/arch-audit.md`). Cite a finding only by its slug ID; section numbers are not stable.
 
 ## Open findings
 

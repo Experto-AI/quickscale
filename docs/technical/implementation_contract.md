@@ -61,7 +61,7 @@ Legacy release-era labels in older text are historical only. Documentation descr
 
 - Modules are selected during `quickscale plan` and configured through `quickscale.yml` before `quickscale apply` runs.
 - `quickscale apply` owns the managed backend/runtime wiring for installed modules, including settings and URL integration where the shipped contract defines them.
-- Supported module configuration never requires a manual edit of generated `settings.py`, `urls.py`, or Poetry metadata for supported module configuration paths.
+- Supported module configuration never requires a manual edit of generated `settings.py`, `urls.py`, or Poetry metadata.
 - If a desired-config rule changes, update this file and the owning module documentation in the same change.
 
 <a id="module-manifest-architecture"></a>

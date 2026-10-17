@@ -63,7 +63,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **Release history** = [CHANGELOG.md](./CHANGELOG.md) plus official tagged release notes in `docs/releases/`
 - **Generated Project** = Output of `quickscale plan`, then entering the generated directory and running `quickscale apply`
 
-See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#document-responsibilities) for complete terminology and Single Source of Truth reference
+Terms: [GLOSSARY.md](./GLOSSARY.md). Which document owns what: [decisions.md § Document Responsibilities](./docs/technical/decisions.md#document-responsibilities). Every document: [docs/index.md](./docs/index.md).
 
 **Package reference docs (informational context only):**
 - [quickscale/README.md](./quickscale/README.md) - meta-package packaging notes

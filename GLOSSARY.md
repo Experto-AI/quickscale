@@ -271,9 +271,3 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 - **[plan-apply-system.md](./docs/technical/plan-apply-system.md)** - Plan/apply workflow specification
 - **[quickscale.md](./docs/overview/quickscale.md)** - Current positioning and evolution rationale
 - **[roadmap.md](./docs/technical/roadmap.md)** - Development timeline and milestones
-
----
-
-**Last Updated**: 2026-08-16
-**Maintained By**: QuickScale maintainers
-**Feedback**: Open issue if terms need clarification or addition

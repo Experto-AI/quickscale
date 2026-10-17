@@ -1,8 +1,7 @@
 # REVIEW - Quality Control Guide
 
 Use this guide for review-stage questions, evidence requirements, and outcome
-language. Shared documents remain authoritative for normative engineering
-policy.
+language. [rules.md](rules.md) is authoritative for engineering rules.
 
 ## Review Checklist
 
@@ -37,4 +36,4 @@ When review finds issues:
 
 - separate blockers from optional follow-up improvements
 - call out missing evidence such as validation gaps or documentation gaps explicitly
-- keep feedback tied to the authoritative shared rule source whenever possible
+- tie each finding to the rule it breaks (a `rules.md` number or a `decisions.md` section)

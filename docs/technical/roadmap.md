@@ -15,15 +15,14 @@ webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#watchlist-latent-act-only-when-the-trigger-fires)).
 SA284, 0.89.0's one release requirement, has landed: the release build content-checks the wheel
-it uploads for the bundled manifests (arch `rules-held-by-parity-not-derivation`, §7).
-Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16, answering
-tech audit §13 Q1): 0.88.0 and earlier move to 0.89.0 on a fresh database, the 0.89.0 release
+it uploads for the bundled manifests (arch `rules-held-by-parity-not-derivation`).
+Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16): 0.88.0 and earlier move to 0.89.0 on a fresh database, the 0.89.0 release
 notes say so, and `initial-migration-edited-in-place` stays a watch item. Publication remains a
 maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
-tickets merge the matching coherence §6 rule into decisions with a harness detector, or record a
+tickets merge the matching coherence proposal into decisions with a harness detector, or record a
 review-only clause without one.
 
 The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
@@ -74,7 +73,7 @@ slices of two tickets: the freeze lands after SA153's build slices and before it
 **Parallel start.** SA291 and SA296 have no unmet dependency; each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
-once, offline, instead of on a live site (arch audit §7).
+once, offline, instead of on a live site.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -88,8 +87,8 @@ non-reseedable tenant data on `bap-web`. SA153's own tables live in the project-
 whose migrations are `0002+` from the start either way. Any module `0001` edit made before the
 freeze is applied to `bap-web` by hand or by a reseed. No open ticket changes a module schema.
 SA154 is an inventory, not work. SA191's repin pins the unpublished `v89` tree and does not wait for 0.89.0; its cutover does, and SA204's remaining slice (j) waits for SA153 (e). SA276 has
-landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site
-(arch audit §7); it is not a release requirement.
+landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site;
+it is not a release requirement.
 
 ### Track states
 
@@ -255,8 +254,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     two known `W006` properties warnings — matching the SA191 baseline; no carried module's
     migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
     (j) is next.
-  The 2026-10-16 arch pass found two branches that still key on labels or authorship (Finding 2,
-  option 1; it answers arch §12 Q2): `quickscale update` compares content only under an equal
+  The 2026-10-16 arch pass found two branches that still key on labels or authorship (arch `clean-break-schema-no-data-path`): `quickscale update` compares content only under an equal
   label (`_module_update.py:286–297`, `:365`), so the cross-release update the freeze exists to
   make safe is the one path left unverified; and `sync_migration_hashes.py --write` re-freezes an
   edited `0001` in the same commit that edits it, so the gate catches drift, not intent. Both
@@ -454,7 +452,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA291 — The manifest owns option validation and throttle rates.**
 
   Closes coherence `adapter-restates-manifest-validation`, `throttle-rate-merge-copies`, and
-  `startup-presence-guard-copies` (items 32–34) and merges coherence §6 proposal 55 into decisions rules 10, 12, and 32.
+  `startup-presence-guard-copies` and merges coherence proposal 55 into decisions rules 10, 12, and 32.
 
   **Context:** notifications' `adapter.py:20–70` re-implements four manifest patterns, its domain
   check by hand; five adapters hand-merge `DEFAULT_THROTTLE_RATES`; three `checks.py` re-test a
@@ -482,7 +480,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA287 — The CLI reaches module behaviour through manifest fields and hooks.**
 
-  Closes coherence `cli-module-name-branches` (item 27, option C) and merges coherence §6
+  Closes coherence `cli-module-name-branches` (option C) and merges coherence
   proposal 51 into decisions rule 37;
   hands its residue to arch watchlist `core-holds-module-vocabulary`.
 
@@ -528,13 +526,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA296 — Close the rule-audit enforcement gaps the 2026-10-16 census found.**
 
-  Closes coherence §7 gaps 17 and 20–25, which no item carries.
+  Closes coherence gaps 17 and 20–25, which no item carries.
 
   **Context:** rule 40 claims `CommandError`/`BaseCommand` and "unlisted core ports" checks that
   do not exist; rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
   module missing from `MODULE_LAYERS`; `AppConfig` capability declarations are open-world, with
   literal sets in both the harness and core; rule 13's `TenantModelAdmin` registration and rule
-  11's compare-against-members clause have no detector; `module-extension.md:601`'s "exactly
+  11's compare-against-members clause have no detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
   these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
   rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
   order.

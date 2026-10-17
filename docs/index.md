@@ -1,8 +1,8 @@
 # QuickScale Documentation
 
 New here: [START_HERE.md](../START_HERE.md). **A** marks an authoritative document. Its
-rules are binding and use MUST / MUST NOT wording. Ownership and conflict resolution are in
-[decisions.md § Document Responsibilities](technical/decisions.md#document-responsibilities).
+rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflict, and
+[§ Document Responsibilities](technical/decisions.md#document-responsibilities) names each topic's owner.
 
 ## Entry points
 - [README.md](../README.md): overview, quick start, packages

@@ -1,12 +1,12 @@
 # DEBUG - Debugging and Bug-Fix Guide
 
 Use this guide for QuickScale-specific debugging flow, failure-analysis inputs,
-and command selection. Shared debugging, testing, scope, and architecture
-rules remain authoritative.
+and command selection. [rules.md](rules.md) is authoritative for debugging, testing, scope, and
+architecture rules.
 
 ## Suggested Debugging Loop
 
-Apply the shared rules with this practical loop:
+Apply [rules.md §7](rules.md#7-debugging) with this practical loop:
 
 1. reproduce the failure with the smallest useful command or fixture set
 2. decide whether the failure is in the code, the test, or the environment assumptions

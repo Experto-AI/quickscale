@@ -1,4 +1,4 @@
-# QuickScale v0.89.0 — Development Maintenance
+# Release v0.89.0 — Development Maintenance
 
 **Date:** unreleased · **Status:** Prepared release artifact (no tag, GitHub release or package upload exists)
 

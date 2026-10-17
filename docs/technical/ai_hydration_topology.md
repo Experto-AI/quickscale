@@ -14,15 +14,15 @@ role's section, and resolves `[include]`s.
 
 | Role | `[include]`d (inlined, counted in metrics) | Must-have facts |
 |---|---|---|
-| `adaptive` | [ai_context.md](ai_context.md) | authority order, conflict policy, workflow and stack baseline, validation entrypoints, generated-project ownership |
-| `plan` | baseline + [generated_project_structure.md](generated_project_structure.md), [repository_layout.md](repository_layout.md), [contrib/plan.md](../contrib/plan.md) | baseline + structure authority, scope discipline, validation planning |
+| `adaptive` | baseline: [ai_context.md](ai_context.md) + `adaptive.intake.yml` | authority order, conflict policy, workflow and stack baseline, validation entrypoints, generated-project ownership |
+| `plan` | baseline + [generated_project_structure.md](generated_project_structure.md), [repository_layout.md](repository_layout.md), [contrib/plan.md](../contrib/plan.md), [contrib/rules.md](../contrib/rules.md) | baseline + structure authority, scope discipline, validation planning |
 | `codebase-discovery` | baseline + both structure docs | baseline + structure authority, generated-vs-maintainer boundary |
 | `external-research` | baseline only | baseline only |
-| `implement` | baseline + both structure docs + [contrib/code.md](../contrib/code.md) | baseline + structure authority, implementation guardrails, `make`/pytest entrypoints |
-| `quality-gate` | baseline + [validation_policy.md](validation_policy.md), [contrib/testing.md](../contrib/testing.md), [contrib/debug.md](../contrib/debug.md) | baseline + validation policy, coverage, narrow-first commands, debug loop |
-| `change-review` | baseline + [contrib/review.md](../contrib/review.md) | baseline + evidence standards, scope protection, regression review |
+| `implement` | baseline + both structure docs + [contrib/code.md](../contrib/code.md), [contrib/rules.md](../contrib/rules.md) | baseline + structure authority, implementation guardrails, `make`/pytest entrypoints |
+| `quality-gate` | baseline + [validation_policy.md](validation_policy.md), [contrib/testing.md](../contrib/testing.md), [contrib/debug.md](../contrib/debug.md), [contrib/rules.md](../contrib/rules.md) | baseline + validation policy, coverage, narrow-first commands, debug loop |
+| `change-review` | baseline + [contrib/review.md](../contrib/review.md), [contrib/rules.md](../contrib/rules.md) | baseline + evidence standards, scope protection, regression review |
 
-Every role also gets [docs/index.md](../index.md) as an *always-read pointer*: a read hint that
+Hydration scoped to `docs/` also surfaces [docs/index.md](../index.md) as an *always-read pointer*: a read hint that
 the agent fetches only when needed. Pointers are not inlined and not counted in metrics.
 
 ## Rules

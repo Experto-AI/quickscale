@@ -25,6 +25,6 @@ quickscale up           # run it in Docker
 | Look up a term | [GLOSSARY.md](GLOSSARY.md) |
 | See what is planned or shipped | [roadmap.md](docs/technical/roadmap.md) / [CHANGELOG.md](CHANGELOG.md) |
 
-Every document is listed in [docs/index.md](docs/index.md). When two documents conflict,
-[decisions.md § Document Responsibilities](docs/technical/decisions.md#document-responsibilities)
-names the owner, and the owner wins.
+Every document is listed in [docs/index.md](docs/index.md). [decisions.md](docs/technical/decisions.md)
+wins any conflict; its [§ Document Responsibilities](docs/technical/decisions.md#document-responsibilities)
+names the owner of every topic.
