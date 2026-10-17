@@ -77,7 +77,7 @@ Use this pattern only when you are intentionally maintaining shared code across 
 
 Rules:
 - Dotted import paths map to underscore-qualified Django app labels where needed.
-- Generated projects should favor standard Django import patterns.
+- Generated projects use standard Django import patterns.
 - Do not introduce alternate naming systems when the existing package and app-label pattern is sufficient.
 - The narrow shared rendered-link seam is imported as
   `quickscale_modules_orgs.sanitization` by

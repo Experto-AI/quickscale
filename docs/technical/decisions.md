@@ -499,7 +499,7 @@ ordinary Django.
   writes a middleware literal
 - ✅ A module that ships models or a migration MUST declare at least one Django app.
   This is enforced by a conformance gate, not by review
-- ✅ Adapters SHOULD route through `build_generic_manifest_spec()` so `apps` is read
+- ✅ Adapters MUST route through `build_generic_manifest_spec()` so `apps` is read
   from the manifest. A hand-built `ResolverResult` is permitted only for a
   module needing a custom post-hook, and MUST still source `apps` from the manifest —
   never as a Python literal in the adapter
@@ -1003,7 +1003,7 @@ public surface is `services.py` (rule 4).
 - ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
   would change and writes nothing; database-only work runs in `transaction.atomic()` in the
   service or command-support module the command calls, never in the command module itself.
-- ✅ Modules ship no scheduler. A command a site should run periodically is listed under the
+- ✅ Modules ship no scheduler. A command meant to run periodically is listed under the
   README's Operations heading with a suggested interval; the operator's cron or platform scheduler
   runs it (backups' `schedule` and `automation_enabled` options already only document this).
 - ✅ A retired command is deleted, not kept behind a guard (rule 6). `migrate_billing_to_orgs`
@@ -1051,8 +1051,8 @@ public surface is `services.py` (rule 4).
   `HasOrgRole(min_role)` beside them, delegating to the same `user_has_org_role` that
   `OrgApiBaseView`'s `min_org_role` uses, so rule 9's base keeps its logic and there is one role
   check). Each module fixes the minimum role per action in code and lists it in its README under
-  Public surface (rule 38). This extends [organizations.md](organizations.md)'s "no tenant should
-  ever have `is_staff`" (org administration happens through org roles) to module back offices.
+  Public surface (rule 38). This extends the [organizations.md](organizations.md) rule that no tenant ever has
+  `is_staff` (org administration happens through org roles) to module back offices.
 - ✅ "Logged in" is `LoginRequiredMixin`, `login_required`, or DRF `IsAuthenticated`.
 - ✅ `is_staff` / `is_superuser` gate only Django admin and `operator_access` paths; forms' "every
   organization" branch moves under `operator_access`. analytics' `EXCLUDE_STAFF` reads `is_staff`
@@ -1812,7 +1812,7 @@ implicit env-var/stdout-JSON coupling.
 
 This is the only document-ownership map. Every fact has one owner, and other documents link to
 the owner instead of restating it. **A** = authoritative: rules are binding and are written as
-MUST / MUST NOT (enforced by `scripts/check_doc_phrasing.py`).
+MUST / MUST NOT (enforced by `quickscale_core/tests/test_doc_phrasing.py`).
 
 | Document | Owns | |
 |---|---|---|
@@ -2413,8 +2413,7 @@ above and `beta-site-migration.md`'s two-repo migration workflow). No CI job,
 generator run, or agent session in this repo can open a shell in Railway or
 push to those repos. Treating this as a temporary blocker awaiting "access"
 mischaracterizes the boundary — access to another maintainer's private
-deployment infrastructure is not something this repo's tooling can or should
-grant itself.
+deployment infrastructure is not something this repo's tooling grants itself.
 
 **What stays in scope (and is not affected by this decision):** everything
 this repo *can* verify mechanically — the generator templates themselves,
@@ -2473,7 +2472,7 @@ plumbing layer.
 
 **Enforcement:** Any module conftest that defines a fixture whose
 documentation or identifier references resetting `app.current_org_id`,
-`SET ROLE`, execute-wrapper priming memo, or the Django cache should instead import
+`SET ROLE`, execute-wrapper priming memo, or the Django cache MUST import
 the shared `reset_test_state` fixture from `tests_shared.reset_state`.
 New cross-module test utilities must be placed in `tests_shared/` rather
 than duplicated across module conftests.
@@ -2675,7 +2674,7 @@ differ. A version mismatch must never be allowed to surface as a downstream fail
 
 **Rule 2a — The comparison is canonical, not literal.** Version equality is decided on a
 canonical parse, so padded, whitespace-bearing, or otherwise non-canonical spellings
-(`0.87.0 `, `0.087.0`) do not satisfy a lockstep check they should fail. A version string
+(`0.87.0 `, `0.087.0`) do not satisfy a lockstep check; they fail it. A version string
 that cannot be canonically parsed is itself a hard error, never a fallback to literal
 string comparison — a permissive comparison is the same defect class as the missing
 assertion Rule 2 exists to close.

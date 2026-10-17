@@ -59,7 +59,7 @@ Notes:
 - `quickscale.yml` is created during planning and remains the user-owned desired-state file.
 - `.quickscale/state.yml` is the sole authoritative applied-state store after apply writes state. It carries consolidated sub-sections for module-tracking metadata and managed-file drift records. Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present). Leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save.
 - `.quickscale/<name>.lock` advisory lock files serialize concurrent `apply` operations.
-- `Makefile` is always generated at the project root and is the preferred local entrypoint for setup, lint, format, test, check, and ci workflows.
+- `Makefile` is always generated at the project root and is the local entrypoint for setup, lint, format, test, check, and ci workflows.
 - `scripts/lint.sh` is generated alongside the root `Makefile` and backs the shared `make lint` and `make check` workflows.
 - Frontend-specific Makefile targets run only when `frontend/package.json` exists.
 

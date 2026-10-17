@@ -217,7 +217,7 @@ Keep credentials in the helper or an SSH agent — never in a remote URL or comm
 
 Publish every module that status reports as outdated. On a normal first pass that is all twelve
 existing split branches; an absent or unobservable branch must be recovered first. On a re-entry
-from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) the outdated set is usually a subset.
+from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) the outdated set is normally a subset.
 One command handles that set:
 
 ```bash
@@ -382,7 +382,7 @@ coding assistant.
 
 Nothing is consumed by iterating: split branches are mutable, no tag is pushed, and the version is not spent
 until [Phase 6](#phase-6--publish). If the same defect survives two passes, stop and escalate rather than
-looping again — a repeating failure usually means the cause was located in the wrong layer at step 2.
+looping again — a repeating failure means the cause was located in the wrong layer at step 2.
 
 This loop runs **before** any tag is sealed. The superficially similar loop for a mistake discovered *after*
 sealing is narrower and is described in [Phase 5](#phase-5--seal-the-split-tags) and the
