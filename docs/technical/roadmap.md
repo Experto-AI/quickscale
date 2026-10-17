@@ -303,13 +303,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
   restricted runtime role; billing stays disabled.
 
   **Remaining:** (1) repin (agent, no publication needed): pin `bap-web-new` to the `v89` tree
-  (git or path pin) and re-run the rehearsal; SA153 (a…e) builds on this pin, re-pinned at each
-  `v89` merge that touches modules, with any module `0001` change applied by a reseed. (2) cutover:
-  after 0.89.0 is published, swap the pin to `0.89.0` and re-run the rehearsal, so the unpublished
-  pin never reaches production; then the maintainer runs the Railway cutover, carries media, re-invites users, and
-  archives the old repository. The pre-cutover database is retained until the reseeded site is
-  verified. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data and
-  stays out of every repository.
+  and re-run the rehearsal; SA153 (a…e) builds on this pin, re-pinned at each `v89` merge that
+  touches modules, with any module `0001` change applied by a reseed. Slice 1 landed (bap-web-new
+  `cecc0fe`, 2026-10-17): the Oct-9 frozen core wheel pin is now a path pin on the checkout's
+  `quickscale_core` (`develop = true`); a git rev pin was probed and refuted — an installed clone
+  carries no bundled manifests and no monorepo manifest path, so every manifest read fails. The
+  rehearsal re-ran green on a reset `bap_cutover_rehearsal`: exit 0 twice, catalog 3/12/48/60 and
+  the six service forms in the System org scope, unscoped reads 0, tenant isolation 6/6, only the
+  two known `W006` warnings (runbook port 32768). Intermediate state: with the pinned core, the three
+  SPA-shell project tests are red (`index.html`'s runtime seam cannot reverse
+  `quickscale_listings_shell`) until the managed-URLconf adoption lands, so the URLconf step is
+  required for the SPA shell, not optional. Next: re-embed the six Oct-9 embedded modules
+  from refreshed split branches (`make publish-modules`), adopt the 16 pending contract steps
+  (regenerate `urls_modules.py`, then the `urls.py` adoption), re-run the rehearsal and the
+  project suite. (2) cutover: after 0.89.0 is published, swap the pin to `0.89.0` and
+  re-run the rehearsal, so the unpublished pin never reaches production; then the maintainer runs
+  the Railway cutover, carries media, re-invites users, and archives the old repository. The
+  pre-cutover database is retained until the reseeded site is verified. The production dump at
+  `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
 
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
