@@ -373,11 +373,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
     reports zero findings, `check_tenant_isolation` passes on the three property tables, and the
     suite is 68/0 at 93.94%. (c, d, e) is next; inquiry → listing lands with it under the same
     composite-FK rule.
-  - [ ] (c, d, e) Frontend, one session: React catalog and detail pages in Spanish on the app's
-    design; listing inquiry into a CRM record with a listing reference, and the search → detail
-    → inquiry journey; prerender or server render, Open Graph tags, sitemap, and `robots.txt`,
-    with the crawler test and rendered-page isolation (Tier 2-full: the prerender mechanism
-    needs discovery).
+  - [ ] (c, d) landed (bap-web-new, 2026-10-17): prices carry each listing's own currency
+    (cached `Intl` formatters; `filter-metadata` reports the catalog currency or `null`), the
+    `crm` module is embedded, and `POST /api/properties/<slug>/inquiries/` stores a
+    tenant-owned `PropertyInquiry` (migration 0006: composite FK, FORCE-RLS pair) and files
+    the CRM record set — shared web-inquiry company, contact reused by address, deal, and a
+    note carrying the listing reference — behind the detail page's inline form. Suite 79/0;
+    frontend 400 (coverage gate green); chromium design-system + properties specs 12 passed.
+  - [ ] (e) prerender, Open Graph, sitemap, `robots.txt`, the crawler test, and rendered-page
+    isolation: not landed; the discovery constraints — `StaticRouter` plus a dehydrated
+    react-query state, the social-only `publicPage` seam, Node at image build without a
+    database and a database at runtime without Node — are recorded in bap-web-new's
+    `MIGRATION_PROMPT.md` (Tier 2-full).
   - [ ] (f) Go-live on `buenosairesproperties.com`, after SA204 (j) freezes migration history:
     the release `bap-web` goes live on carries the frozen manifest, and the search → detail →
     inquiry journey is re-proved on the deployed site (Tier 2-full; production deploy, maintainer
