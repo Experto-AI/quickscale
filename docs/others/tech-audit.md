@@ -20,8 +20,8 @@ None (S1–S4: 0).
 | `migrate-runs-per-replica` | `start.sh` runs `migrate` on every boot, so concurrent replicas race | more than one replica |
 | `social-config-error-served-200` | DRF payload views return 200 with `str(exc)` for `status=error` | any new raise of `SocialConfigurationError` |
 | `account-deletion-hook-exception-text` | undeclared `reconcile_account_deletion_provider_state` hooks flash `str(exc)` to the user | a documented host extension point for that hook |
-| `deploy-existing-settings-module-never-corrected` | deploy keeps an existing `DJANGO_SETTINGS_MODULE`, so a value derived wrongly before SA256 persists | a pre-SA256 Railway service fails to boot |
-| `generated-project-automation-local-only` | the SA253 generated-automation gate runs locally only (no hosted PostgreSQL) | a generated-artifact regression reaches a release |
+| `deploy-existing-settings-module-never-corrected` | deploy keeps an existing `DJANGO_SETTINGS_MODULE`, so a value derived wrongly by an older deploy persists | an older Railway service fails to boot |
+| `generated-project-automation-local-only` | the generated-automation gate runs locally only (no hosted PostgreSQL) | a generated-artifact regression reaches a release |
 | `orgs-provider-id-check-blocks-migrate` | the orgs `check_provider_id_conformance` ERROR fails `check` and `migrate` until every tenant model's provider fields are classified (deliberate) | a contract-vintage step that does not list it |
 | `crm-stage-seed-lost-on-commit-failure` | `receivers.py` seeds default stages in `transaction.on_commit`, so a failure in that callback leaves the org without stages | a report of an org without stages |
 | `development-workflow-intermittent-root-500` | one unreproduced HTTP 500 on `/` in the development-workflow E2E | a recurrence with a retained backend traceback |
