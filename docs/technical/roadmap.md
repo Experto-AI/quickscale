@@ -51,7 +51,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
-| SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
 | SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
 | SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
 
@@ -59,7 +58,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
+Track 2: SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
@@ -74,7 +73,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA293 and SA292 have no unmet dependency; each track takes one at a time,
+**Parallel start.** SA291 and SA292 have no unmet dependency; each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -101,7 +100,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | no | no | yes | no | yes |
-| 2 | SA293 | yes | yes | yes | yes | no |
+| 2 | SA291 | yes | yes | yes | yes | no |
 | 3 | SA292 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -441,39 +440,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA295 — Review the security suppressions and stagger their expiry.**
 
-- [ ] **SA293 — One test-settings base, one pyproject template, no ticket ids in tests or manifests.**
-
-  Closes coherence `test-ticket-ids-in-identifiers`, `test-harness-parity`, `pyproject-residue`,
-  and `manifest-option-residue` (items 37–40) and merges coherence §6 proposal 57 into decisions rules 11, 18, and 29.
-
-  **Acceptance:** the decisions rules carry proposal 57. No `sa<NNN>` token remains in a test identifier or
-  string, or in a `module.yml` description; module test settings and conftest hooks come from one
-  core base and plugin; module `pyproject.toml` files follow one template; the manifest loader
-  refuses a validation key that does not match the option type (notifications'
-  `webhook_ttl_seconds` `pattern`). Each clause has a harness detector with a control.
-
-  **Slices:**
-  - [x] (a) Rename the ~70–90 ticket-id test identifiers and extend the rule 29 scan to
-    identifiers in `tests/` (Tier 2-fast). Landed: 241 ticket-id occurrences left the
-    modules' tests (identifiers, strings, docstrings, comments); rule 29 scans every `tests/`
-    `.py` entry's identifiers and string literals, any case, embedded ids included, with
-    controls; decisions rule 29 carries the clause.
-  - [x] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
-    including analytics' and storage's missing hooks, auth's `DEFAULT_AUTO_FIELD`, and blog's and
-    listings' `USE_TZ`, with the harness key diff (Tier 2-full). Landed: `quickscale_core.testing`
-    (`settings.py` with `BASE_TEST_SETTINGS_KEYS` and the database, secret-key, and schema
-    helpers; `pytest_plugin.py` with the `bypass_rls` hooks) is imported by every module's
-    `tests/settings.py` and `tests/conftest.py`; harness rule 18 reads the base from the corpus,
-    diffs each module's keys against it, and requires both hooks from the plugin, with controls;
-    decisions rules 11 and 18 carry the clauses.
-  - [x] (c) One pyproject template: the stale "centralized in root" comments, orgs' `>=` dev
-    floors, and the six `pythonpath` variants, with a template diff (Tier 2-fast). Landed: harness
-    rule 18 diffs each module pyproject against one template — table order, shared values, one
-    `pythonpath` (`[".", "src", "../.."]`), one marker block, caret dev specs, the stale-comment ban
-    — with controls; the 12 files conform, and decisions rule 18 and module-extension.md § 1.1
-    carry the clause. (d) is next.
-  - [ ] (d) Manifest text: drop the three version stamps, fix the type-mismatched key, scan
-    `module.yml` descriptions under rule 29, and the loader refusal (Tier 2-fast).
+- [x] **SA293 — One test-settings base, one pyproject template, no ticket ids in tests or manifests.**
 
 - [ ] **SA291 — The manifest owns option validation and throttle rates.**
 

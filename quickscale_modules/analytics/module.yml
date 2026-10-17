@@ -15,7 +15,7 @@ config:
       type: string
       default: "posthog"
       django_setting: QUICKSCALE_ANALYTICS_PROVIDER
-      description: "Approved analytics provider for v0.80.0. PostHog is the only supported option."
+      description: "Approved analytics provider. PostHog is the only supported option."
       validation:
         choices: ["posthog"]
 

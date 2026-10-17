@@ -32,6 +32,23 @@ OPTION_VALIDATION_KEYS = (
 
 OPTION_TYPES = ("string", "integer", "boolean", "list", "mapping")
 
+#: Rule 12's key/type applicability, mirroring the loader's
+#: ``VALIDATION_KEY_TYPES`` in ``quickscale_core.manifest.option_validation``:
+#: a key outside its declared type's entry would check a value the engine
+#: never gives it a meaningful form of.
+VALIDATION_KEY_TYPES: dict[str, frozenset[str]] = {
+    "choices": frozenset(OPTION_TYPES),
+    "min": frozenset({"integer"}),
+    "max": frozenset({"integer"}),
+    "pattern": frozenset({"string"}),
+    "not_empty": frozenset({"list", "string"}),
+    "required_when": frozenset(OPTION_TYPES),
+    "any_of": frozenset(OPTION_TYPES),
+    "subset_of": frozenset({"list"}),
+    "excludes": frozenset({"boolean", "integer", "string"}),
+    "intersects": frozenset({"list"}),
+}
+
 
 def _declares_option_blocks(manifest: Mapping[str, Any]) -> bool:
     """Return whether the manifest declares both option blocks."""
@@ -89,7 +106,22 @@ def _option_field_violations(prefix: str, option: Mapping[str, Any]) -> list[str
             for rule_key in validation:
                 if rule_key not in OPTION_VALIDATION_KEYS:
                     violations.append(f"{prefix} uses unsupported validation key {rule_key!r}")
+            violations.extend(_validation_type_violations(prefix, option, validation))
     return violations
+
+
+def _validation_type_violations(
+    prefix: str, option: Mapping[str, Any], validation: Mapping[str, Any]
+) -> list[str]:
+    """Rule 12: every validation key applies to the option's declared type."""
+    option_type = option.get("type")
+    if option_type not in OPTION_TYPES:
+        return []
+    return [
+        f"{prefix} uses validation key {rule_key!r} on a {option_type} option"
+        for rule_key in validation
+        if rule_key in VALIDATION_KEY_TYPES and option_type not in VALIDATION_KEY_TYPES[rule_key]
+    ]
 
 
 def _option_setting_violations(
