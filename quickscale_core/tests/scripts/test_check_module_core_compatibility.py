@@ -126,7 +126,7 @@ def test_get_mgmt_cmds_finds_backups_commands() -> None:
 
 
 def test_get_mgmt_cmds_finds_forms_commands() -> None:
-    """Forms has 2 management commands."""
+    """Forms has 2 management commands; private support modules are not commands."""
     src_dir = (
         Path(__file__).resolve().parents[3] / "quickscale_modules" / "forms" / "src"
     )
@@ -135,6 +135,7 @@ def test_get_mgmt_cmds_finds_forms_commands() -> None:
     assert len(modules) == 2
     assert any("quickscale_forms_anonymize_submissions" in m for m in modules)
     assert any("quickscale_forms_seed_presets" in m for m in modules)
+    assert not any("._presets" in m or "._retention" in m for m in modules)
 
 
 def test_get_mgmt_cmds_returns_empty_when_absent() -> None:

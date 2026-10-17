@@ -993,6 +993,9 @@ public surface is `services.py` (rule 4).
   and only a `scheduled` run is refused while its module is off. The admin UI passes its own
   `admin` provenance through the same option; no command defaults to `scheduled`, and the retired
   `--scheduled` alias is not kept.
+- ✅ The scheduled-off refusal is core's one `require_scheduled_module_enabled(trigger,
+  module_name=...)` helper, called before any other work; the module-conventions gate requires
+  the call in every command that declares `--trigger`.
 - ✅ A command that deletes another tenant's or the whole database's data takes
   `--confirm <identifier>`, which must match the targeted object before the deletion proceeds.
 - ✅ An organization selector is `--organization-id <uuid>`, validated as a UUID. A slug serves a
@@ -1001,14 +1004,16 @@ public surface is `services.py` (rule 4).
 - ❌ `--organization`, `--org`, a slug spelling of the organization selector, or a `--slug`
   lookup without `--organization-id`; the module-conventions gate refuses these spellings.
 - ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
-  would change and writes nothing; database-only work runs in `transaction.atomic()`.
+  would change and writes nothing; database-only work runs in `transaction.atomic()` in the
+  service or command-support module the command calls, never in the command module itself.
 - ✅ Modules ship no scheduler. A command a site should run periodically is listed under the
   README's Operations heading with a suggested interval; the operator's cron or platform scheduler
   runs it (backups' `schedule` and `automation_enabled` options already only document this).
 - ✅ A retired command is deleted, not kept behind a guard (rule 6). `migrate_billing_to_orgs`
   is deleted with its recovery documentation: its 2026-09-16 retirement already stated current
   installs cannot hold the shape it repairs.
-- ❌ `print()`, `sys.exit()`, or returning normally after a failure.
+- ❌ `print()`, `sys.exit()`, or returning normally after a failure; an inline scheduled-off
+  refusal, or a `transaction.atomic()` in a command module.
 
 **18. Package tooling.**
 - ✅ Every module's `pyproject.toml` follows one template

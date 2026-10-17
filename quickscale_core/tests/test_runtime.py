@@ -224,6 +224,7 @@ class TestRuntimeAllExport:
             "register_backup_persistence",
             "register_module_checks",
             "register_module_settings_check",
+            "require_scheduled_module_enabled",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
@@ -362,6 +363,7 @@ class TestRuntimeSymbolTypes:
             "exception_handler",
             "register_module_checks",
             "register_module_settings_check",
+            "require_scheduled_module_enabled",
         ):
             symbol = getattr(runtime, name, None)
             assert symbol is not None, f"runtime.{name} is None"
@@ -448,6 +450,7 @@ class TestRuntimeImportable:
             "register_backup_persistence",
             "register_module_checks",
             "register_module_settings_check",
+            "require_scheduled_module_enabled",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",

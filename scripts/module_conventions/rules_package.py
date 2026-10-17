@@ -223,7 +223,9 @@ def rule_17_management_commands(corpus: Corpus) -> list[str]:
             if not rel.startswith("management/commands/") or not rel.endswith(".py"):
                 continue
             command = Path(rel).stem
-            if command == "__init__":
+            if command == "__init__" or command.startswith("_"):
+                # Django discovers commands as non-underscore modules in the
+                # commands package, so a private support module is not a command.
                 continue
             violations.extend(_command_findings(module.name, command, _parse(text), text))
     return violations

@@ -1233,6 +1233,9 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_purge.py": (
+                "from quickscale_core.runtime import require_scheduled_module_enabled\n"
+                "\n"
+                "\n"
                 "class Command:\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--confirm')\n"
@@ -1242,6 +1245,10 @@ def test_command_flag_conventions_controls() -> None:
                 "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
                 "default='manual')\n"
                 "        parser.add_argument('--json', action='store_true')\n"
+                "\n"
+                "    def handle(self, *args, **options):\n"
+                "        require_scheduled_module_enabled(options['trigger'], "
+                "module_name='demo')\n"
             )
         },
     )

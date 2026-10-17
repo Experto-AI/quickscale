@@ -898,6 +898,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     exclusion — so one manifest edit changes both apply-time validation and runtime backend
     selection, and a configuration the declared rules refuse no longer counts as live-ready; a
     `re.compile` in any module `adapter.py` fails the module-conventions gate.
+  - **One scheduled-off refusal, and command work opens its own transaction.**
+    `quickscale_core.runtime.require_scheduled_module_enabled` refuses a `--trigger scheduled` run
+    while its module is off, used by the backups create and prune and forms retention commands,
+    and the module-conventions gate requires that call wherever `--trigger` exists; the forms
+    seeding and retention operations and the organization purge open their `transaction.atomic()`
+    below the command instead of in it.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

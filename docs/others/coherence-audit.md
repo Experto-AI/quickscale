@@ -339,8 +339,8 @@ items:
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: throttle-rate-merge-copies, status: open, aspect: B, cost: [tax], members_diverging: [billing, blog, forms, listings, orgs], population: throttled-modules(5),
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: command-off-refusal-and-atomic, status: open, aspect: J, cost: [tax], members_diverging: [backups, forms, orgs], population: commands(16),
-     rule: "rule 1, rule 17", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: command-off-refusal-and-atomic, status: resolved, aspect: J, cost: [tax], members_diverging: [], population: commands(16),
+     rule: "rule 17 (one scheduled-off refusal helper; the transaction opens below the command)", check: "harness rule 17 (the helper call is required wherever --trigger exists, with controls); 3/3 commands declaring --trigger conform", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-17}
   - {id: theme-request-paths, status: resolved, aspect: P, cost: [tax], members_diverging: [],
      population: theme-hooks, rule: "rule 31", check: "theme ESLint (fetch ban in src/hooks)",
      closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
@@ -518,7 +518,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 32 | `adapter-restates-manifest-validation` | B | tax | 0 / 12 adapters | resolved (SA291 (a)) |
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
 | 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
-| 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | open (2026-10-16) |
+| 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | resolved (SA292 (a)) |
 | 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | resolved (SA289 (b)) |
 | 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | resolved (SA293 (a)) |
 | 38 | `test-harness-parity` | M | tax | 5 / 12 | resolved (SA293 (b)) |
@@ -1694,7 +1694,7 @@ B · analytics `checks.py:69`, billing `:53`, and notifications `:86` repeat the
 B · billing `adapter.py:44`, blog `:27`, forms `:26`, listings `:27`, and orgs `:32` each hand-merge `REST_FRAMEWORK.DEFAULT_THROTTLE_RATES`. **Rule:** ✅ a manifest `throttle_scopes` projection that core merges. **Check:** a ban on `DEFAULT_THROTTLE_RATES` in adapters. Confidence: High.
 
 ### Item 35 (compact): `command-off-refusal-and-atomic`
-J · the off refusal uses a helper in backups create, and is inline in backups prune and forms anonymize. `transaction.atomic` opens inside the command in forms ×2 and orgs purge, and below it in services elsewhere. **Rule:** ✅ one core helper for the scheduled-off refusal; the transaction lives in the service. **Check:** harness rule 17 requires the helper call when `--trigger` exists. Confidence: Medium.
+J · the off refusal uses a helper in backups create, and is inline in backups prune and forms anonymize. `transaction.atomic` opens inside the command in forms ×2 and orgs purge, and below it in services elsewhere. **Rule:** ✅ one core helper for the scheduled-off refusal; the transaction lives in the service. **Check:** harness rule 17 requires the helper call when `--trigger` exists. Confidence: Medium. **Settled (SA292 (a), 2026-10-17):** decisions rule 17 carries the clause — `quickscale_core.runtime.require_scheduled_module_enabled` is the one scheduled-off refusal, and a command's database work opens its `transaction.atomic()` in the helper below the command (its service or command-support module, never the command module); harness rule 17 requires the helper call wherever `--trigger` exists, with controls.
 
 ### Item 36 (compact): `theme-request-paths`
 P · residue of `mount-path-copies`. `useFormSchema` and `usePublicSocialSurface` call raw `fetch`, not `apiRequest`. `useOrgNavigation` and `App.tsx` write page paths as literals. **Rule:** ✅ theme requests go through `apiRequest` with seam paths. **Check:** a lint ban on `fetch(` in `src/hooks`. Confidence: High.
@@ -2595,6 +2595,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).
+- 2026-10-17 — `command-off-refusal-and-atomic`: resolved (SA292 (a) — backups create and prune and forms' retention command refuse a scheduled run through one core helper, `quickscale_core.runtime.require_scheduled_module_enabled`; the forms seeding and retention operations and the orgs purge open their `transaction.atomic()` below the command, and the command scans treat underscore-prefixed support modules the way Django does; harness rule 17 requires the helper call wherever `--trigger` exists, with controls; proposal 56's rule-17 clause lands here).
 6. Does forms' cross-tenant `operator_access` need its own predicate, distinct from orgs' superuser escape? → `superuser-escape-spelling`
 7. Do host projects post form-encoded bodies to the crm, forms, or notifications APIs? This sets the release-note weight of a JSON-only default. → `api-renderer-parser-pinning`
 8. Should module logs carry structured fields? → `structured-log-fields` (settled by SA294: decisions rule 24 carries the convention — a security or audit event carries `extra=` fields; every other module log line stays message-only).

@@ -155,7 +155,9 @@ def _command_violations(module: Module, commands: str) -> list[str]:
         if not rel.startswith("management/commands/"):
             continue
         command = Path(rel).stem
-        if command == "__init__":
+        if command == "__init__" or command.startswith("_"):
+            # Django discovers commands as non-underscore modules in the
+            # commands package, so a private support module is not a command.
             continue
         if command not in commands:
             violations.append(

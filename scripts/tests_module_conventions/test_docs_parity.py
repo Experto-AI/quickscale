@@ -131,6 +131,12 @@ CASE_BUILDERS = {
     "command_init_skipped": lambda: _corpus(
         _with_files(_golden_module(), **{"management/commands/__init__.py": ""})
     ),
+    "command_private_skipped": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            **{"management/commands/_support.py": "def seed():\n    return None\n"},
+        )
+    ),
     "role_required": lambda: _corpus(_role_views_with_surface("Nothing.")),
     "role_documented_inline": lambda: _corpus(_role_views_with_surface("Minimum role: `viewer`.")),
     "role_documented_table": lambda: _corpus(
@@ -163,6 +169,7 @@ EXACT_FINDINGS = (
         ("rule 38: demo: Management commands does not name 'quickscale_demo_extra'",),
     ),
     ("command_init_skipped", ()),
+    ("command_private_skipped", ()),
     ("role_required", ("rule 38: demo: Public surface does not list the minimum role",)),
     ("role_documented_inline", ()),
     ("role_documented_table", ()),

@@ -1,6 +1,6 @@
 """Shared runtime helpers every first-party module builds its conventions on.
 
-This module is the one implementation of the three cross-module conventions:
+This module is the one implementation of the cross-module conventions:
 
 * :func:`collect_capabilities` — Module Conventions rule 4's ``AppConfig``
   capability collector.  A module declares what it provides as an attribute
@@ -32,6 +32,12 @@ This module is the one implementation of the three cross-module conventions:
   installed as ``REST_FRAMEWORK["EXCEPTION_HANDLER"]`` by the generated
   settings.  It also renders a module error that is not a DRF ``APIException``
   but declares ``status_code`` and ``default_code`` (rule 10).
+* :func:`require_scheduled_module_enabled` — rule 17's one scheduled-off
+  refusal (its implementation lives in the private ``_scheduled_off`` sibling,
+  re-exported here).  A command whose ``--trigger`` option exists calls it
+  before any other work; the helper refuses a ``scheduled`` run while the
+  module's ``QUICKSCALE_<MODULE>_ENABLED`` setting is false, so every module
+  spells the refusal once and the refusal is testable where it lives.
 
 The module also defines the records a module declares through the
 ``personal_data_declarations`` capability (Module Conventions rule 49): each
@@ -40,7 +46,7 @@ reads the collected declarations.  They live in core so every layer — includin
 same-layer modules that may not import ``orgs`` — can declare them by importing
 only lower-layer code.
 
-The root ``quickscale_core.runtime`` facade exposes all four lazily, so
+The root ``quickscale_core.runtime`` facade exposes all of them lazily, so
 importing the facade in a process without Django (CLI ``plan``/``apply``)
 never imports this module.  :func:`exception_handler` imports DRF inside the
 call, so a project without a DRF-embedding module never imports
@@ -74,6 +80,9 @@ from quickscale_core.runtime._error_shape import (
     _error_message,
     _validation_fields,
 )
+from quickscale_core.runtime._scheduled_off import (
+    require_scheduled_module_enabled as require_scheduled_module_enabled,
+)
 
 if TYPE_CHECKING:
     from rest_framework.response import Response
@@ -90,6 +99,7 @@ __all__ = [
     "module_settings_are_supplied",
     "register_module_checks",
     "register_module_settings_check",
+    "require_scheduled_module_enabled",
 ]
 
 #: The callable contract of a module check: Django's system-check signature,

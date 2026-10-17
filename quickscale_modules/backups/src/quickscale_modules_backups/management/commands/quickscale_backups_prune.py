@@ -1,9 +1,12 @@
 """Prune expired backup artifacts according to the active retention policy."""
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_core.runtime import ADAPTER_FUNCTIONS, BackupError
+from quickscale_core.runtime import (
+    ADAPTER_FUNCTIONS,
+    BackupError,
+    require_scheduled_module_enabled,
+)
 
 
 class Command(BaseCommand):
@@ -30,14 +33,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         trigger = str(options.get("trigger") or "manual")
-        if trigger == "scheduled" and not bool(settings.QUICKSCALE_BACKUPS_ENABLED):
-            # Rule 1 (D3): a module switched off runs none of its scheduled
-            # jobs; operator and admin invocations stay available like the
-            # retained admin.
-            raise CommandError(
-                "The backups module is disabled (QUICKSCALE_BACKUPS_ENABLED "
-                "is False); scheduled pruning runs do not run."
-            )
+        require_scheduled_module_enabled(trigger, module_name="backups")
         dry_run = bool(options["dry_run"])
         try:
             result = ADAPTER_FUNCTIONS["prune_backups"](dry_run=dry_run)

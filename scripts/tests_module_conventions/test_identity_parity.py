@@ -88,6 +88,16 @@ def _rule2_corpus() -> Corpus:
     )
 
 
+def _rule2_private_command_corpus() -> Corpus:
+    """Return a corpus with a private support module under commands/."""
+    return _corpus(
+        _with_files(
+            _golden_module(),
+            **{"management/commands/_support.py": "seed = 1\n"},
+        )
+    )
+
+
 def _rule24_corpus() -> Corpus:
     module = _golden_module()
     without_py_typed = replace(
@@ -230,6 +240,7 @@ def _rule37_seam_corpus() -> Corpus:
 CASE_BUILDERS = {
     "clean": _clean_corpus,
     "rule2": _rule2_corpus,
+    "rule2_private_command": _rule2_private_command_corpus,
     "rule24": _rule24_corpus,
     "rule28": _rule28_corpus,
     "rule29": _rule29_corpus,
@@ -244,6 +255,7 @@ CASE_BUILDERS = {
 #: list is exact, so order, wording, and duplicate findings are all pinned.
 EXACT_FINDINGS = (
     ("clean", "rule_2_identity_names", ()),
+    ("rule2_private_command", "rule_2_identity_names", ()),
     ("clean", "rule_24_small_conventions", ()),
     ("clean", "rule_28_file_names", ()),
     ("clean", "rule_29_test_names", ()),

@@ -471,7 +471,7 @@ def test_backups_create_refuses_scheduled_runs_when_disabled(settings) -> None:
     """Rule 1 (D3): a module switched off runs none of its scheduled jobs."""
     settings.QUICKSCALE_BACKUPS_ENABLED = False
 
-    with pytest.raises(CommandError, match="scheduled backup runs do not run"):
+    with pytest.raises(CommandError, match="scheduled runs do not run"):
         call_command(
             "quickscale_backups_create",
             "--trigger",
@@ -511,7 +511,7 @@ def test_backups_prune_refuses_scheduled_runs_when_disabled(settings) -> None:
     """Rule 1 (D3): a scheduled prune refuses while the module is off."""
     settings.QUICKSCALE_BACKUPS_ENABLED = False
 
-    with pytest.raises(CommandError, match="scheduled pruning runs do not run"):
+    with pytest.raises(CommandError, match="scheduled runs do not run"):
         call_command(
             "quickscale_backups_prune",
             "--trigger",
