@@ -27,6 +27,11 @@ CLI_PACKAGE = Path("quickscale_cli") / "src" / "quickscale_cli"
 
 MYPY_INI_NAME = "mypy.ini"
 
+#: The document that declares rule 5's layer table.  The corpus carries its
+#: text so the harness can compare the declared table with ``MODULE_LAYERS``
+#: (SA296 (c)).
+DECISIONS_DOC_RELATIVE_PATH = Path("docs/technical/decisions.md")
+
 # Rule 5 <-> rule 43: the modules a manifest declares itself to require.
 MODULE_REQUIRED_NAME = "required_modules"
 
@@ -87,6 +92,7 @@ class Corpus:
     cli_files: Mapping[str, str]
     script_files: Mapping[str, str]
     mypy_ini: str
+    decisions_text: str = ""
 
 
 def _credential_reference_options(module: Module) -> set[str]:
@@ -226,6 +232,12 @@ def load_corpus(repo_root: Path) -> Corpus:
         if mypy_ini_path.is_file()
         else ""
     )
+    decisions_path = repo_root / DECISIONS_DOC_RELATIVE_PATH
+    decisions_text = (
+        decisions_path.read_text(encoding="utf-8", errors="replace")
+        if decisions_path.is_file()
+        else ""
+    )
     return Corpus(
         modules=tuple(modules),
         module_dir_names=tuple(dir_names),
@@ -233,4 +245,5 @@ def load_corpus(repo_root: Path) -> Corpus:
         cli_files=_read_tree(repo_root / CLI_PACKAGE, repo_root),
         script_files=_read_tree(repo_root / "scripts", repo_root),
         mypy_ini=mypy_ini,
+        decisions_text=decisions_text,
     )

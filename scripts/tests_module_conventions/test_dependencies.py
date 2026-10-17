@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from scripts import check_module_conventions as checker
 from scripts.tests_module_conventions._support import (
+    REPO_ROOT,
     _corpus,
     _golden_module,
     _violations,
@@ -433,3 +435,94 @@ def test_typecheck_config_option_controls() -> None:
         "relaxes outside the allowed set" in violation
         for violation in checker.rule_36_typecheck_config(follow_imports)
     )
+
+
+def _layer_document(layers: Mapping[str, int]) -> str:
+    """Render a decisions.md-shaped layer table for a module -> layer map."""
+    lines = [
+        "**5. Dependency direction.** A module may import only from its own layer or lower ones.",
+        "",
+        "| Layer | Modules |",
+        "|---|---|",
+        "| 0 \u2014 core | `quickscale_core` (imports no module; already gated) |",
+    ]
+    for layer in sorted(set(layers.values())):
+        names = sorted(name for name, value in layers.items() if value == layer)
+        lines.append(f"| {layer} \u2014 section {layer} | " + ", ".join(names) + " |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _layer_corpus(layers: Mapping[str, int]) -> checker.Corpus:
+    """Build the corpus and document that ship exactly ``layers``' modules."""
+    return replace(
+        _corpus(*(_golden_module(name) for name in layers)),
+        decisions_text=_layer_document(layers),
+    )
+
+
+def _unreadable(corpus: checker.Corpus, document: str) -> list[str]:
+    """Return the findings for a corpus whose decisions text is replaced."""
+    return checker.layer_table_findings(replace(corpus, decisions_text=document))
+
+
+def test_layer_table_controls() -> None:
+    """Shipped modules, the layer table, and decisions.md agree (SA296 (c))."""
+    corpus = _layer_corpus(checker.MODULE_LAYERS)
+    assert checker.layer_table_findings(corpus) == []
+
+    demo = _golden_module("demo")
+    missing_entry = replace(
+        corpus,
+        modules=(*corpus.modules, demo),
+        module_dir_names=(*corpus.module_dir_names, demo.name),
+    )
+    assert checker.layer_table_findings(missing_entry) == [
+        "rule 5: demo has no MODULE_LAYERS entry"
+    ]
+
+    dropped = corpus.modules[-1].name
+    missing_module = replace(corpus, modules=corpus.modules[:-1])
+    assert checker.layer_table_findings(missing_module) == [
+        f"rule 5: MODULE_LAYERS entry {dropped} ships no module"
+    ]
+
+    moved = next(name for name, layer in checker.MODULE_LAYERS.items() if layer == 3)
+    drifted = _unreadable(corpus, _layer_document({**checker.MODULE_LAYERS, moved: 2}))
+    assert drifted == [f"rule 5: {moved} is layer 2 in decisions.md and layer 3 in MODULE_LAYERS"]
+
+    dropped_entry = {name: layer for name, layer in checker.MODULE_LAYERS.items() if name != moved}
+    assert _unreadable(corpus, _layer_document(dropped_entry)) == [
+        f"rule 5: MODULE_LAYERS names {moved}, which decisions.md layer table does not"
+    ]
+
+    extra_entry = {**checker.MODULE_LAYERS, "demo": 3}
+    assert _unreadable(corpus, _layer_document(extra_entry)) == [
+        "rule 5: decisions.md layer table names demo, which MODULE_LAYERS does not"
+    ]
+
+    assert _unreadable(corpus, "No layer table here.\n") == [
+        "rule 5: decisions.md layer table unreadable: no '| Layer | Modules |' table"
+    ]
+    renamed = _layer_document(checker.MODULE_LAYERS).replace("| 1 \u2014", "| one \u2014", 1)
+    assert any(
+        "unreadable:" in finding and "names no layer" in finding
+        for finding in _unreadable(corpus, renamed)
+    )
+    not_a_name = _layer_document(checker.MODULE_LAYERS).replace(moved, "not a module name", 1)
+    assert any("not a module name" in finding for finding in _unreadable(corpus, not_a_name))
+    duplicated = _unreadable(
+        corpus,
+        _layer_document(checker.MODULE_LAYERS).rstrip("\n") + f"\n| 4 \u2014 extra | {dropped} |\n",
+    )
+    assert any(
+        f"layer 4 lists {dropped}, which layer 3 already lists" in finding for finding in duplicated
+    )
+
+
+def test_layer_table_mirrors_the_real_tree() -> None:
+    """The live inventory, the layer table, and the shipped document agree."""
+    corpus = checker.load_corpus(REPO_ROOT)
+    assert checker.layer_table_findings(corpus) == []
+    document = (REPO_ROOT / checker.DECISIONS_DOC_RELATIVE_PATH).read_text(encoding="utf-8")
+    assert checker.decisions_layer_table(document) == checker.MODULE_LAYERS

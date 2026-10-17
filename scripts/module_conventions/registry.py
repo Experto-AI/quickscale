@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.module_conventions.core import (
+    DECISIONS_DOC_RELATIVE_PATH,
     Corpus,
     load_corpus,
 )
 from scripts.module_conventions.rule_44 import rule_44_role_checks
 from scripts.module_conventions.rules_analytics import rule_22_analytics_events
 from scripts.module_conventions.rules_dependencies import (
+    layer_table_findings,
     rule_5_dependency_direction,
     rule_35_secrets,
     rule_36_typecheck_config,
@@ -158,7 +160,6 @@ DELEGATED_RULES: tuple[tuple[int, str], ...] = (
     (49, "the inventory test and orgs' W006 check"),
 )
 
-DECISIONS_DOC_RELATIVE_PATH = Path("docs/technical/decisions.md")
 MODULE_CONVENTIONS_HEADING = "### Module Conventions"
 _RULE_HEADING = re.compile(r"^\*\*(\d+)\.\s")
 
@@ -211,7 +212,10 @@ def partition_violations(recorded: Iterable[int]) -> list[str]:
 def check_conventions(repo_root: Path) -> list[str]:
     """Return sorted violations for every covered rule."""
     corpus = load_corpus(repo_root)
-    violations: list[str] = []
+    # Rule 5's layer table is a repository-wide clause, not a per-module
+    # source scan: every shipped module has a layer and decisions.md declares
+    # the same table (SA296 (c)).
+    violations = layer_table_findings(corpus)
     for rule in RULES:
         try:
             violations.extend(rule.detector(corpus))

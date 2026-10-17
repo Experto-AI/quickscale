@@ -536,10 +536,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Closes coherence gaps 17 and 20–25, which no item carries.
 
-  **Context:** rules 5 and 34 skip a module missing from `MODULE_LAYERS`; `AppConfig`
-  capability declarations are open-world, with literal sets in both the harness and core; rule
-  13's `TenantModelAdmin` registration and rule 11's compare-against-members clause have no
-  detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
+  **Context:** `AppConfig` capability declarations are open-world, with literal sets in both
+  the harness and core; rule 13's `TenantModelAdmin` registration and rule 11's
+  compare-against-members clause have no detector;
+  [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
   these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
   rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
   order.
@@ -555,9 +555,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     code — a deleting, anonymizing, or overwriting operation, the adapter registry's callable
     key included — with `--dry-run` checked as a declared flag; `_reset`/`_wipe` controls and
     exact-findings rows pin it. A computed-name dispatch such as the backups DR bridge's stays
-    outside the detector, recorded in coherence gap 21. (c) is next.
-  - [ ] (c) The harness fails on a module missing from `MODULE_LAYERS` and compares decisions'
-    layer table with it (Tier 1).
+    outside the detector, recorded in coherence gap 21.
+  - [x] (c): landed as the harness's layer-table check: a shipped module missing from
+    `MODULE_LAYERS`, an entry naming no module, and any disagreement with decisions' layer
+    table fail the check, with control cases and a fail-closed table parser. (d) is next.
   - [ ] (d) Capability declarations checked against core's `CAPABILITIES`, the harness reading
     core's set instead of its own literal (Tier 2-fast).
   - [ ] (e) Detectors for rule 13's admin registration and rule 11's compare-against-members

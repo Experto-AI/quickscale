@@ -7,7 +7,10 @@ module's source, and core's and the CLI's option handling that fails on each
 of the Module Conventions rules the harness covers.  This check runs the
 detectors for the rules the shipped tree already meets.  Each detector has a
 control case in ``scripts/tests_module_conventions/`` proving it rejects
-a violation.  Rules not yet enforced here are recorded in ``OPEN_RULES`` with
+a violation.  Rule 5's layer table is checked over the whole repository: a
+module missing from ``MODULE_LAYERS``, an entry naming no shipped module, or
+a table that disagrees with decisions.md fails the check.  Rules not yet
+enforced here are recorded in ``OPEN_RULES`` with
 the ticket or mechanism that closes them; rules whose clauses ride other rules
 or an external gate are listed in ``DELEGATED_RULES``.  The test suite keeps
 covered, open, and delegated a partition of the rule headings decisions.md
@@ -60,6 +63,8 @@ from scripts.module_conventions.rules_analytics import (
     rule_22_analytics_events,
 )
 from scripts.module_conventions.rules_dependencies import (
+    decisions_layer_table,
+    layer_table_findings,
     rule_5_dependency_direction,
     rule_35_secrets,
     rule_36_typecheck_config,
@@ -137,7 +142,9 @@ __all__ = [
     "THEME_SEAM_TEMPLATE",
     "THEME_SEAM_TEMPLATES",
     "check_conventions",
+    "decisions_layer_table",
     "decisions_rule_numbers",
+    "layer_table_findings",
     "load_corpus",
     "main",
     "partition_violations",
