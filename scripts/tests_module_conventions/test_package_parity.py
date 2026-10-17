@@ -217,7 +217,10 @@ CASE_BUILDERS = {
     "format_flag": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--format', choices=('human', 'json'))\n",
         )
@@ -225,7 +228,10 @@ CASE_BUILDERS = {
     "scheduled_alias": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--scheduled', action='store_true')\n",
         )
@@ -233,7 +239,10 @@ CASE_BUILDERS = {
     "bad_trigger": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--trigger', choices=['scheduled'], "
             "default='scheduled')\n",
@@ -242,7 +251,10 @@ CASE_BUILDERS = {
     "purge_no_confirm": lambda: _corpus(
         _command_module(
             "purge",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--dry-run', action='store_true')\n",
         )
@@ -250,7 +262,10 @@ CASE_BUILDERS = {
     "organization_flag": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--organization')\n",
         )
@@ -258,7 +273,10 @@ CASE_BUILDERS = {
     "org_flag": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--org')\n",
         )
@@ -266,7 +284,10 @@ CASE_BUILDERS = {
     "organization_slug_flag": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--organization-slug')\n",
         )
@@ -274,7 +295,10 @@ CASE_BUILDERS = {
     "slug_without_selector": lambda: _corpus(
         _command_module(
             "purge",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--slug')\n"
             "        parser.add_argument('--confirm')\n"
@@ -284,13 +308,23 @@ CASE_BUILDERS = {
     "print_call": lambda: _corpus(
         _command_module(
             "run",
-            "class Command:\n    def handle(self, *args, **options):\n        print('x')\n",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        print('x')\n",
         )
     ),
     "exit_call": lambda: _corpus(
         _command_module(
             "run",
-            "import sys\n\n\nclass Command:\n"
+            "import sys\n"
+            "\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def handle(self, *args, **options):\n"
             "        sys.exit(1)\n",
         )
@@ -298,10 +332,12 @@ CASE_BUILDERS = {
     "conforming_command": lambda: _corpus(
         _command_module(
             "purge",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
             "from quickscale_core.runtime import require_scheduled_module_enabled\n"
             "\n"
             "\n"
-            "class Command:\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--confirm')\n"
             "        parser.add_argument('--dry-run', action='store_true')\n"
@@ -319,10 +355,45 @@ CASE_BUILDERS = {
     "trigger_without_helper": lambda: _corpus(
         _command_module(
             "report",
-            "class Command:\n"
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
             "default='manual')\n",
+        )
+    ),
+    "command_without_base": lambda: _corpus(
+        _command_module(
+            "run",
+            "class Command:\n    def handle(self, *args, **options):\n        return None\n",
+        )
+    ),
+    "command_without_class": lambda: _corpus(
+        _command_module("run", "def handle():\n    return None\n")
+    ),
+    "command_error_raise": lambda: _corpus(
+        _command_module(
+            "run",
+            "from django.core.management.base import BaseCommand, CommandError\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        if not options['confirm']:\n"
+            "            raise CommandError('Pass --confirm to continue.')\n",
+        )
+    ),
+    "command_raise_value_error": lambda: _corpus(
+        _command_module(
+            "run",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        raise ValueError('bad input')\n",
         )
     ),
     "private_support_module": lambda: _corpus(
@@ -330,7 +401,10 @@ CASE_BUILDERS = {
             _golden_module(),
             **{
                 "management/commands/_support.py": (
-                    "class Command:\n"
+                    "from django.core.management.base import BaseCommand\n"
+                    "\n"
+                    "\n"
+                    "class Command(BaseCommand):\n"
                     "    def add_arguments(self, parser):\n"
                     "        parser.add_argument('--format')\n"
                     "        parser.add_argument('--trigger', choices=['scheduled'])\n"
@@ -593,6 +667,28 @@ EXACT_FINDINGS = (
         ),
     ),
     ("private_support_module", "rule_17_management_commands", ()),
+    (
+        "command_without_base",
+        "rule_17_management_commands",
+        ("rule 17: demo: quickscale_demo_run class Command does not subclass BaseCommand",),
+    ),
+    (
+        "command_without_class",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_run defines no Command class; "
+            "a command subclasses BaseCommand",
+        ),
+    ),
+    ("command_error_raise", "rule_17_management_commands", ()),
+    (
+        "command_raise_value_error",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_run raises ValueError; commands report "
+            "failures through django.core.management.base.CommandError",
+        ),
+    ),
     ("clean", "rule_23_service_surface", ()),
     (
         "missing_all",

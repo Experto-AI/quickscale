@@ -56,9 +56,6 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
     module-name order, yet `INSTALLED_APPS` and `MIDDLEWARE` compose in module-name order
     (`_sort_module_items`). No defect today: auth's `AccountMiddleware` happens to sort before
     orgs' `TenantMiddleware`. Fix: explicit `before`/`after`, or the rule names the exception.
-20. **Rule 40 claims checks that do not exist.** No detector checks `CommandError` or
-    `BaseCommand`, and none checks "unlisted core ports". The rule 28 file allowlist is the only
-    indirect guard.
 21. **Rule 17's destructive duty keys on command-name keywords.** `--dry-run` is matched as a
     substring, so a command named `_reset` or `_wipe` passes. `--json` is never required, and
     `--trigger` is checked only when present (`_package_commands.py`).

@@ -36,21 +36,180 @@ def test_command_output_control() -> None:
     module = _golden_module()
     broken = _with_files(
         module,
-        **{"management/commands/quickscale_demo_run.py": "def handle():\n    print('x')\n"},
+        **{
+            "management/commands/quickscale_demo_run.py": (
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
+                "    def handle(self, *args, **options):\n"
+                "        print('x')\n"
+            )
+        },
     )
-    assert _violations(checker.rule_17_management_commands, broken)
+    assert any(
+        "calls print()" in violation
+        for violation in _violations(checker.rule_17_management_commands, broken)
+    )
 
 
 def test_destructive_command_dry_run_control() -> None:
     module = _golden_module()
     broken = _with_files(
         module,
-        **{"management/commands/quickscale_demo_purge.py": "def handle():\n    pass\n"},
+        **{
+            "management/commands/quickscale_demo_purge.py": (
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
+                "    def handle(self, *args, **options):\n"
+                "        return None\n"
+            )
+        },
     )
     assert any(
         "dry-run" in violation
         for violation in _violations(checker.rule_17_management_commands, broken)
     )
+
+
+def test_command_base_control() -> None:
+    """Rule 17: a command's Command class subclasses BaseCommand."""
+    module = _golden_module()
+    assert _violations(checker.rule_17_management_commands, module) == []
+    no_base = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_run.py": (
+                "class Command:\n    def handle(self, *args, **options):\n        return None\n"
+            )
+        },
+    )
+    assert any(
+        "does not subclass BaseCommand" in violation
+        for violation in _violations(checker.rule_17_management_commands, no_base)
+    )
+    no_class = _with_files(
+        module,
+        **{"management/commands/quickscale_demo_run.py": "def handle():\n    return None\n"},
+    )
+    assert any(
+        "defines no Command class" in violation
+        for violation in _violations(checker.rule_17_management_commands, no_class)
+    )
+    aliased = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_run.py": (
+                "from django.core.management.base import BaseCommand as DjangoBaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(DjangoBaseCommand):\n"
+                "    def handle(self, *args, **options):\n"
+                "        return None\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_17_management_commands, aliased) == []
+    wrong_origin = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_run.py": (
+                "from demo.helpers import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
+                "    def handle(self, *args, **options):\n"
+                "        return None\n"
+            )
+        },
+    )
+    assert any(
+        "does not subclass BaseCommand" in violation
+        for violation in _violations(checker.rule_17_management_commands, wrong_origin)
+    )
+
+
+def test_command_error_control() -> None:
+    """Rule 17: a command reports failures by raising CommandError."""
+    module = _golden_module()
+
+    def _command(source: str) -> Module:
+        return _with_files(module, **{"management/commands/quickscale_demo_run.py": source})
+
+    raising = _command(
+        "from django.core.management.base import BaseCommand, CommandError\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        raise CommandError('Requested snapshot does not exist.')\n"
+    )
+    assert _violations(checker.rule_17_management_commands, raising) == []
+    wrong_type = _command(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        raise ValueError('bad input')\n"
+    )
+    assert any(
+        "raises ValueError; commands report failures through "
+        "django.core.management.base.CommandError" in violation
+        for violation in _violations(checker.rule_17_management_commands, wrong_type)
+    )
+    wrong_origin = _command(
+        "from django.core.management.base import BaseCommand\n"
+        "from demo.helpers import CommandError\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        raise CommandError('Requested snapshot does not exist.')\n"
+    )
+    assert any(
+        "raises CommandError; commands report failures through "
+        "django.core.management.base.CommandError" in violation
+        for violation in _violations(checker.rule_17_management_commands, wrong_origin)
+    )
+    re_raising = _command(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        try:\n"
+        "            risky()\n"
+        "        except DemoError:\n"
+        "            raise\n"
+    )
+    assert _violations(checker.rule_17_management_commands, re_raising) == []
+    internal_raise = _command(
+        "from django.core.management.base import BaseCommand, CommandError\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        try:\n"
+        "            raise ValueError('bad input')\n"
+        "        except ValueError:\n"
+        "            raise CommandError('--snapshot-id must be an integer.')\n"
+    )
+    assert any(
+        "raises ValueError" in violation
+        for violation in _violations(checker.rule_17_management_commands, internal_raise)
+    )
+    aliased = _command(
+        "from django.core.management.base import BaseCommand, CommandError as QSError\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        raise QSError('Requested snapshot does not exist.')\n"
+    )
+    assert _violations(checker.rule_17_management_commands, aliased) == []
 
 
 def test_package_tooling_control() -> None:
@@ -1119,7 +1278,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_report.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--format', choices=('human', 'json'))\n"
             )
@@ -1133,7 +1295,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_report.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--scheduled', action='store_true')\n"
             )
@@ -1147,7 +1312,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_report.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--trigger', choices=['scheduled'], "
                 "default='scheduled')\n"
@@ -1161,7 +1329,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_purge.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--dry-run', action='store_true')\n"
             )
@@ -1175,7 +1346,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_report.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--organization')\n"
             )
@@ -1189,7 +1363,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_report.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--org')\n"
             )
@@ -1203,7 +1380,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_report.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--organization-slug')\n"
             )
@@ -1217,7 +1397,10 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_purge.py": (
-                "class Command:\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--slug')\n"
                 "        parser.add_argument('--confirm')\n"
@@ -1233,10 +1416,12 @@ def test_command_flag_conventions_controls() -> None:
         module,
         **{
             "management/commands/quickscale_demo_purge.py": (
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
                 "from quickscale_core.runtime import require_scheduled_module_enabled\n"
                 "\n"
                 "\n"
-                "class Command:\n"
+                "class Command(BaseCommand):\n"
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--confirm')\n"
                 "        parser.add_argument('--dry-run', action='store_true')\n"

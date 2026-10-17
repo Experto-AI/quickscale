@@ -1330,8 +1330,8 @@ through the closed-world inventory test and orgs' `W006` check): names, suffixes
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
-`checks.py` or swallowed, required files and tests, README headings, choice lists, unlisted core
-ports, option fields and validation, per-module option code, constants, and module-name branches
+`checks.py` or swallowed, required files and tests, README headings, choice lists, option fields
+and validation, per-module option code, constants, and module-name branches
 in core or the CLI, duplicated setting names or defaults in a manifest,
 tenant-model base,
 `Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,

@@ -528,8 +528,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Closes coherence gaps 17 and 20–25, which no item carries.
 
-  **Context:** rule 40 claims `CommandError`/`BaseCommand` and "unlisted core ports" checks that
-  do not exist; rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
+  **Context:** rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
   module missing from `MODULE_LAYERS`; `AppConfig` capability declarations are open-world, with
   literal sets in both the harness and core; rule 13's `TenantModelAdmin` registration and rule
   11's compare-against-members clause have no detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
@@ -541,8 +540,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   is checked, and the checklist matches the core edits a new module needs.
 
   **Slices:**
-  - [ ] (a) Rule 40: add the `CommandError`/`BaseCommand` detector and drop the unchecked
-    "unlisted core ports" claim (Tier 2-fast).
+  - [x] (a): landed as the module-conventions harness's rule 17 `BaseCommand`/`CommandError`
+    detector, with control cases and exact-findings rows; decisions rule 40 drops the unchecked
+    "unlisted core ports" claim. (b) is next.
   - [ ] (b) Rule 17's destructive duty keyed on what the command deletes, not on its name, with
     `_reset`/`_wipe` controls (Tier 2-full: detecting a destructive command needs design).
   - [ ] (c) The harness fails on a module missing from `MODULE_LAYERS` and compares decisions'

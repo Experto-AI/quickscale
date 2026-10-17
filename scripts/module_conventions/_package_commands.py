@@ -9,7 +9,13 @@ keep working.
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 
+from scripts.module_conventions._misc_checks import (
+    _base_origin,
+    _base_origins,
+    _import_bindings,
+)
 from scripts.module_conventions.core import (
     _call_func_name,
     _keyword,
@@ -61,6 +67,23 @@ DESTRUCTIVE_COMMAND_KEYWORDS = (
 #: option exists calls this core helper before any other work, so the refusal
 #: reads the same everywhere and no command module spells its own.
 SCHEDULED_REFUSAL_HELPER = "require_scheduled_module_enabled"
+
+#: Rule 17: the module that owns the one command base class and the one
+#: expected-failure exception.  Both are matched by their resolved import
+#: origin, so a same-named object from anywhere else — or an unimported name —
+#: is a different object and is refused; an alias import of Django's own
+#: passes.
+DJANGO_COMMAND_MODULE = "django.core.management.base"
+
+#: Rule 17: the one command base class.  A command module's ``Command`` class
+#: subclasses Django's ``BaseCommand``; another base — or no ``Command`` class
+#: at all — is refused.
+COMMAND_BASE_NAME = "BaseCommand"
+
+#: Rule 17: the one expected-failure exception.  A command reports a failure
+#: by raising Django's ``CommandError``; raising anything else from a command
+#: module is refused, the statically checkable reading of the clause.
+COMMAND_ERROR_NAME = "CommandError"
 
 #: Rule 17: the one organization-selector spelling.  A command that selects a
 #: single organization declares ``--organization-id`` and validates the value
@@ -148,16 +171,74 @@ def _call_findings(module_name: str, command: str, tree: ast.Module) -> list[str
     return violations
 
 
+def _command_base_findings(
+    module_name: str,
+    command: str,
+    tree: ast.Module,
+    bindings: Mapping[str, tuple[str, str | None, bool]],
+) -> list[str]:
+    """Return rule 17's BaseCommand findings for one command module."""
+    classes = [
+        node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name == "Command"
+    ]
+    if not classes:
+        return [
+            f"rule 17: {module_name}: {command} defines no Command class; "
+            "a command subclasses BaseCommand"
+        ]
+    if any(
+        module_path == DJANGO_COMMAND_MODULE and name == COMMAND_BASE_NAME
+        for node in classes
+        for module_path, name in _base_origins(node, bindings)
+    ):
+        return []
+    return [f"rule 17: {module_name}: {command} class Command does not subclass BaseCommand"]
+
+
+def _raise_findings(
+    module_name: str,
+    command: str,
+    tree: ast.Module,
+    bindings: Mapping[str, tuple[str, str | None, bool]],
+) -> list[str]:
+    """
+    Return rule 17's CommandError findings for one command module.
+
+    A bare ``raise`` re-raises and stays accepted; every other raise must
+    resolve to Django's ``CommandError`` by import origin, aliases included.
+    Any other raise is refused — a caught exception re-raised by name and an
+    internal raise later translated to ``CommandError`` included, because the
+    clause is enforced syntactically.
+    """
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Raise) or node.exc is None:
+            continue
+        expression = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+        module_path, name = _base_origin(expression, bindings)
+        if module_path == DJANGO_COMMAND_MODULE and name == COMMAND_ERROR_NAME:
+            continue
+        violations.append(
+            f"rule 17: {module_name}: {command} raises "
+            f"{name or 'an unresolved exception'}; commands report failures "
+            f"through {DJANGO_COMMAND_MODULE}.{COMMAND_ERROR_NAME}"
+        )
+    return violations
+
+
 def _command_findings(module_name: str, command: str, tree: ast.Module, text: str) -> list[str]:
     """Return one management command's rule 17 findings, in report order."""
+    bindings = _import_bindings(tree)
     flags = _command_flags(tree)
-    violations = _flag_findings(module_name, command, flags)
+    violations = _command_base_findings(module_name, command, tree, bindings)
+    violations.extend(_flag_findings(module_name, command, flags))
     if "--trigger" in flags and not _refuses_scheduled_runs(tree):
         violations.append(
             f"rule 17: {module_name}: {command} --trigger must refuse scheduled "
             f"runs through {SCHEDULED_REFUSAL_HELPER}"
         )
     violations.extend(_call_findings(module_name, command, tree))
+    violations.extend(_raise_findings(module_name, command, tree, bindings))
     if any(keyword in command for keyword in DESTRUCTIVE_COMMAND_KEYWORDS):
         if "--dry-run" not in text:
             violations.append(f"rule 17: {module_name}: destructive {command} takes no --dry-run")

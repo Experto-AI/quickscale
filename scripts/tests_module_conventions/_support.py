@@ -194,7 +194,12 @@ def _golden_module(name: str = "demo") -> Module:
                 "{% block demo_content %}{% endblock %}\n"
             ),
             "management/commands/quickscale_demo_run.py": (
-                "class Command:\n    def handle(self, *args, **options):\n        return None\n"
+                "from django.core.management.base import BaseCommand\n"
+                "\n"
+                "\n"
+                "class Command(BaseCommand):\n"
+                "    def handle(self, *args, **options):\n"
+                "        return None\n"
             ),
         },
         root_files={
