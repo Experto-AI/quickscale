@@ -241,9 +241,10 @@ def _get_management_command_modules(package_name: str, src_dir: Path) -> list[st
     """
     Return dotted import paths for management command modules in *package_name*.
 
-    Scans ``src_dir/<package_name>/management/commands/*.py`` (excluding
-    ``__init__.py``) and returns fully-qualified dotted paths suitable for
-    ``importlib.import_module`` or ``__import__``.
+    Scans ``src_dir/<package_name>/management/commands/*.py`` (skipping
+    ``__init__.py`` and underscore-prefixed support modules, the way Django's
+    own command discovery does) and returns fully-qualified dotted paths
+    suitable for ``importlib.import_module`` or ``__import__``.
 
     Returns an empty list when the directory does not exist or no commands
     are found.
@@ -254,6 +255,6 @@ def _get_management_command_modules(package_name: str, src_dir: Path) -> list[st
         return []
     modules: list[str] = []
     for cmd_file in sorted(commands_dir.iterdir()):
-        if cmd_file.suffix == ".py" and cmd_file.stem != "__init__":
+        if cmd_file.suffix == ".py" and not cmd_file.stem.startswith("_"):
             modules.append(f"{package_name}.management.commands.{cmd_file.stem}")
     return modules
