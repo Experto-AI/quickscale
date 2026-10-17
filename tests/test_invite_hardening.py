@@ -86,11 +86,9 @@ def test_orgs_wiring_contributes_the_invite_throttle_scopes() -> None:
 
     assert spec.settings["QUICKSCALE_ORGS_INVITE_RATE_LIMIT"] == "20/day"
     assert spec.settings["QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT"] == 50
-    assert spec.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {
-            "quickscale_orgs_invite": "20/day",
-            "quickscale_orgs_invite_organization": "20/day",
-        }
+    assert dict(spec.throttle_scopes) == {
+        "quickscale_orgs_invite": "20/day",
+        "quickscale_orgs_invite_organization": "20/day",
     }
 
 
@@ -99,7 +97,7 @@ def test_orgs_wiring_carries_the_configured_invite_rate() -> None:
     spec = _orgs_manifest_adapter({"invite_rate_limit": " 7/hour "})
 
     assert spec.settings["QUICKSCALE_ORGS_INVITE_RATE_LIMIT"] == "7/hour"
-    assert spec.settings["REST_FRAMEWORK"]["DEFAULT_THROTTLE_RATES"] == {
+    assert dict(spec.throttle_scopes) == {
         "quickscale_orgs_invite": "7/hour",
         "quickscale_orgs_invite_organization": "7/hour",
     }
