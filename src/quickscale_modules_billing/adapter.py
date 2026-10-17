@@ -25,37 +25,22 @@ from quickscale_core.runtime import (
 def _billing_post_hook(
     spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
-    """Contribute billing's throttle scopes and apply its off-switch behaviour.
+    """Apply billing's off-switch behaviour.
 
     Rule 32 — every Stripe-calling billing endpoint carries an explicit scope
     stemmed as ``quickscale_billing_<purpose>``, and the rate for those scopes
-    is the module's ``api_rate_limit`` option, contributed here for rule 30's
-    merge.  The option's canonical value and the Stripe secret references
-    arrive from the manifest boundary; the hook never re-coerces or re-reads a
-    raw option.
+    is the module's ``api_rate_limit`` option, declared in the manifest's
+    ``throttle_scopes`` projection.  The option's canonical value reaches the
+    projected ``spec.throttle_scopes`` before this hook runs; the hook never
+    re-coerces or re-reads a raw option and contributes no rate map.
 
     Rule 1 (D3): off keeps the module installed — app, middleware, settings,
     and admin — and unmounts its public pages and APIs.  The Stripe webhook
     stays mounted through its own URLconf and answers the module's 404
     refusal (rule 26), so provider retries get a clean answer.
     """
-    settings = dict(spec.settings)
-    api_rate_limit = settings["QUICKSCALE_BILLING_API_RATE_LIMIT"]
-    settings["REST_FRAMEWORK"] = {
-        "DEFAULT_THROTTLE_RATES": {
-            "quickscale_billing_checkout": api_rate_limit,
-            "quickscale_billing_portal": api_rate_limit,
-        },
-    }
     if resolved.enabled:
-        return ModuleWiringSpec(
-            apps=spec.apps,
-            middleware=spec.middleware,
-            settings=settings,
-            pre_home_url_includes=spec.pre_home_url_includes,
-            url_includes=spec.url_includes,
-            managed_files=spec.managed_files,
-        )
+        return spec
     webhook_includes = tuple(
         (prefix, "quickscale_modules_billing.webhook_urls")
         for prefix, target in spec.url_includes
@@ -64,11 +49,12 @@ def _billing_post_hook(
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
-        settings=settings,
+        settings=spec.settings,
         pre_home_url_includes=(),
         url_includes=webhook_includes,
         spa_routes=(),
         managed_files=spec.managed_files,
+        throttle_scopes=spec.throttle_scopes,
     )
 
 
@@ -81,8 +67,8 @@ def _billing_manifest_adapter(
 
     Uses the generic manifest-driven path that reads every declared default,
     normalization rule, check, projection, and secret reference from the
-    billing ``module.yml`` manifest, then contributes the throttle scopes and
-    the off-switch URL transformation via the post-resolution hook.
+    billing ``module.yml`` manifest, then applies the off-switch URL
+    transformation via the post-resolution hook.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).

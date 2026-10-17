@@ -94,6 +94,12 @@ config:
 
   immutable: {}
 
+# Declared DRF throttle scopes (rule 32): each scope names the option whose
+# resolved value is its rate, so the adapter carries no rate map.
+throttle_scopes:
+  quickscale_billing_checkout: api_rate_limit
+  quickscale_billing_portal: api_rate_limit
+
 # Non-live CI placeholders: each key names a declared option whose
 # resolved value is the environment variable the enabled module's startup
 # check reads, and the placeholder is what the managed
