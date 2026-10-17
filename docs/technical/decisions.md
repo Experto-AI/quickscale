@@ -1301,15 +1301,19 @@ rather than the release that introduced it.
   environment constants (`contracts/module_options.py`) that its env-sync and secret-projection
   plumbing and the CLI's operator output read; `manifest/social_manifest.py`'s social runtime,
   pending the arch watchlist `core-holds-module-vocabulary`; `utils/_dependency_io.py`'s storage
-  cloud-extra selection, which has no generic manifest home yet; and
-  `commands/_module_embed.py`'s auth migration gate, which runs before the module is importable.
+  cloud-extra selection, which has no generic manifest home yet; `commands/_module_embed.py`'s
+  auth migration gate, which runs before the module is importable; the CLI's apply next-steps
+  text (`commands/_finalize.py`) and backups `.gitignore` adoption (`commands/_runtime.py`),
+  which read the configured module set for operator output and an apply-side effect the
+  manifests do not declare; and `dr_engine/_media.py`'s media-runtime descriptor field, whose
+  `storage` key carries the resolved storage handle and not the module.
 - ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter
   hook: option values are judged by each module's manifest-declared checks, and a module's
   adapter may implement the generic `option_validation_guidance` hook to carry its own
   operator remediation text for refused values.
 - ✅ `module-extension.md`'s authoring checklist states each core edit a new module needs.
-- ❌ A per-module constant, default, or equality branch on a module name in core or the CLI
-  outside the listed exceptions.
+- ❌ A per-module constant, default, equality, membership, or `.get()`/subscript branch on a
+  module name in core or the CLI outside the listed exceptions.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
   test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producers
   (`runtime/seam._SEAM_MODULE_PATHS` and `runtime/seam._SEAM_MODULE_API_PATHS`, and the runtime

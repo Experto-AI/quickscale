@@ -196,7 +196,12 @@ def _rule34_corpus() -> Corpus:
 
 
 def _rule37_corpus() -> Corpus:
-    corpus = _corpus(_golden_module("alpha"), _golden_module("beta"), _golden_module("gamma"))
+    corpus = _corpus(
+        _golden_module("alpha"),
+        _golden_module("beta"),
+        _golden_module("gamma"),
+        _golden_module("billing"),
+    )
     return replace(
         corpus,
         core_files={
@@ -209,6 +214,14 @@ def _rule37_corpus() -> Corpus:
             "commands/select.py": "def pick(module_name):\n    return module_name == 'alpha'\n",
             "commands/const.py": "ALPHA_STATE = 'x'\n",
             "commands/other.py": "NAMES = ['alpha', 'beta']\n",
+            "commands/gate.py": (
+                "def enabled(modules):\n"
+                "    if 'billing' in modules:\n"
+                "        return True\n"
+                "    return 'beta' not in modules\n"
+            ),
+            "commands/lookup.py": "def pick(modules):\n    return modules.get('alpha')\n",
+            "commands/index.py": "def pick(modules):\n    return modules['beta']\n",
         },
     )
 
@@ -337,6 +350,12 @@ EXACT_FINDINGS = (
             "module_name == 'alpha'",
             "rule 37: cli/commands/const.py:1 declares module-prefixed constant ALPHA_STATE",
             "rule 37: cli/commands/other.py:1 literal NAMES lists 2 module names: alpha, beta",
+            "rule 37: cli/commands/gate.py:2 branches on module name 'billing': "
+            "'billing' in modules",
+            "rule 37: cli/commands/gate.py:4 branches on module name 'beta': 'beta' not in modules",
+            "rule 37: cli/commands/lookup.py:2 branches on module name 'alpha': "
+            "modules.get('alpha')",
+            "rule 37: cli/commands/index.py:2 branches on module name 'beta': modules['beta']",
         ),
     ),
     ("rule37_allowed", "rule_37_module_lists", ()),

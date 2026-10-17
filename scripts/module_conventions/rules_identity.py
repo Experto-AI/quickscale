@@ -222,9 +222,9 @@ RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
 }  #: Two or more distinct module names in one literal is a module enumeration
 
 #: Rule 37's recorded exceptions, each with the reason the rule accepts it.
-#: A branch compares against a discovered module name; a constant is declared
-#: with a module-name prefix.  Keys are (tree, relative path, module name or
-#: constant name).
+#: A branch names a discovered module in a comparison, a ``.get()`` call, or a
+#: subscript; a constant is declared with a module-name prefix.  Keys are
+#: (tree, relative path, module name or constant name).
 RULE_37_ALLOWED_BRANCHES: dict[tuple[str, str, str], str] = {
     ("cli", "utils/_dependency_io.py", "storage"): (
         "storage's cloud extra selects the module's optional boto3/django-storages "
@@ -234,6 +234,21 @@ RULE_37_ALLOWED_BRANCHES: dict[tuple[str, str, str], str] = {
     ("cli", "commands/_module_embed.py", "auth"): (
         "auth's split-branch migration gate runs before the embedded module is "
         "importable, so it cannot live in the module's adapter"
+    ),
+    **{
+        ("cli", "commands/_finalize.py", name): (
+            "operator next-steps text: the apply summary's per-module setup "
+            "guidance is presentation data the module manifests do not declare"
+        )
+        for name in ("analytics", "backups", "billing", "notifications", "social")
+    },
+    ("cli", "commands/_runtime.py", "backups"): (
+        "backups' artifact-directory .gitignore adoption: an apply-side effect "
+        "of the module's local_directory option that the manifest does not declare"
+    ),
+    ("core", "dr_engine/_media.py", "storage"): (
+        "the media-runtime descriptor's own `storage` field carries the resolved "
+        "storage handle; the key is not the storage module name"
     ),
 }
 
