@@ -365,17 +365,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   check.
 
   **Slices:**
-  - [ ] (a) Models: property fields, currency labels, and ordered gallery child tables, with
-    forced RLS, boundary tests, SA208 classification, and purge coverage, as `0002+` migrations.
-    Every tenant-to-tenant FK (gallery → property, inquiry → listing) carries the composite
-    organization constraint that orgs' composite-FK check requires.
-  - [ ] (b) Read API: published listings of the requested organization, with server-side keyword
-    and attribute filters, and API-level isolation tests.
-  - [ ] (c) React catalog and detail pages in Spanish on the app's design.
-  - [ ] (d) Listing inquiry into a CRM record with a listing reference, and the search → detail
-    → inquiry journey.
-  - [ ] (e) Prerender or server render, Open Graph tags, sitemap, and `robots.txt`, with the
-    crawler test and rendered-page isolation.
+  - [ ] (a, b) Backend, one session: models — property fields, currency labels, and ordered
+    gallery child tables, with forced RLS, boundary tests, SA208 classification, and purge
+    coverage, as `0002+` migrations, every tenant-to-tenant FK (gallery → property, inquiry →
+    listing) carrying the composite organization constraint that orgs' composite-FK check
+    requires — and the read API: published listings of the requested organization, with
+    server-side keyword and attribute filters, and API-level isolation tests (Tier 2-full).
+  - [ ] (c, d, e) Frontend, one session: React catalog and detail pages in Spanish on the app's
+    design; listing inquiry into a CRM record with a listing reference, and the search → detail
+    → inquiry journey; prerender or server render, Open Graph tags, sitemap, and `robots.txt`,
+    with the crawler test and rendered-page isolation (Tier 2-full: the prerender mechanism
+    needs discovery).
   - [ ] (f) Go-live on `buenosairesproperties.com`, after SA204 (j) freezes migration history:
     the release `bap-web` goes live on carries the frozen manifest, and the search → detail →
     inquiry journey is re-proved on the deployed site (Tier 2-full; production deploy, maintainer
@@ -433,10 +433,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices:**
   - [ ] (a) The decision record and boundary rule, drawn from SA191's cutover evidence (which
-    steps `beta_migration` covered and which the port did by hand) (Tier 1).
-  - [ ] (b) Wire the handoff: `beta_migration` emits its unresolved gaps in the form the prompt
-    reads, the prompt and `CUTOVER.md` move into the maintained tree beside it, and a smoke test
-    proves the handoff file is produced (Tier 2-fast).
+    steps `beta_migration` covered and which the port did by hand), and the wired handoff:
+    `beta_migration` emits its unresolved gaps in the form the prompt reads, the prompt and
+    `CUTOVER.md` move into the maintained tree beside it, and a smoke test proves the handoff
+    file is produced (Tier 2-full: the gap ledger's handoff format needs discovery).
 
 - [x] **SA284 — Content-check the core wheel that `publish.yml` uploads.**
 
@@ -523,10 +523,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     table fail the check, with control cases and a fail-closed table parser. (d) is next.
   - [ ] (d) Capability declarations checked against core's `CAPABILITIES`, the harness reading
     core's set instead of its own literal (Tier 2-fast).
-  - [ ] (e) Detectors for rule 13's admin registration and rule 11's compare-against-members
-    clause (Tier 2-fast).
-  - [ ] (f) Docs: the checklist lists the seam tables, `runtime/urls.py`, and the layer choice,
-    and rule 30 names the module-name composition order as its exception (Tier 1).
+  - [ ] (e, f) One session: detectors for rule 13's admin registration and rule 11's
+    compare-against-members clause, and the docs — the checklist lists the seam tables,
+    `runtime/urls.py`, and the layer choice, and rule 30 names the module-name composition order
+    as its exception (Tier 2-full: two detectors plus the decisions and checklist rewording).
 
 ## Deferred constraints and references
 
