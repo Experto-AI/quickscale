@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
     ModuleWiringSpec,
     ResolvedOptions,
     build_generic_manifest_spec,
+    collect_resolved_option_validation_issues,
+    load_module_manifest,
     resolve_manifest_module_options,
 )
 
@@ -17,10 +18,15 @@ NOTIFICATIONS_LIVE_EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
 #: Django email backend the module selects while live delivery is not configured.
 NOTIFICATIONS_CONSOLE_EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-_PLACEHOLDER_SENDER_EMAIL = "noreply@example.com"
-_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_DOMAIN_PATTERN = re.compile(r"^[A-Za-z0-9.-]+$")
-_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+#: The delivery options whose declared validation decides whether live Resend
+#: delivery is configured: the sender identity, the sending domain, and the
+#: API-key environment-variable reference.  Their ``validation`` blocks are the
+#: one home of the email, domain, and env-var-name patterns and of the
+#: placeholder-sender exclusion, so the predicates below evaluate the
+#: manifest's declared rules instead of restating them (rule 12).
+_LIVE_DELIVERY_OPTIONS = frozenset(
+    {"resend_api_key_env_var", "resend_domain", "sender_email", "sender_name"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -28,46 +34,23 @@ _ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 # ---------------------------------------------------------------------------
 
 
-def _is_valid_email(value: str) -> bool:
-    return bool(_EMAIL_PATTERN.fullmatch(value))
-
-
-def _uses_placeholder_sender_email(value: Any) -> bool:
-    return str(value).strip().casefold() == _PLACEHOLDER_SENDER_EMAIL.casefold()
-
-
-def _is_valid_domain(value: str) -> bool:
-    candidate = value.strip()
-    if not candidate or "://" in candidate or "/" in candidate:
-        return False
-    if candidate.startswith(".") or candidate.endswith("."):
-        return False
-    return bool(_DOMAIN_PATTERN.fullmatch(candidate) and "." in candidate)
-
-
-def _is_valid_env_var_reference(value: str) -> bool:
-    candidate = value.strip()
-    return not candidate or bool(_ENV_VAR_NAME_PATTERN.fullmatch(candidate))
-
-
 def _production_targeted(resolved: ResolvedOptions) -> bool:
     return bool(resolved.enabled) and bool(str(resolved.resend_domain).strip())
 
 
 def _live_delivery_configured(resolved: ResolvedOptions) -> bool:
+    """Return whether live Resend delivery is fully configured.
+
+    The configuration must target live delivery, and the options it depends on
+    must satisfy the validation the manifest declares next to them — the
+    sender-email pattern and placeholder exclusion included.
+    """
     if not _production_targeted(resolved):
         return False
-    sender_name = str(resolved.sender_name).strip()
-    sender_email = str(resolved.sender_email).strip()
-    resend_domain = str(resolved.resend_domain).strip()
-    resend_api_key_env_var = str(resolved.resend_api_key_env_var).strip()
-    return (
-        bool(sender_name)
-        and _is_valid_email(sender_email)
-        and not _uses_placeholder_sender_email(sender_email)
-        and _is_valid_domain(resend_domain)
-        and _is_valid_env_var_reference(resend_api_key_env_var)
+    issues = collect_resolved_option_validation_issues(
+        load_module_manifest("notifications"), resolved
     )
+    return all(issue.option_name not in _LIVE_DELIVERY_OPTIONS for issue in issues)
 
 
 def _runtime_email_backend(resolved: ResolvedOptions) -> str | None:
