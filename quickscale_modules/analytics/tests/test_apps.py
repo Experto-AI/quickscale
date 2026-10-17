@@ -138,55 +138,6 @@ def test_check_skips_empty_api_key_when_debug_excluded(settings) -> None:
     assert check_analytics_settings() == []
 
 
-def test_check_reports_missing_projected_settings(settings) -> None:
-    """An older managed wiring without the projected secret settings fails loudly."""
-    settings.DEBUG = False
-    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
-    del settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY
-    del settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE
-
-    messages = check_analytics_settings()
-
-    assert len(messages) == 1
-    assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY" in messages[0].msg
-    assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE" in messages[0].msg
-    assert "quickscale apply" in messages[0].msg
-
-
-def test_check_reports_missing_projected_settings_when_debug_is_excluded(
-    settings,
-) -> None:
-    """DEBUG exclusion skips capture, not the settings the dashboard path reads."""
-    settings.DEBUG = True
-    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = True
-    del settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY
-    del settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE
-
-    messages = check_analytics_settings()
-
-    assert len(messages) == 1
-    assert "quickscale apply" in messages[0].msg
-
-
-@patch(
-    "quickscale_modules_analytics.checks.projected_setting_names",
-    return_value=("QUICKSCALE_ANALYTICS_RENAMED_PROJECTION",),
-)
-def test_check_reads_projected_names_from_the_manifest(
-    mock_projected_setting_names, settings
-) -> None:
-    """E001's names come from the manifest projection, never a hand-written list."""
-    settings.DEBUG = False
-    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
-
-    messages = check_analytics_settings()
-
-    assert len(messages) == 1
-    assert messages[0].id == "quickscale_analytics.E001"
-    assert "QUICKSCALE_ANALYTICS_RENAMED_PROJECTION" in messages[0].msg
-    mock_projected_setting_names.assert_called_once_with("analytics")
-
-
 @pytest.mark.django_db
 @override_settings()
 def test_missing_enabled_setting_fails_check_migrate_and_runserver(settings) -> None:

@@ -711,11 +711,12 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `retired_options`, and the generic startup check reads it from the shipped manifest: a project
   setting that still carries the name is refused before the project is re-applied, naming its
   replacement.
-- ✅ A module check reads the setting names it requires from the module's manifest projection — the
-  secret and derived settings `apply` writes beyond the declared options — never a hand-written
-  copy, so a renamed setting lands once, in `module.yml`.
-- ❌ A module check re-listing its own setting names (`QUICKSCALE_<MODULE>_*`) instead of reading
-  them from the manifest projection.
+- ✅ A module check names no setting and re-tests no projected setting's presence: the names live
+  only in `module.yml` — the secret and derived settings `apply` writes beyond the declared
+  options included — and the generic settings check validates them against the managed wiring
+  (rule 10).
+- ❌ A module check naming its own setting names (`QUICKSCALE_<MODULE>_*`), or calling
+  `projected_setting_names` in `checks.py` (harness rule 6).
 
 **7. URLs.**
 - ✅ The manifest's `url_includes` sets a module's mount (`blog/`, `accounts/` for auth, `orgs/`
@@ -802,7 +803,11 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ✅ The generic settings check registers from `ready()` before the module's own checks, so a
   missing or invalid declared setting — and a retired setting name the manifest declares — is
   reported by the generic check; a module check does not re-list the settings the generic check
-  validates.
+  validates. Wherever the managed `MODULE_SETTINGS` mapping is present, the generic check also
+  requires the module's manifest-projected settings — the `_ENV_VAR` secret settings and the
+  unconditional derived settings `apply` writes beyond the declared options — so a module check
+  does not re-test a projected setting's presence; `checks.py` calls no `projected_setting_names`
+  (harness rule 6).
 - ✅ **Core port:** core defines a `Protocol` for something it needs, exactly one module
   implements it and registers it from `ready()` through `quickscale_core.runtime`, and a second
   or missing registration fails hard. The allowed ports are listed here:

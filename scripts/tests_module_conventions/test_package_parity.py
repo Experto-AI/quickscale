@@ -214,6 +214,21 @@ CASE_BUILDERS = {
             checks="_PROJECTED_SECRETS = ('QUICKSCALE_DEMO_SECRET_KEY',)\n",
         )
     ),
+    "checks_projected_recheck": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            checks=(
+                "from django.conf import settings\n\n"
+                "from quickscale_core.runtime import projected_setting_names\n\n\n"
+                "def check_demo() -> list[str]:\n"
+                "    return [\n"
+                "        name\n"
+                "        for name in projected_setting_names('demo')\n"
+                "        if not hasattr(settings, name)\n"
+                "    ]\n"
+            ),
+        )
+    ),
     "format_flag": lambda: _corpus(
         _command_module(
             "report",
@@ -584,7 +599,15 @@ EXACT_FINDINGS = (
         "rule_6_no_legacy_names",
         (
             "rule 6: demo: checks.py:1 names setting QUICKSCALE_DEMO_SECRET_KEY; "
-            "read it from the manifest projection",
+            "the generic settings check validates it",
+        ),
+    ),
+    (
+        "checks_projected_recheck",
+        "rule_6_no_legacy_names",
+        (
+            "rule 6: demo: checks.py:9: re-tests a projected setting's presence; "
+            "the generic settings check validates it",
         ),
     ),
     (

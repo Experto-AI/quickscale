@@ -7,8 +7,7 @@ Rule 10: these functions are run from ``AppConfig.ready()`` through
 Rule 12: the declared options (presence, type, choices) are validated by the
 generic settings check registered first; this check covers what options
 cannot express: the resolved PostHog host must be a usable absolute URL, and
-a live runtime must resolve a non-empty API key.  The projected secret
-settings are not manifest options, so a missing one is still reported here.
+a live runtime must resolve a non-empty API key.
 
 Analytics distinguishes invalid configuration from an unreachable vendor: an
 invalid host or an empty PostHog key for live analytics fails startup, while
@@ -22,20 +21,16 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
-from quickscale_core.runtime import (
-    module_settings_are_supplied,
-    projected_setting_names,
-)
+from quickscale_core.runtime import module_settings_are_supplied
 from quickscale_modules_analytics._settings import (
     AnalyticsRuntimeSettingsSnapshot,
 )
 
 # The projected settings apply writes beyond the declared options — the
-# `_ENV_VAR` secret settings (rule 35) and the manifest's derived settings — are
-# read from the module's manifest projection (rule 6), so a rename lands once,
-# in `module.yml`.  They are not manifest options, so the generic settings check
-# does not report them; a missing one is reported below instead of raising
-# while resolving.
+# `_ENV_VAR` secret settings (rule 35) and the manifest's derived settings —
+# are validated by the generic settings check (rule 10), which names a
+# missing one before this check reads it; a module check does not re-test a
+# projected setting's presence.
 
 
 def check_analytics_settings(
@@ -60,23 +55,6 @@ def check_analytics_settings(
     snapshot = AnalyticsRuntimeSettingsSnapshot.from_settings()
     if not snapshot.enabled:
         return messages
-
-    # The projected settings must exist even when DEBUG excludes capture,
-    # because the dashboard view and the public template tags resolve the
-    # host outside the capture path.
-    missing_projected = [
-        name
-        for name in projected_setting_names("analytics")
-        if not hasattr(settings, name)
-    ]
-    if missing_projected:
-        return [
-            Error(
-                f"{', '.join(missing_projected)} not set. "
-                "Run `quickscale apply` to regenerate the managed settings.",
-                id="quickscale_analytics.E001",
-            )
-        ]
 
     if snapshot.exclude_debug and bool(settings.DEBUG):
         return messages

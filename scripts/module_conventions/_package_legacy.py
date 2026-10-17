@@ -3,7 +3,9 @@ Rule 6's legacy- and retired-name mechanics.
 
 Implementation detail of :mod:`scripts.module_conventions.rules_package`; that
 module re-exports every public name defined here, so existing import paths
-keep working.
+keep working.  The module also owns rule 6's scan of ``checks.py``: a check
+names none of its own settings and re-tests no projected setting's presence —
+the generic settings check validates both (rule 10).
 """
 
 from __future__ import annotations
@@ -130,13 +132,12 @@ def _setting_relist_findings(module: Module) -> list[str]:
     """
     Return findings for a checks.py naming the module's settings literally.
 
-    Rule 6's no-re-listing clause: a startup check reads the setting names it
-    requires from the module's manifest projection, so a literal copy of one
-    of the module's own ``QUICKSCALE_<MODULE>_*`` setting names in
-    ``checks.py`` — a collection entry, a ``hasattr`` argument, a mapping key —
-    is a second home for a rename.  A string that merely carries the name in
-    prose stays allowed, and a ``RETIRED_SETTINGS`` mapping keeps its own
-    refusal clause and is exempt here.
+    Rule 6's no-re-listing clause: a setting name written into ``checks.py`` —
+    a collection entry, a ``hasattr`` argument, a mapping key — is a second
+    home for a rename the generic settings check already validates.  A string
+    that merely carries the name in prose stays allowed, and a
+    ``RETIRED_SETTINGS`` mapping keeps its own refusal clause and is exempt
+    here.
     """
     text = module.files.get("checks.py")
     if text is None:
@@ -156,9 +157,83 @@ def _setting_relist_findings(module: Module) -> list[str]:
             continue
         findings.append(
             f"rule 6: {module.name}: checks.py:{node.lineno} names setting "
-            f"{node.value}; read it from the manifest projection"
+            f"{node.value}; the generic settings check validates it"
         )
     return findings
+
+
+#: The core projection reader a module check would call to re-test a
+#: projected setting's presence (SA291).
+PROJECTED_SETTING_NAMES = "projected_setting_names"
+
+#: The import paths that publish the projection reader.
+_PROJECTION_MODULES = frozenset(
+    {
+        "quickscale_core.runtime",
+        "quickscale_core.runtime.manifest",
+    }
+)
+
+
+def _projection_bindings(tree: ast.Module) -> tuple[frozenset[str], frozenset[str]]:
+    """
+    Return the names bound to the runtime module and to the projection reader.
+
+    The import spellings a check could call the projection through are
+    gathered from the import statements: ``from quickscale_core.runtime[.manifest]
+    import projected_setting_names [as <alias>]`` binds the function, and
+    ``import quickscale_core.runtime[.manifest] as <alias>`` (or the runtime
+    facade's ``manifest`` submodule) binds the module.  A star import, a
+    rebinding, or a chained attribute spelling stays outside this static
+    scan's scope; no shipped check uses one.
+    """
+    module_names: set[str] = set()
+    function_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in _PROJECTION_MODULES and alias.asname:
+                    module_names.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom) and node.module in _PROJECTION_MODULES:
+            for alias in node.names:
+                if alias.name == PROJECTED_SETTING_NAMES:
+                    function_names.add(alias.asname or alias.name)
+                elif alias.name == "manifest" and node.module == "quickscale_core.runtime":
+                    module_names.add(alias.asname or alias.name)
+    return frozenset(module_names), frozenset(function_names)
+
+
+def _projected_presence_recheck_lines(tree: ast.Module) -> list[int]:
+    """Return the source lines of ``projected_setting_names`` calls in *tree*."""
+    module_names, function_names = _projection_bindings(tree)
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name):
+            if func.id in function_names:
+                lines.append(node.lineno)
+        elif (
+            isinstance(func, ast.Attribute)
+            and func.attr == PROJECTED_SETTING_NAMES
+            and isinstance(func.value, ast.Name)
+            and func.value.id in module_names
+        ):
+            lines.append(node.lineno)
+    return sorted(lines)
+
+
+def _projected_recheck_findings(module: Module) -> list[str]:
+    """Rule 6: ``checks.py`` re-tests no projected setting's presence."""
+    text = module.files.get("checks.py")
+    if text is None:
+        return []
+    return [
+        f"rule 6: {module.name}: checks.py:{line}: re-tests a projected "
+        "setting's presence; the generic settings check validates it"
+        for line in _projected_presence_recheck_lines(_parse(text))
+    ]
 
 
 def _retired_name_reads(

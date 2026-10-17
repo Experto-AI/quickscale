@@ -165,20 +165,6 @@ def test_vendor_secret_check_passes_when_disabled(settings: Any) -> None:
     assert check_vendor_secrets() == []
 
 
-def test_vendor_secret_check_reports_missing_projected_settings(settings: Any) -> None:
-    """An older managed wiring without the projected secret settings fails loudly."""
-    settings.QUICKSCALE_NOTIFICATIONS_ENABLED = True
-    del settings.QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY
-    del settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET
-
-    messages = check_vendor_secrets()
-
-    assert len(messages) == 1
-    assert "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY" in messages[0].msg
-    assert "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET" in messages[0].msg
-    assert "quickscale apply" in messages[0].msg
-
-
 @pytest.mark.django_db
 def test_missing_setting_fails_check_migrate_and_runserver(settings: Any) -> None:
     """The registered check fails check, migrate, and runserver alike."""
