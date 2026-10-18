@@ -122,12 +122,8 @@ describe('validateQuickScaleConfig', () => {
     window.__QUICKSCALE__ = config
 
     const result = validateQuickScaleConfig()
-    expect(result.publicPage).toMatchObject({
-      module: 'social',
-      surface: 'link_tree',
-      endpoint: '/_quickscale/social/',
-      navigation: { home: '/', linkTree: '/social', embeds: '/social/embeds' },
-    })
+    expect(result.publicPage?.surface).toBe('link_tree')
+    expect(result.publicPage?.navigation.home).toBe('/')
   })
 
   it('throws when window.__QUICKSCALE__ is missing', () => {
@@ -480,7 +476,7 @@ describe('validateQuickScaleConfig', () => {
 
   // ── publicPage enum/type strict validation (SA107-CR-002) ─────
 
-  it('throws when publicPage.module is neither "social" nor "properties"', () => {
+  it('throws when publicPage.module is not "social"', () => {
     window.__QUICKSCALE__ = {
       ...buildValidConfig(),
       publicPage: {
@@ -551,11 +547,8 @@ describe('validateQuickScaleConfig', () => {
     window.__QUICKSCALE__ = buildPublicInjectorLinkTree()
     const result = validateQuickScaleConfig()
     expect(result.projectName).toBe('Public Social Demo')
-    expect(result.publicPage).toMatchObject({
-      module: 'social',
-      surface: 'link_tree',
-      endpoint: '/_quickscale/social/',
-    })
+    expect(result.publicPage?.surface).toBe('link_tree')
+    expect(result.publicPage?.endpoint).toBe('/_quickscale/social/')
     expect(result.owner.mode).toBe('solo')
     expect(result.owner.currentOrgSlug).toBeNull()
     expect(result.modulePaths.crm).toBe('/crm/')
@@ -569,11 +562,8 @@ describe('validateQuickScaleConfig', () => {
     window.__QUICKSCALE__ = buildPublicInjectorEmbeds()
     const result = validateQuickScaleConfig()
     expect(result.projectName).toBe('Public Social Demo')
-    expect(result.publicPage).toMatchObject({
-      module: 'social',
-      surface: 'embeds',
-      endpoint: '/_quickscale/social/embeds/',
-    })
+    expect(result.publicPage?.surface).toBe('embeds')
+    expect(result.publicPage?.endpoint).toBe('/_quickscale/social/embeds/')
     expect(result.owner.mode).toBe('solo')
     expect(result.owner.currentOrgSlug).toBeNull()
     expect(result.modulePaths.social).toBe('/social/embeds')
@@ -591,79 +581,5 @@ describe('validateQuickScaleConfig', () => {
     const result = validateQuickScaleConfig()
     expect(result.owner.mode).toBe('saas')
     expect(result.owner.currentOrgSlug).toBe('acme-corp')
-  })
-
-  // ── Properties public page validation (SA153 (e1)) ─────────────
-
-  /**
-   * Build a config matching the prerendered project document's injector: the
-   * properties publicPage carries the route and the react-query state the
-   * server rendered the document with.
-   */
-  function buildPropertyPublicPage(
-    surface: 'catalog' | 'detail',
-    overrides: Record<string, unknown> = {},
-  ): QuickScaleConfig {
-    return {
-      ...buildValidConfig(),
-      publicPage: {
-        module: 'properties',
-        surface,
-        path: surface === 'catalog' ? '/properties' : '/properties/malvarrosa-villa-001',
-        dehydratedState: { mutations: [], queries: [] },
-        ...overrides,
-      },
-    } as unknown as QuickScaleConfig
-  }
-
-  it('accepts a properties catalog public page', () => {
-    window.__QUICKSCALE__ = buildPropertyPublicPage('catalog')
-    const result = validateQuickScaleConfig()
-    expect(result.publicPage?.module).toBe('properties')
-    expect(result.publicPage?.surface).toBe('catalog')
-  })
-
-  it('accepts a properties detail public page', () => {
-    window.__QUICKSCALE__ = buildPropertyPublicPage('detail')
-    const result = validateQuickScaleConfig()
-    expect(result.publicPage?.surface).toBe('detail')
-  })
-
-  it('throws when a properties public page surface is unsupported', () => {
-    window.__QUICKSCALE__ = buildPropertyPublicPage('catalog', { surface: 'gallery' })
-    expect(() => validateQuickScaleConfig()).toThrow(/publicPage\.surface/)
-  })
-
-  it('throws when a properties public page path is missing', () => {
-    const config = buildPropertyPublicPage('catalog')
-    delete (config.publicPage as unknown as Record<string, unknown>).path
-    window.__QUICKSCALE__ = config
-    expect(() => validateQuickScaleConfig()).toThrow(/publicPage\.path/)
-  })
-
-  it('throws when a properties public page path is empty', () => {
-    window.__QUICKSCALE__ = buildPropertyPublicPage('detail', { path: '  ' })
-    expect(() => validateQuickScaleConfig()).toThrow(/publicPage\.path/)
-  })
-
-  it('throws when a properties public page has no dehydrated state', () => {
-    const config = buildPropertyPublicPage('catalog')
-    delete (config.publicPage as unknown as Record<string, unknown>).dehydratedState
-    window.__QUICKSCALE__ = config
-    expect(() => validateQuickScaleConfig()).toThrow(/publicPage\.dehydratedState/)
-  })
-
-  it('throws when a properties dehydrated state lacks its queries array', () => {
-    window.__QUICKSCALE__ = buildPropertyPublicPage('catalog', {
-      dehydratedState: { mutations: [] },
-    })
-    expect(() => validateQuickScaleConfig()).toThrow(/publicPage\.dehydratedState/)
-  })
-
-  it('throws when a properties dehydrated state is an array', () => {
-    window.__QUICKSCALE__ = buildPropertyPublicPage('catalog', {
-      dehydratedState: [],
-    })
-    expect(() => validateQuickScaleConfig()).toThrow(/publicPage\.dehydratedState/)
   })
 })

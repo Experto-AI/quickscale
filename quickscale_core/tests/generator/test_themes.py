@@ -555,16 +555,11 @@ class TestSelectedModulesReactTheme:
             in empty_main
         ), "main.tsx must import renderQuickScaleRoot from extracted seam after SA105."
 
-        # renderQuickScaleRoot is used in the render tree with the social surface.
-        # After SA107, surface is read from the validated config, not directly from
-        # the seam; after SA153 (e1), only a social public page passes a surface
-        # and a prerendered properties document boots the app tree itself.
+        # renderQuickScaleRoot is used in the render tree with surface
+        # After SA107, surface is read from the validated config, not directly from the seam.
         assert (
-            "renderQuickScaleRoot(publicPage?.module === 'social' ? publicPage.surface : undefined)"
-            in empty_main
-        ), (
-            "renderQuickScaleRoot must be called with the social surface from validated config."
-        )
+            "renderQuickScaleRoot(quickScaleConfig.publicPage?.surface)" in empty_main
+        ), "renderQuickScaleRoot must be called with surface from validated config."
 
     def test_window_config_always_renders_the_runtime_seam(
         self, tmp_path: Path
@@ -688,14 +683,11 @@ class TestSelectedModulesReactTheme:
         ), (
             "Generated main.tsx must import renderQuickScaleRoot from the extracted seam."
         )
-        # Uses it with the social surface (from validated config after SA107;
-        # the prerendered properties document boots the app tree itself, (e1))
+        # Uses it with surface (from validated config after SA107)
         assert (
-            "renderQuickScaleRoot(publicPage?.module === 'social' ? publicPage.surface : undefined)"
-            in content
+            "renderQuickScaleRoot(quickScaleConfig.publicPage?.surface)" in content
         ), (
-            "Generated main.tsx must call renderQuickScaleRoot with the social surface "
-            "from the validated config."
+            "Generated main.tsx must call renderQuickScaleRoot with surface from validated config."
         )
         # No inline lazy social variable declarations remain in main.tsx
         assert "const SocialEmbedsPublicPage" not in content, (
@@ -726,17 +718,10 @@ class TestSelectedModulesReactTheme:
                 "renderQuickScaleRoot.tsx must use the then/default pattern for lazy imports."
             )
 
-        # Surface dispatch logic (SA153 (e1) adds the SSR entry's static-location
-        # option beside the surface parameter)
-        assert "export function renderQuickScaleRoot(" in content, (
-            "renderQuickScaleRoot must take the surface parameter."
-        )
-        assert "surface?: PublicSocialSurface," in content, (
-            "renderQuickScaleRoot must take the surface parameter."
-        )
-        assert "options: QuickScaleRootRenderOptions = {}," in content, (
-            "renderQuickScaleRoot must accept the render options."
-        )
+        # Surface dispatch logic
+        assert (
+            "function renderQuickScaleRoot(surface?: PublicSocialSurface)" in content
+        ), "renderQuickScaleRoot must take the surface parameter."
         assert (
             "const Page = surface === 'link_tree' ? SocialLinkTreePublicPage : SocialEmbedsPublicPage"
             in content
