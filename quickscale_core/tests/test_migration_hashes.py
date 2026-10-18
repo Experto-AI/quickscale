@@ -134,10 +134,16 @@ class TestIsFrozenVintage:
     def test_unset_freeze_has_no_frozen_vintage(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """While SA204 (j) has not set the freeze vintage, nothing is frozen."""
+        """While the freeze vintage is unset, nothing is frozen."""
         monkeypatch.setattr(migration_hashes, "MIGRATION_FREEZE_VINTAGE", None)
         assert is_frozen_vintage("0.89.0") is False
         assert is_frozen_vintage("99.0.0") is False
+
+    def test_shipped_freeze_vintage_names_the_freeze_release(self) -> None:
+        """The shipped constant names the release the freeze landed in."""
+        assert migration_hashes.MIGRATION_FREEZE_VINTAGE == "0.89.0"
+        assert is_frozen_vintage("0.89.0") is True
+        assert is_frozen_vintage("0.88.0") is False
 
     def test_vintage_at_the_freeze_is_frozen(
         self, monkeypatch: pytest.MonkeyPatch

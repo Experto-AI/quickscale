@@ -2,6 +2,7 @@
 # ruff: noqa: E402 — AF5 Phase 4: module-level bypass set before imports
 
 import os
+import shutil
 import quickscale_cli.commands._types as _types
 import subprocess
 from pathlib import Path
@@ -1447,6 +1448,15 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         (module_dir / "README.md").write_text(f"{module_name} baseline\n")
         (module_dir / "module.yml").write_text(
             (manifest_root / module_name / "module.yml").read_text()
+        )
+        # SA204 (j): from the freeze vintage on, the update flow must establish an
+        # applied module's migration content identity and import its adapter, so
+        # each embedded module carries the shipped source tree; the pull below
+        # leaves every file of it byte-identical.
+        shutil.copytree(
+            manifest_root / module_name / "src",
+            module_dir / "src",
+            ignore=shutil.ignore_patterns("__pycache__"),
         )
 
     # AF5: the update command now reads module state from .quickscale/state.yml

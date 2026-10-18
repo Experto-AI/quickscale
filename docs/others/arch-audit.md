@@ -23,25 +23,13 @@ are in git history (`git log -- docs/others/arch-audit.md`). Cite a finding only
   as SA153 adds pages. Guard: the closed-world emission test refuses any module setting,
   endpoint or constant in a user-owned file except through a managed include.
 
-### 2. `clean-break-schema-no-data-path` — no verified data upgrade path across releases
-**Horizon:** now (trigger: SA153 goes live) · **Size:** S · one-way door
-
-- **Problem.** The freeze machinery is built and rehearsed: the freeze gate, content-keyed
-  restore, and an `update` guard keyed on `is_frozen_vintage` that refuses a rewritten applied
-  file across releases. It binds nothing until `MIGRATION_FREEZE_VINTAGE` is set, so shipped
-  `0001` files can still change before `bap-web` holds non-reseedable data.
-- **Correct shape.** From the freeze release on, every database-fits-code check compares
-  migration content identity regardless of label.
-- **Next.** SA204 (j): record the decision, commit the frozen manifest, and set
-  `MIGRATION_FREEZE_VINTAGE`, before SA153's go-live.
-
 ## Watchlist (deferred; act only when the trigger fires)
 
 | ID | Concern | Trigger |
 |---|---|---|
 | `core-holds-module-vocabulary` | Core/CLI name modules (`social_manifest.py`, `module_options.py`, module-named apply steps, dr_engine loaders) | teams scheduled, a 13th module, a new module-named apply step |
 | `manifest-dsl-vocabulary-growth` | Manifest DSL gains one keyword per module need | a validation keyword added for one module |
-| `vendored-module-edits-undetected` | Edits under vendored `modules/` go undetected (only same-label migration edits are caught) | a second project with vendored edits, or a subtree-pull conflict |
+| `vendored-module-edits-undetected` | Edits under vendored `modules/` go undetected (migration content is compared under an unchanged version label, and on every pull from the freeze vintage on) | a second project with vendored edits, or a subtree-pull conflict |
 | `session-advisory-lock-pooling` | Billing mutex is a session-level advisory lock | a pooler or pooled `DATABASE_URL` |
 | `modules-english-only` | Module-rendered pages are English-only | SA153/SA154 needs a Spanish module page |
 | `two-filesystem-lock-implementations` | `advisory_lock.py` and `dr_engine/_lock.py` | a third implementation |
