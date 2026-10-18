@@ -40,7 +40,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 3 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
@@ -48,17 +48,18 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (e3, e4) ──► SA204 (j) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA277 (a)
-Track 3: —
-     release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
-     critical path: SA153 (e3, e4) ──► SA204 (j) ──► SA153 (f)
+Track 1: SA153 (e3, e4) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 2: SA277 (a1) ──► SA277 (a2)
+Track 3: SA204 (j)
+     release path:  SA153 (e3) ──► publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
+     critical path: SA153 (e3, e4) ──► SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
-waits on the 0.89.0 publication; SA153 (f) waits on the cutover and on SA204 (j); SA277 waits on
-the cutover, whose evidence draws the line between what `beta_migration` automates and what the
-prompt handles.
+waits on the 0.89.0 publication, which waits on SA153 (e3) so the reverted contract step never
+ships; SA153 (f) waits on the cutover and on SA204 (j). SA277 (a1) builds on SA191's landed port
+and rehearsal; only SA277 (a2) waits on the cutover, whose evidence confirms the line between what
+`beta_migration` automates and what the prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -77,14 +78,13 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA153 (e3) | yes | yes | yes | yes | yes |
-| 2 | SA277 (a) | no | no | yes | no | no |
-| 3 | — | yes | yes | yes | yes | no |
+| 2 | SA277 (a1) | yes | yes | yes | yes | no |
+| 3 | SA204 (j) | yes | no | yes | no | no |
 
 ### Ownership and merge coordination
 
 - Track 1 owns the generated `urls.py.j2` and the theme's social seam pages, the parity oracles,
-  the hosted workflow triggers (including `e2e.yml`'s tag pattern), the migration-history freeze
-  gate, its hash manifest, and `decisions.md` § Clean-Break Migration History, the `bap-web`
+  the hosted workflow triggers (including `e2e.yml`'s tag pattern), the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, the managed CI-environment and operations-guide includes, and, for the
   conventions, module identities, models and their `0001_initial`, module READMEs, and module
@@ -121,8 +121,9 @@ A track is **truly green** only when all three states are yes.
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, the conformance harness with its registry row, parity families and
-  `module-extension.md`'s authoring checklist, and the five `_anonymization.py` handlers with
-  core's redaction helpers.
+  `module-extension.md`'s authoring checklist, the five `_anonymization.py` handlers with
+  core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
+  `decisions.md` § Clean-Break Migration History.
 - **Cross-track edits.** SA153 (e3) reverts Track 3's `publicPage` seam type, with Track 3
   review; SA204 (j) sets `MIGRATION_FREEZE_VINTAGE` in core. Both land through the serialized
   merge queue.
@@ -155,14 +156,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `is_frozen_vintage`, and the rehearsal on a `bap-web` copy (FORCE-RLS 6 tables / 12 policies,
   tenant isolation 6/6, cross-release rewrites refused, an added `0002` applied forward).
   `MIGRATION_FREEZE_VINTAGE` is still unset, so none of it binds a release yet. SA204 is a
-  release requirement for the release `bap-web` goes live on, not for 0.89.0.
+  release requirement for the release `bap-web` goes live on, not for 0.89.0. SA153 (e3, e4)
+  change no module schema, so (j) does not wait on them.
 
   **Slices:**
   - [ ] (j) The decision record lifting rule 1 of § Clean-Break Migration History from this
     release, the freeze commit of the manifest, and `MIGRATION_FREEZE_VINTAGE` set to this
-    release; after SA153 (e4), before SA153 (f), with the maintainer's sign-off. If a module
-    `0001` changed after (i), re-run the (i) rehearsal first (Tier 2-fast; the one-way step,
-    kept to docs, the manifest, and that one constant).
+    release; before SA153 (f), with the maintainer's sign-off. If a module `0001` changed after
+    (i), re-run the (i) rehearsal first; if one changes after (j) lands and before (f), (j) is
+    redone (Tier 2-fast; the one-way step, kept to docs, the manifest, and that one constant).
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
@@ -239,11 +241,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
   (50 declared steps on 2026-10-16). Operator docs do not duplicate steps either stage covers.
 
   **Slices:**
-  - [ ] (a) The decision record and boundary rule from SA191's evidence (which steps
-    `beta_migration` covered and which the port did by hand), and the wired handoff:
-    `beta_migration` emits unresolved gaps in the form the prompt reads, the prompt and
-    `CUTOVER.md` move into the maintained tree, and a smoke test proves the handoff file is
-    produced (Tier 2-full: the gap ledger's handoff format needs discovery).
+  - [ ] (a1) The wired handoff, from SA191's landed port and rehearsal: `beta_migration` emits
+    unresolved gaps in the form the prompt reads, the prompt and `CUTOVER.md` are copied into the
+    maintained tree (the `bap-web-new` copies stay the cutover's source until it runs), and a
+    smoke test proves the handoff file is produced; a draft of the decision record and boundary
+    rule from the port evidence (which steps `beta_migration` covered and which the port did by
+    hand) goes in the handoff note, not in decisions (Tier 2-full: the gap ledger's handoff
+    format needs discovery).
+  - [ ] (a2) After SA191's cutover: the decision record and boundary rule in decisions, the
+    (a1) draft confirmed or amended against the cutover evidence, and the operator docs pruned of
+    steps either stage covers (Tier 2-fast).
 
 ## Deferred constraints and references
 
