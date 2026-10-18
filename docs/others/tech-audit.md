@@ -12,7 +12,6 @@ None (S1–S4: 0).
 
 | ID | Concern | Trigger |
 |---|---|---|
-| `initial-migration-edited-in-place` | billing/orgs/blog `0001_initial` were edited in place pre-1.0 with no data copy (for example `BillingCustomer` replaced `orgs.stripe_customer_id`). The freeze gate now blocks further edits | any supported upgrade from a live 0.88.0 install (none: 0.88.0 moves to 0.89.0 on a fresh database, per the roadmap's 2026-10-16 decision) |
 | `orgs-role-mixin-checks-request-org` | `OrgRoleMixin.dispatch` checks the role on `resolve_request_org()` (prefers `request.org`), while `get_organization()` prefers the URL slug. Fix: check on `get_organization()`, as `OrgApiBaseView.initial` does | a code path sets `request.org` on `/orgs/<slug>/` for a non-superuser |
 | `backups-upload-restore-by-model-permission` | uploaded-dump restore needs only `change_backuppolicy` plus `QUICKSCALE_BACKUPS_ALLOW_RESTORE=true`, and a dump can write `auth_user` | that permission granted to non-superuser staff while restore is enabled |
 | `allow-bypassrls-serving-undetected` | `QUICKSCALE_ALLOW_BYPASSRLS=1` plus a blank `RUNTIME_DATABASE_URL` silently disables RLS, and nothing flags it at startup | any tooling or docs setting it outside dev |

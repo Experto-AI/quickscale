@@ -1,10 +1,11 @@
 """Content hashes for a module's applied migration files.
 
-The clean-break migration policy rewrites each model-bearing module's
-``0001_initial`` in place every release, so a version label alone cannot
-identify migration history: two revisions can carry the same label with
-different content.  The repository therefore records a *content identity* —
-the SHA-256 hash of each applied migration file — and this module owns it.
+The clean-break migration policy rewrote each model-bearing module's
+``0001_initial`` in place every release until the freeze release, so a version
+label alone cannot identify migration history: two revisions can carry the same
+label with different content.  The repository therefore records a *content
+identity* — the SHA-256 hash of each applied migration file — and this module
+owns it.  From the freeze release on, a recorded file is immutable.
 
 Three helpers build that identity:
 
@@ -28,7 +29,7 @@ The freeze vintage answers which vintages that identity is enforced for:
 before the freeze, a release may still rewrite a migration in place and the
 documented upgrade stays a fresh database; from the freeze vintage on, an
 applied file is immutable and a schema change ships as a new migration.
-:data:`MIGRATION_FREEZE_VINTAGE` names that release, SA204 (j) sets it, and
+:data:`MIGRATION_FREEZE_VINTAGE` names that release — ``0.89.0`` — and
 :func:`is_frozen_vintage` is the one predicate callers key on.
 """
 
@@ -45,11 +46,12 @@ from quickscale_core.manifest.schema import parse_version_tuple
 #: ordered prefix plus a name, matching Django's migration naming.
 NUMBERED_MIGRATION_PATTERN: Final = re.compile(r"^\d{4}_.+\.py$")
 
-#: The QuickScale release the module migration freeze lands in.  SA204 (j)
-#: sets it to that release; while it is ``None`` the freeze has not landed, no
-#: vintage is at or after it, and every project keeps the documented
-#: fresh-database upgrade path.
-MIGRATION_FREEZE_VINTAGE: Final[str | None] = None
+#: The QuickScale release the module migration freeze lands in.  ``0.89.0`` is
+#: that release: from it on an applied migration file is immutable and a schema
+#: change ships as a new migration.  ``None`` means no release has landed the
+#: freeze — no vintage is at or after it, and every project keeps the
+#: documented fresh-database upgrade path.
+MIGRATION_FREEZE_VINTAGE: Final[str | None] = "0.89.0"
 
 #: Read chunk size for hashing.  64 KiB keeps memory low for large files.
 _HASH_CHUNK_SIZE: Final[int] = 65536
@@ -176,9 +178,9 @@ def compute_module_migration_hashes(module_path: Path) -> dict[str, str]:
 def is_frozen_vintage(version: str | None) -> bool:
     """Return whether an applied module vintage is at or after the freeze.
 
-    The freeze vintage is :data:`MIGRATION_FREEZE_VINTAGE`; while that is
-    unset the freeze has not landed, so no vintage is at or after it and every
-    project keeps the documented fresh-database upgrade path.  A missing,
+    The freeze vintage is :data:`MIGRATION_FREEZE_VINTAGE`, the release the
+    freeze landed in; while that is unset no vintage is at or after it and
+    every project keeps the documented fresh-database upgrade path.  A missing,
     empty, or unparseable version compares below any real freeze vintage —
     unknown stays unfrozen rather than being read as a promised identity.
 

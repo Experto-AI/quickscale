@@ -40,7 +40,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 3 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
@@ -50,26 +49,26 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA153 (e3, e4) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a1) ──► SA277 (a2)
-Track 3: SA204 (j)
+Track 3: — (SA204 (j) landed)
      release path:  SA153 (e3) ──► publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA153 (e3, e4) ──► SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
 waits on the 0.89.0 publication, which waits on SA153 (e3) so the reverted contract step never
-ships; SA153 (f) waits on the cutover and on SA204 (j). SA277 (a1) builds on SA191's landed port
-and rehearsal; only SA277 (a2) waits on the cutover, whose evidence confirms the line between what
-`beta_migration` automates and what the prompt handles.
+ships; SA153 (f) waits on the cutover, with the migration freeze it also waited on landed. SA277 (a1)
+builds on SA191's landed port and rehearsal; only SA277 (a2) waits on the cutover, whose evidence
+confirms the line between what `beta_migration` automates and what the prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
 its last slice lands; slices are not scheduled.
 
-**Order.** SA204 (j) freezes migration history after SA153 (e4) and before SA153 (f) puts
-non-reseedable tenant data on `bap-web`. Any module `0001` edit before then reaches `bap-web` by
-a reseed. SA153's own tables live in the project-owned extension as `0002+` migrations. No open
-ticket changes a module schema. SA153 (a…e) builds on the `v89` pin, re-pinned at each `v89`
-merge that touches modules.
+**Order.** SA204 (j) froze migration history before SA153 (f) puts non-reseedable tenant data on
+`bap-web`, and no module `0001` edit was outstanding, so `bap-web` needs no reseed. SA153's own
+tables live in the project-owned extension as `0002+` migrations. No open ticket changes a module
+schema; a schema change from the freeze release on ships as a new migration. SA153 (a…e) builds on
+the `v89` pin, re-pinned at each `v89` merge that touches modules.
 
 ### Track states
 
@@ -79,7 +78,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA153 (e3) | yes | yes | yes | yes | yes |
 | 2 | SA277 (a1) | yes | yes | yes | yes | no |
-| 3 | SA204 (j) | yes | no | yes | no | no |
+| 3 | — | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -125,8 +124,7 @@ A track is **truly green** only when all three states are yes.
   core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
   `decisions.md` § Clean-Break Migration History.
 - **Cross-track edits.** SA153 (e3) reverts Track 3's `publicPage` seam type, with Track 3
-  review; SA204 (j) sets `MIGRATION_FREEZE_VINTAGE` in core. Both land through the serialized
-  merge queue.
+  review, and lands through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
   `project_contract.yml`, and [decisions.md](decisions.md). Each track resolves the shared set at
@@ -145,26 +143,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — migration history and the property portal
 
-- [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
-
-  Closes arch `clean-break-schema-no-data-path` and retires tech watchlist
-  `initial-migration-edited-in-place`.
-
-  **Context:** slices (a)–(i) landed: the `check-migration-freeze` gate against
-  `scripts/migration_hashes.json` (append-only against the latest release tag), hash-keyed
-  restore-forward in `dr_engine/recovery.py`, the `quickscale update` guard keyed on
-  `is_frozen_vintage`, and the rehearsal on a `bap-web` copy (FORCE-RLS 6 tables / 12 policies,
-  tenant isolation 6/6, cross-release rewrites refused, an added `0002` applied forward).
-  `MIGRATION_FREEZE_VINTAGE` is still unset, so none of it binds a release yet. SA204 is a
-  release requirement for the release `bap-web` goes live on, not for 0.89.0. SA153 (e3, e4)
-  change no module schema, so (j) does not wait on them.
-
-  **Slices:**
-  - [ ] (j) The decision record lifting rule 1 of § Clean-Break Migration History from this
-    release, the freeze commit of the manifest, and `MIGRATION_FREEZE_VINTAGE` set to this
-    release; before SA153 (f), with the maintainer's sign-off. If a module `0001` changed after
-    (i), re-run the (i) rehearsal first; if one changes after (j) lands and before (f), (j) is
-    redone (Tier 2-fast; the one-way step, kept to docs, the manifest, and that one constant).
+- [x] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
@@ -212,8 +191,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
     snapshot command, and the committed artifacts, and drop the reverted contract step's
     record; the no-JavaScript crawler test, rendered-document organization isolation, and the
     journey test pass (Tier 2-fast).
-  - [ ] (f) Go-live on `buenosairesproperties.com` after SA204 (j) and SA191's cutover; re-prove
-    the journey on the deployed site (Tier 2-full; production deploy, maintainer action).
+  - [ ] (f) Go-live on `buenosairesproperties.com` after SA191's cutover and the migration
+    freeze; re-prove the journey on the deployed site (Tier 2-full; production deploy,
+    maintainer action).
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 

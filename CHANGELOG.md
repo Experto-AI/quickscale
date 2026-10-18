@@ -142,9 +142,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     snapshot route compares the identity recorded with the snapshot's authoritative dump.
   - **Module updates keep an applied migration's content identity.** An update that would replace
     an applied migration file is refused — while the module's version label is unchanged, and on
-    every pull once the project's applied vintage is at or after the migration-freeze release —
-    and the pre-update content is restored, because the database's applied schema would no longer
-    be identifiable; a migration file the pull adds is still applied forward on the next `migrate`.
+    every pull once the project's applied vintage is at or after the migration-freeze release,
+    which this release sets — and the pre-update content is restored, because the database's
+    applied schema would no longer be identifiable; a migration file the pull adds is still
+    applied forward on the next `migrate`.
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.

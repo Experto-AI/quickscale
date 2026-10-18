@@ -540,8 +540,9 @@ dependencies. A conformance test enforces each rule.
 cross-module coupling. The recorded boundary rules cover core ↔ module only; nothing governed
 module ↔ module, which produced an `auth ↔ orgs` import cycle, modules reading each other's settings,
 settings read but never declared, and every default written twice. Renames are a clean break
-(§[Module Version Lockstep](#module-version-lockstep)) and cost least before
-§[Clean-Break Migration History](#migration-squash-decision) is frozen.
+(§[Module Version Lockstep](#module-version-lockstep)) and cost least while
+§[Clean-Break Migration History](#migration-squash-decision) still allowed a
+rewritten `0001_initial`; the freeze release closed that window.
 
 **1. Settings names.**
 - ✅ Every first-party setting is `QUICKSCALE_<MODULE>_<NAME>`, `<MODULE>` being the module name in
@@ -2139,23 +2140,41 @@ disappears or a privacy-first/EU-only default becomes policy: Plausible, then Ma
 - **Last-owner `pre_delete` backstop refusal mechanism:** the orgs `pre_delete` receiver on the `User` model raises (does not silently return/no-op) when the deletion would orphan a shared organization's last owner, matching the [fail-hard principle](#fail-hard-principle) — a caller (admin bulk-delete, management command, a future GDPR erasure path) must see a loud failure rather than believe a refused delete succeeded.
 ### Clean-Break Migration History {#migration-squash-decision}
 
-**Rule:** QuickScale is pre-1.0 and does not support in-place database upgrades
-between releases. The supported upgrade path is a fresh database, so every
-model-bearing shipped module carries one final-schema `0001_initial` and no
-incremental migration history. Service-style modules carry no migrations. This
-is a clean-break, fresh-only posture — there is no cross-release backfill or
-compatibility migration class. The rules below are standing constraints for
+**Rule:** QuickScale is pre-1.0 and, for a release before the freeze release, does
+not support in-place database upgrades between releases: its supported upgrade
+path is a fresh database, no incremental migration history is kept, and each
+model-bearing shipped module carries one final-schema `0001_initial`.
+Service-style modules carry no migrations. From the freeze release on, a database
+created at or after it moves forward in place: an applied migration file is
+immutable, and the migrations a later pull adds are applied by `migrate`. The
+clean-break posture holds on both sides — there is no cross-release backfill or
+compatibility migration class — and the rules below are standing constraints for
 anyone adding or changing migrations.
+
+**Freeze release: 0.89.0.** Module migration history is frozen from `0.89.0` on.
+`scripts/migration_hashes.json` holds the content identity — the SHA-256 hash of
+every numbered migration file — of each shipped module's applied migrations, and
+`MIGRATION_FREEZE_VINTAGE` in `quickscale_core.migration_hashes` names `0.89.0` as
+the release that carries it. A recorded file is never rewritten in place or
+removed, and a schema change ships as a new, higher-numbered migration. The
+identity binds every release whose applied vintage is at or after this one:
+`quickscale update` refuses to replace an applied migration file and restores the
+pre-update content, and `make check-migration-freeze` holds the recorded identity
+append-only against the latest release tag. A project on an earlier release keeps
+the fresh-database upgrade path and may still have a migration rewritten in
+place.
 
 **Standing rules:**
 
 1. **One `0001_initial` per model-bearing module.** The current ten are auth,
    backups, billing, blog, crm, forms, listings, notifications, orgs, and social.
-   Each carries its final model state in a single initial migration with
-   `Migration.initial = True`; analytics and storage are service-style and carry
-   no migrations. Do not add `0002_*` history or cross-release backfill
-   `RunPython` steps. New tenant tables ship with `organization_id NOT NULL` from
-   creation.
+   Each carries its model state in a single initial migration with
+   `Migration.initial = True` — the final schema the module held before the
+   freeze release; analytics and storage are service-style and carry no
+   migrations. From the freeze release on (the paragraph above) that file is
+   immutable and a schema change ships as a new, higher-numbered migration.
+   Cross-release backfill `RunPython` steps stay prohibited either way. New tenant
+   tables ship with `organization_id NOT NULL` from creation.
 
 2. **Each tenant app installs its own RLS.** Every tenant module's `0001_initial` carries its own `RunPython(apply_force_rls, ...)` and is authoritative for its own exact two-policy FORCE-RLS pair. A project-owned tenant app follows the same rule in its own initial migration. The orgs module installs no module-table policy (it runs before enrolled tables exist). `apply_force_rls`/`revert_force_rls` in `orgs/tenancy.py` are the only supported RLS-management entrypoints.
 

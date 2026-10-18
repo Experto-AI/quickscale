@@ -411,3 +411,10 @@ project or cron job updates with this release:
   list, and the generated social payload endpoints are DRF views that answer the standard error
   shape without echoing exception text. Lists that previously returned every row now return their
   first page unless the client asks for another.
+
+**Frozen module migration history.** From this release on, a shipped module's applied migration
+file is its database's schema identity: `scripts/migration_hashes.json` records the SHA-256 hash of
+each one, `quickscale update` refuses a pull that would replace an applied file and restores the
+pre-update content, and a module schema change arrives as a new, higher-numbered migration instead
+of a rewrite of `0001_initial`. A project moving from 0.88.0 is unaffected, because that upgrade is
+a fresh database, and a migration file a pull adds is still applied by the next `migrate`.
