@@ -12,15 +12,17 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
-with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#watchlist-latent-act-only-when-the-trigger-fires)).
-0.89.0 has no open release requirement. A live 0.88.0 install moves to 0.89.0 on a fresh
-database, and the 0.89.0 release notes say so. Publication is assistant-driven up to the two
-operator commands: an assistant runs [publish_procedure.md](publish_procedure.md) Part 1 and
-Phases 2–4b on `v89`'s tip (re-pointing the stale local tag), readies the CHANGELOG line and release
-note for publication, and stops; the operator runs `make seal-modules VERSION=0.89.0` and
-`git push origin 0.89.0`; the assistant then verifies PyPI and the GitHub Release and opens the
-release PR.
+([publish_procedure.md](publish_procedure.md)). 0.89.0 has no open release requirement. A live
+0.88.0 install moves to 0.89.0 on a fresh database, and the 0.89.0 release notes say so.
+Publication is assistant-driven up to the two operator commands. Done on `v89`: Part 1 is green on
+the release bytes — `7821db42` readies the CHANGELOG and release note, `f4c8c79f` brings three
+quality-gate functions under the CC threshold, and `make ci-e2e` and `make release-gate` pass with
+the E2E lanes serial (`QS_E2E_PARALLEL=0`; concurrent-lane Poetry installs exceed the per-test
+timeout on this machine) — and Phases 2–3 re-pointed the local `0.89.0` tag at the tip and
+published the four outdated split branches. Remaining: Phase 4a's generated-project verification,
+Phase 4b's Railway verification and project deletion, then the operator runs
+`make seal-modules VERSION=0.89.0` and `git push origin 0.89.0`; the assistant then verifies PyPI
+and the GitHub Release and opens the release PR.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
