@@ -293,6 +293,48 @@ _OPERATIONS_SECTION_KEYS = frozenset({"title", "text", "values"})
 _OPERATIONS_TOKEN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
+def _parse_operations_values(
+    values_raw: dict[Any, Any],
+    reserved: set[str],
+    module_name: str | None,
+) -> dict[str, str | tuple[str, ...]]:
+    """Parse and validate the ``operations.values`` mapping."""
+    values: dict[str, str | tuple[str, ...]] = {}
+    for value_name, value in values_raw.items():
+        if (
+            not isinstance(value_name, str)
+            or _OPERATIONS_TOKEN_NAME.match(value_name) is None
+        ):
+            raise ManifestError(
+                "'operations.values' keys must be token names (letters, "
+                "digits, and underscores, not starting with a digit)",
+                module_name,
+            )
+        if value_name in reserved:
+            raise ManifestError(
+                f"'operations.values.{value_name}' would shadow a declared "
+                "option or a core contract token; rename the value",
+                module_name,
+            )
+        if isinstance(value, list):
+            if not value or not all(isinstance(item, str) and item for item in value):
+                raise ManifestError(
+                    f"'operations.values.{value_name}' list entries must be "
+                    "non-empty strings",
+                    module_name,
+                )
+            values[value_name] = tuple(value)
+        elif isinstance(value, str) and value:
+            values[value_name] = value
+        else:
+            raise ManifestError(
+                f"'operations.values.{value_name}' must be a non-empty string "
+                "or a list of non-empty strings",
+                module_name,
+            )
+    return values
+
+
 def _parse_operations(
     data: dict[str, Any],
     module_name: str | None,
@@ -362,39 +404,7 @@ def _parse_operations(
         raise ManifestError("'operations.values' must be a mapping", module_name)
 
     reserved = set(options) | set(ADOPTION_STEP_TOKENS)
-    values: dict[str, str | tuple[str, ...]] = {}
-    for value_name, value in values_raw.items():
-        if (
-            not isinstance(value_name, str)
-            or _OPERATIONS_TOKEN_NAME.match(value_name) is None
-        ):
-            raise ManifestError(
-                "'operations.values' keys must be token names (letters, "
-                "digits, and underscores, not starting with a digit)",
-                module_name,
-            )
-        if value_name in reserved:
-            raise ManifestError(
-                f"'operations.values.{value_name}' would shadow a declared "
-                "option or a core contract token; rename the value",
-                module_name,
-            )
-        if isinstance(value, list):
-            if not value or not all(isinstance(item, str) and item for item in value):
-                raise ManifestError(
-                    f"'operations.values.{value_name}' list entries must be "
-                    "non-empty strings",
-                    module_name,
-                )
-            values[value_name] = tuple(value)
-        elif isinstance(value, str) and value:
-            values[value_name] = value
-        else:
-            raise ManifestError(
-                f"'operations.values.{value_name}' must be a non-empty string "
-                "or a list of non-empty strings",
-                module_name,
-            )
+    values = _parse_operations_values(values_raw, reserved, module_name)
 
     return ModuleOperations(title=title, text=text, values=values)
 

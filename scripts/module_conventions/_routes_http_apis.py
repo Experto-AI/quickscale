@@ -600,20 +600,14 @@ def _is_multipart_upload_parser_list(
     )
 
 
-def _content_policy_pin_violations(
-    label: str, tree: ast.Module, webhook_view_names: frozenset[str]
+def _class_attribute_pin_violations(
+    label: str,
+    tree: ast.Module,
+    webhook_view_names: frozenset[str],
+    imported: dict[str, str],
+    namespaces: dict[str, str],
 ) -> list[str]:
-    """
-    Return rule 9's per-view renderer/parser pin violations for one source.
-
-    ``label`` names the source in the finding (``"demo: views.py"`` or the
-    rendered managed views).  Closed world: no view pins ``renderer_classes``
-    or ``parser_classes`` — as a class attribute or as an ``as_view()``
-    keyword override, which DRF applies to the instance — except a webhook
-    view (its raw body is the input) and a file upload's multipart parser
-    policy.
-    """
-    imported, namespaces = _parser_class_bindings(tree)
+    """Return rule 9's class-attribute renderer/parser pins for one source."""
     violations: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef) or node.name in webhook_view_names:
@@ -639,6 +633,18 @@ def _content_policy_pin_violations(
                     f"rule 9: {label} pins {attribute} on {node.name}; the composed "
                     "REST_FRAMEWORK defaults carry the JSON content contract"
                 )
+    return violations
+
+
+def _as_view_keyword_pin_violations(
+    label: str,
+    tree: ast.Module,
+    webhook_view_names: frozenset[str],
+    imported: dict[str, str],
+    namespaces: dict[str, str],
+) -> list[str]:
+    """Return rule 9's ``as_view()`` keyword content-policy pins for one source."""
+    violations: list[str] = []
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
             continue
@@ -660,6 +666,25 @@ def _content_policy_pin_violations(
                 "defaults carry the JSON content contract"
             )
     return violations
+
+
+def _content_policy_pin_violations(
+    label: str, tree: ast.Module, webhook_view_names: frozenset[str]
+) -> list[str]:
+    """
+    Return rule 9's per-view renderer/parser pin violations for one source.
+
+    ``label`` names the source in the finding (``"demo: views.py"`` or the
+    rendered managed views).  Closed world: no view pins ``renderer_classes``
+    or ``parser_classes`` — as a class attribute or as an ``as_view()``
+    keyword override, which DRF applies to the instance — except a webhook
+    view (its raw body is the input) and a file upload's multipart parser
+    policy.
+    """
+    imported, namespaces = _parser_class_bindings(tree)
+    return _class_attribute_pin_violations(
+        label, tree, webhook_view_names, imported, namespaces
+    ) + _as_view_keyword_pin_violations(label, tree, webhook_view_names, imported, namespaces)
 
 
 def _composed_json_default_violations() -> list[str]:

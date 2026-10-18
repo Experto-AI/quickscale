@@ -160,25 +160,10 @@ def _test_file_ticket_violations(module: Module, rel: str, text: str) -> list[st
     return violations
 
 
-def _test_code_ticket_violations(module: Module, rel: str, text: str) -> list[str]:
-    """
-    Return rule 29's ticket ids in one test entry's identifiers and strings.
-
-    Every ``.py`` entry under ``tests/`` is scanned, not only
-    ``test_<subject>.py`` files: ``conftest.py`` fixtures and ``urls.py``
-    route names carry identifiers and string literals as well.  A docstring
-    is reported through the docstring scan above where that scan already
-    covers the entry, and as a string literal otherwise.
-    """
-    basename = Path(rel).name
-    if not basename.endswith(".py"):
-        return []
-    try:
-        tree = _parse(text)
-    except SyntaxError:
-        return []
-    docstrings = _docstring_constants(tree)
-    report_docstrings = not basename.startswith("test_")
+def _collect_entry_names(
+    tree: ast.AST, docstrings: set[int], report_docstrings: bool
+) -> tuple[list[str], list[str]]:
+    """Return one parsed test entry's identifier and string-literal names."""
     identifiers: list[str] = []
     strings: list[str] = []
     for node in ast.walk(tree):
@@ -203,6 +188,28 @@ def _test_code_ticket_violations(module: Module, rel: str, text: str) -> list[st
                 strings.append(value.decode("utf-8", "replace"))
             elif isinstance(value, str) and (report_docstrings or id(node) not in docstrings):
                 strings.append(value)
+    return identifiers, strings
+
+
+def _test_code_ticket_violations(module: Module, rel: str, text: str) -> list[str]:
+    """
+    Return rule 29's ticket ids in one test entry's identifiers and strings.
+
+    Every ``.py`` entry under ``tests/`` is scanned, not only
+    ``test_<subject>.py`` files: ``conftest.py`` fixtures and ``urls.py``
+    route names carry identifiers and string literals as well.  A docstring
+    is reported through the docstring scan above where that scan already
+    covers the entry, and as a string literal otherwise.
+    """
+    basename = Path(rel).name
+    if not basename.endswith(".py"):
+        return []
+    try:
+        tree = _parse(text)
+    except SyntaxError:
+        return []
+    docstrings = _docstring_constants(tree)
+    identifiers, strings = _collect_entry_names(tree, docstrings, not basename.startswith("test_"))
     violations = [
         f"rule 29: {module.name}: {basename} identifier carries a ticket id"
         for name in identifiers
