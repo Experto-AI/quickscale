@@ -15,7 +15,12 @@ webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#watchlist-latent-act-only-when-the-trigger-fires)).
 0.89.0 has no open release requirement. A live 0.88.0 install moves to 0.89.0 on a fresh
-database, and the 0.89.0 release notes say so. Publication is a maintainer action.
+database, and the 0.89.0 release notes say so. Publication is assistant-driven up to the two
+operator commands: an assistant runs [publish_procedure.md](publish_procedure.md) Part 1 and
+Phases 2–4b on `v89`'s tip (re-pointing the stale local tag), readies the CHANGELOG line and release
+note for publication, and stops; the operator runs `make seal-modules VERSION=0.89.0` and
+`git push origin 0.89.0`; the assistant then verifies PyPI and the GitHub Release and opens the
+release PR.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -153,9 +158,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `CUTOVER.md` rebuild a fresh database, reseed the catalog under the restricted runtime role
   (billing disabled), verify, and roll back, rehearsed on scratch.
 
-  **Remaining:** the cutover. After 0.89.0 is published, swap the pin to `0.89.0` and re-run the
-  rehearsal, so the unpublished pin never reaches production; then the maintainer runs the
-  Railway cutover, carries media, re-invites users, and archives the old repository. The
+  **Remaining:** the cutover. After 0.89.0 is published, an assistant swaps the pin to `0.89.0`,
+  re-runs the rehearsal, so the unpublished pin never reaches production, and stages the
+  production run (exact commands, media manifest, invite list, rollback). The operator then gives
+  the go: the Railway cutover against production, the media carry, the user re-invites, and the
+  old repository's archive. The
   pre-cutover database is retained until the reseeded site is verified. The production dump at
   `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
 
