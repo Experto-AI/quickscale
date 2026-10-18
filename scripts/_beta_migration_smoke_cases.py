@@ -1,11 +1,11 @@
 """
 Smoke cases for the SA267(d) ``check_beta_migration_smoke`` split.
 
-The four cases exercise fresh-first compatibility, iterate regeneration,
-project-owned app carry, and pre-port build-surface recording.  They resolve
-their collaborators through the defining support sibling, never through the
-facade (decisions.md, Split-Facade Seams).  Behavior is unchanged from the
-pre-split module.
+The cases exercise fresh-first compatibility, iterate regeneration,
+project-owned app carry, pre-port build-surface recording, and the
+module-edit gap handoff.  They resolve their collaborators through the
+defining support sibling, never through the facade (decisions.md,
+Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -435,3 +435,60 @@ def _case_pre_port_surfaces(root: Path, environment: dict[str, str], spy_log: Pa
         f"handoff prompt did not record the pre-port surface output:\n{prompt}",
     )
     _assert_recipient_services_lifecycle(report, spy_log, label="pre-port")
+
+
+def _case_gap_handoff(root: Path, environment: dict[str, str], spy_log: Path) -> None:
+    """Emit the donor's module divergences into the handoff file the prompt reads."""
+    spy_log.write_text("")
+    donor = _generate_project(root, "gap-handoff-donor")
+    recipient = _generate_project(root, "gap-handoff-recipient")
+    module_edit = donor / "modules" / "legacy" / "donor_note.py"
+    module_edit.parent.mkdir(parents=True)
+    module_edit.write_text("DONOR_MODULE_EDIT = True\n")
+
+    donor_before = _snapshot_tree(donor)
+    recipient_before = _snapshot_tree(recipient)
+    report, _stdout = _run_migration(
+        donor=donor,
+        recipient=recipient,
+        report_path=root / "gap-handoff.json",
+        environment=environment,
+    )
+
+    _assert_successful_execution(
+        report,
+        donor=donor,
+        recipient=recipient,
+        before_donor=donor_before,
+        before_recipient=recipient_before,
+        label="gap-handoff",
+    )
+    classification = report["donor_file_classification"]
+    _require(
+        classification["module_edited"] == ["modules/legacy/donor_note.py"],
+        f"gap handoff did not classify the donor module divergence: {classification}",
+    )
+    actions = {action["action"]: action for action in report["pending_manual_actions"]}
+    module_action = actions.get("triage-module-divergences")
+    _require(
+        module_action is not None,
+        f"gap handoff emitted no module-divergence action: {sorted(actions)}",
+    )
+    _require(
+        module_action["paths"] == ["modules/legacy/donor_note.py"]
+        and module_action["rule"]
+        and "module divergences" in module_action["detail"]
+        and "keep the current content" in module_action["detail"],
+        f"gap handoff module-divergence action is incomplete: {module_action}",
+    )
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+    _require(
+        prompt_path.is_file(),
+        "gap handoff did not write the recipient handoff prompt",
+    )
+    prompt = prompt_path.read_text()
+    _require(
+        "`triage-module-divergences`" in prompt and "modules/legacy/donor_note.py" in prompt,
+        f"handoff prompt did not carry the emitted module-divergence gap:\n{prompt}",
+    )
+    _assert_recipient_services_lifecycle(report, spy_log, label="gap-handoff")

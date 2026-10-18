@@ -23,6 +23,7 @@ Rules for the current maintainer tool:
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
 - a run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient — what was migrated, every remaining manual action with its paths and governing rule, the hard constraints, and the done criteria — for a coding assistant to complete the remainder; dry runs and runs blocked before or during execution write no prompt
+- the completed prompt names every unresolved gap the run recorded, in the remaining-work form the prompt-driven port reads: the recorded pre-port surfaces and the donor's module divergences — stale copies the current module content supersedes, and real local edits to upstream or re-express — each with its paths and governing rule; the [gap ledger](#gap-ledger) row vocabulary stays maintainer-side
 - the tool starts the recipient's database service from a clean state with a reserved loopback publication before the database-backed verification command and stops it, with its throwaway volumes, after the verification stack even when a command fails; the migration runs in the recipient's own Poetry environment as the sanctioned privileged command because the generated production image compiles the pre-port frontend sources in its build, and the database service is the project's own Compose definition; host-run `poetry run pytest` reads the recipient `.env` and needs the operator's PostgreSQL 18 service
 - the verification environment inherits the project's own declarations — the non-live credential placeholders (the managed `.github/quickscale-ci-env` file the current workflow loads, or an older project's CI test job) and the `.env.example` restricted runtime-role URL — with the operator's environment winning; a copied donor Django file keeps its own symbols and receives every generated top-level symbol it lacks plus the imports those symbols need; donor package-root modules the recipient lacks are copied in and never overwrite a module the recipient owns
 - the verification contract records pre-port manual-port surfaces instead of blocking: a non-zero exit from `pnpm build`, `poetry run pytest`, or `pnpm test` is recorded as a failed result plus a remaining manual action carrying the command and its captured output, and the stack continues; `poetry lock`, `poetry install`, `pnpm install`, `makemigrations`, and `poetry run python manage.py migrate` stay blocking, and a timeout or launch failure blocks regardless; a completed run writes the handoff prompt naming each recorded surface
@@ -30,6 +31,16 @@ Rules for the current maintainer tool:
 - prefer deterministic Python transforms over bash-heavy pipelines
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
 - the tool owns the fresh-first phases end to end; the remaining operator actions are local smoke testing and the repository/release handoff
+
+## Maintained copies
+
+[`beta-site-migration-prompt.md`](beta-site-migration-prompt.md) and
+[`beta-site-cutover.md`](beta-site-cutover.md) are maintained-tree copies of the working
+`MIGRATION_PROMPT.md` and `CUTOVER.md` carried by `bap-web-new`. The `bap-web-new` copies stay
+the cutover's source until it runs; afterwards the maintained copies are the source, and a new
+recipient's documents remain the tool's and the port's to produce. The two-stage path they take
+part in is drafted in
+[`migration-upgrade-path-draft.md`](migration-upgrade-path-draft.md).
 
 ---
 
@@ -97,7 +108,9 @@ local tag steps, and repin the recipient to the release before cutover.
 ## Gap ledger
 
 Every gap an iteration finds gets one row, and a row is closed only by the evidence it names.
-The final iteration runs with every row closed.
+The final iteration runs with every row closed. A completed run emits its unresolved gaps in
+the recipient prompt's remaining-work form; the maintainer lifts the rows the iteration leaves
+open into this table.
 
 Open rows go in this table; closed rows are deleted (their evidence lives in git history). No row is open.
 

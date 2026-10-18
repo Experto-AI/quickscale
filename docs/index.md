@@ -44,6 +44,9 @@ rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflic
 ## Operations
 - [deployment/railway.md](deployment/railway.md): deploy to Railway
 - [planning/beta-site-migration.md](planning/beta-site-migration.md): keep `bap-web` current with releases
+- [planning/beta-site-migration-prompt.md](planning/beta-site-migration-prompt.md): maintained copy of the port's working prompt (`bap-web-new`'s copy stays the cutover's source)
+- [planning/beta-site-cutover.md](planning/beta-site-cutover.md): maintained copy of the cutover and rollback runbook
+- [planning/migration-upgrade-path-draft.md](planning/migration-upgrade-path-draft.md): draft decision record for the two-stage upgrade path (not policy until it lands in decisions)
 
 ## Audits (open findings only; not authoritative)
 - [arch-audit.md](others/arch-audit.md), [tech-audit.md](others/tech-audit.md), [coherence-audit.md](others/coherence-audit.md)

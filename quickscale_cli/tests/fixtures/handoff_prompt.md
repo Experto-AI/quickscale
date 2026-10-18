@@ -67,6 +67,9 @@ Verification commands:
 
 ## Remaining work
 
+- [ ] `triage-module-divergences` — Triage the donor's module divergences; the migration never copies donor module content verbatim, so each of the 1 differing path(s) is either module content the current version supersedes (keep the current content) or a real local edit to upstream or re-express as project-owned code.
+      Paths: `modules/social/README.md`
+      Rule: In-place edits under vendored module source are outside the extension contract: keep the current module content where the donor path is only an older copy, and upstream or re-express a real local edit, so the recipient is handed over with no edits under `modules/`.
 - [ ] `run-local-smoke-checks` — Start the verified recipient, confirm the home page, admin, custom routes, and any installed public module pages.
       Paths: `.`
       Rule: Smoke-check every surface the live site serves before replacing any repository.

@@ -1659,8 +1659,14 @@ def test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_sett
     assert classification.unclassified == []
     assert "modules/auth/donor_note.py" in classification.module_edited
     assert observed == [("makemigrations", False), ("migrate", True)]
+    actions = {action.action: action for action in report.pending_manual_actions}
+    module_action = actions["triage-module-divergences"]
+    assert module_action.paths == ["modules/auth/donor_note.py"]
+    assert module_action.rule
     prompt = (recipient / "MIGRATION_PROMPT.md").read_text()
     assert "RunPython" in prompt
+    assert "`triage-module-divergences`" in prompt
+    assert "modules/auth/donor_note.py" in prompt
 
 
 def test_operations_mutated_after_declaration_blocks_before_mutation(

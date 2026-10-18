@@ -15,6 +15,7 @@ from .model import (
     BetaMigrationInput,
     BetaMigrationReport,
     DiffSummary,
+    DonorFileClassification,
     FrontendDependencyMerge,
     PendingManualAction,
     PlannedAction,
@@ -308,6 +309,40 @@ def _pre_port_failure_excerpt(result: VerificationCommandResult) -> str:
     return output[-300:] if len(output) > 300 else output
 
 
+def _module_divergence_action(
+    classification: DonorFileClassification | None,
+) -> PendingManualAction | None:
+    """Return the module-divergence triage action for a classified donor.
+
+    Classification compares donor module content against the recipient's
+    current module content, so the list holds both stale donor copies the
+    current content supersedes and real local edits. The port triages each
+    path instead of treating every recorded divergence as an edit to
+    re-express; the action emits those recorded paths instead of only
+    counting them.
+    """
+    if classification is None or not classification.module_edited:
+        return None
+    divergent_paths = list(classification.module_edited)
+    return PendingManualAction(
+        action="triage-module-divergences",
+        detail=(
+            "Triage the donor's module divergences; the migration never copies donor "
+            "module content verbatim, so each of the "
+            f"{len(divergent_paths)} differing path(s) is either module content the "
+            "current version supersedes (keep the current content) or a real local "
+            "edit to upstream or re-express as project-owned code."
+        ),
+        paths=divergent_paths,
+        rule=(
+            "In-place edits under vendored module source are outside the extension "
+            "contract: keep the current module content where the donor path is only "
+            "an older copy, and upstream or re-express a real local edit, so the "
+            "recipient is handed over with no edits under `modules/`."
+        ),
+    )
+
+
 def _build_pending_manual_actions(
     report: BetaMigrationReport,
 ) -> list[PendingManualAction]:
@@ -400,6 +435,12 @@ def _build_pending_manual_actions(
                 ),
             )
         )
+
+    module_divergence_action = _module_divergence_action(
+        report.donor_file_classification
+    )
+    if module_divergence_action is not None:
+        actions.append(module_divergence_action)
 
     actions.extend(
         [

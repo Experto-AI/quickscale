@@ -49,7 +49,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA153 (e4) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA277 (a1) ──► SA277 (a2)
+Track 2: SA277 (a2)
 Track 3: SA204 (j)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA153 (e4) ──► SA191 (cutover) ──► SA153 (f)
@@ -57,9 +57,9 @@ Track 3: SA204 (j)
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
 waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
-never ships; SA153 (f) waits on the cutover and on SA204 (j). SA277 (a1) builds on SA191's landed port
-and rehearsal; only SA277 (a2) waits on the cutover, whose evidence confirms the line between what
-`beta_migration` automates and what the prompt handles.
+never ships; SA153 (f) waits on the cutover and on SA204 (j). SA277 (a1) has landed; only SA277
+(a2) waits on the cutover, whose evidence confirms the line between what `beta_migration`
+automates and what the prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -78,7 +78,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA153 (e4) | yes | yes | yes | yes | yes |
-| 2 | SA277 (a1) | yes | yes | yes | yes | no |
+| 2 | SA277 (a2) | no | no | yes | no | no |
 | 3 | SA204 (j) | yes | no | yes | no | no |
 
 ### Ownership and merge coordination
@@ -242,13 +242,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
   (50 declared steps on 2026-10-16). Operator docs do not duplicate steps either stage covers.
 
   **Slices:**
-  - [ ] (a1) The wired handoff, from SA191's landed port and rehearsal: `beta_migration` emits
-    unresolved gaps in the form the prompt reads, the prompt and `CUTOVER.md` are copied into the
-    maintained tree (the `bap-web-new` copies stay the cutover's source until it runs), and a
-    smoke test proves the handoff file is produced; a draft of the decision record and boundary
-    rule from the port evidence (which steps `beta_migration` covered and which the port did by
-    hand) goes in the handoff note, not in decisions (Tier 2-full: the gap ledger's handoff
-    format needs discovery).
+  - [x] (a1) The wired handoff: the completed prompt names every recorded unresolved gap in its
+    remaining-work form — the pre-port surfaces and the donor's module divergences (older copies
+    the current module content supersedes, and local edits to upstream or re-express), each with
+    paths and a governing rule — and the smoke gate's gap-handoff case proves the handoff file
+    carries them. The working prompt and `CUTOVER.md` are copied into the maintained tree
+    (`docs/planning/beta-site-migration-prompt.md`, `docs/planning/beta-site-cutover.md`; the
+    `bap-web-new` copies stay the cutover's source). This slice's handoff note carries the
+    decision-record and boundary-rule draft:
+    `docs/planning/migration-upgrade-path-draft.md`. Next: (a2), after the cutover.
   - [ ] (a2) After SA191's cutover: the decision record and boundary rule in decisions, the
     (a1) draft confirmed or amended against the cutover evidence, and the operator docs pruned of
     steps either stage covers (Tier 2-fast).
