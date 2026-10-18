@@ -47,18 +47,19 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (e4) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2)
 Track 3: — (SA204 (j) landed)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
-     critical path: SA153 (e4) ──► SA191 (cutover) ──► SA153 (f)
+     critical path: SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
 waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
-never ships; SA153 (f) waits on the cutover, with the migration freeze it also waited on landed.
-SA277 (a1) has landed; only SA277 (a2) waits on the cutover, whose evidence confirms the line
-between what `beta_migration` automates and what the prompt handles.
+never ships; SA153 (e4) has landed, so Track 1's queue head is the cutover. SA153 (f) waits on
+the cutover, with the migration freeze it also waited on landed. SA277 (a1) has landed; only
+SA277 (a2) waits on the cutover, whose evidence confirms the line between what `beta_migration`
+automates and what the prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -76,7 +77,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA153 (e4) | yes | yes | yes | yes | yes |
+| 1 | SA191 (cutover) | no | no | yes | no | yes |
 | 2 | SA277 (a2) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -166,32 +167,30 @@ suite, and merge only the reviewed delivery through the serialized queue.
   behavior in generated projects. Module-coupled data on new pages comes through seam-declared
   hooks in managed files (arch `generated-file-ownership-unmodeled`, Next (b)).
 
-  **Landed (a)–(d)** on `bap-web-new`: explicit per-listing currency labels, the tenant-owned
+  **Landed (a)–(e4)** on `bap-web-new`: explicit per-listing currency labels, the tenant-owned
   `PropertyImage`/`PropertyFeature`/`PropertyInquiry` tables (own `organization_id`, forced RLS,
-  composite FKs, boundary tests), and the listing inquiry filing a CRM record with the listing
-  reference.
+  composite FKs, boundary tests), the listing inquiry filing a CRM record with the listing
+  reference, and (e4)'s per-request fill: Django writes the catalog and detail documents' head
+  and a plain-HTML crawler summary from the live published listings, `sitemap.xml` and
+  `robots.txt` are Django views over the same data, and the build-time prerender path is gone.
 
-  **Acceptance (remaining):** catalog and detail pages reach a crawler that runs no JavaScript
-  with their content and Open Graph tags by decisions § Frontend Rendering Decisions, Decision 2
-  (Django fills the SPA document per request from published listings); `sitemap.xml` and
-  `robots.txt` are live Django views; the search → detail → inquiry journey and organization
-  isolation hold through the served documents; then the deployed site. Every `*_id` field on a
-  property model is classified through SA208's declaration and every personal field carries an
-  SA246 declaration, both checks passing in the project.
+  **Acceptance (remaining):** the deployed site (f). The served documents, the sitemap and robots
+  views, and the search → detail → inquiry journey with organization isolation pass in the
+  project, and the SA208 and SA246 declarations pass in `manage.py check`.
 
-  **Slices** (in order; (e1) and (e2) built a build-time prerender from a committed snapshot,
-  which Decision 2 replaces):
+  **Slices** (in order; (e1) and (e2) built a build-time prerender from a committed snapshot that
+  (e3)–(e4) replaced with Decision 2's per-request fill):
   - [x] (e3): landed on QuickScale as the revert: the theme's `publicPage` seam carries the social
     shapes only, `main.tsx` mounts with `createRoot` (no hydration), the static-location render is
     gone, the prerender contract step is retired (replaced by `sa153e3-public-page-prerender-reverted`
     — the contract gate requires a fresh id on a template change), its CHANGELOG bullet is out, and
-    frontend.md matches Decision 2. (e4) is next.
-  - [ ] (e4) `bap-web-new`: the catalog and detail routes' Django view fills the SPA document's
-    head and a crawler summary from published, organization-scoped listings; `sitemap.xml` and
-    `robots.txt` become Django views over the same data; remove the prerender build step, the
-    snapshot command, and the committed artifacts, and drop the reverted contract step's
-    record; the no-JavaScript crawler test, rendered-document organization isolation, and the
-    journey test pass (Tier 2-fast).
+    frontend.md matches Decision 2.
+  - [x] (e4): landed on `bap-web-new`: the catalog and detail routes' Django view fills the SPA
+    document's head and a crawler summary per request from the published, organization-scoped
+    listings; `sitemap.xml` and `robots.txt` are Django views over the same data; the prerender
+    build step, the snapshot command, the committed artifacts, and the reverted contract step's
+    project-side traces are gone; the no-JavaScript crawler test, rendered-document organization
+    isolation, and the journey test pass (Tier 2-fast).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA191's cutover and the migration
     freeze; re-prove the journey on the deployed site (Tier 2-full; production deploy,
     maintainer action).
