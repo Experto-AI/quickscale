@@ -84,6 +84,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `poetry run pytest`, or `pnpm test` is recorded as a failed verification result and a remaining
     handoff action with its captured output, while setup and migration commands keep blocking, and
     the completed run's `MIGRATION_PROMPT.md` names each recorded surface.
+  - **Beta migration hands off the module divergences it cannot resolve.** A completed
+    `make beta-migrate-fresh` run names the donor's module divergences in `MIGRATION_PROMPT.md`
+    as a remaining action with each path and its governing rule, so the prompt-driven port
+    triages which are older copies the current module content supersedes and which are local
+    edits to upstream or re-express.
   - **Beta migration carries donor Django symbols and modules.** A copied donor Django file keeps
     its own symbols and gains the generated top-level symbols the regenerated wiring imports, and
     donor package-root modules the recipient lacks are adopted without overwriting the recipient's

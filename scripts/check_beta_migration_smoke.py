@@ -4,7 +4,7 @@
 # The implementation lives in private ``_beta_migration_smoke_*`` siblings
 # (SA267): ``_beta_migration_smoke_support`` (fixture generation, verification
 # shims, migration execution, and the shared assertion helpers) and
-# ``_beta_migration_smoke_cases`` (the four smoke cases).  This module owns the
+# ``_beta_migration_smoke_cases`` (the smoke cases).  This module owns the
 # entrypoint and re-exports the pre-split surface for unchanged import paths,
 # so a test's seam is the sibling that defines the name (decisions.md,
 # Split-Facade Seams).
@@ -48,6 +48,9 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 from _beta_migration_smoke_cases import (
     _case_fresh_first as _case_fresh_first,
+)
+from _beta_migration_smoke_cases import (
+    _case_gap_handoff as _case_gap_handoff,
 )
 from _beta_migration_smoke_cases import (
     _case_iterate as _case_iterate,
@@ -148,6 +151,11 @@ def main() -> int:
             print("  🔍 pre-port build surface recording and handoff prompt")
             _case_pre_port_surfaces(root / "pre-port", environment, spy_log)
             print("    ✅ pre-port covered recorded failure, continued stack, and prompt")
+            print("  🔍 donor module-divergence gap emission and the handoff file")
+            _case_gap_handoff(root / "gap-handoff", environment, spy_log)
+            print(
+                "    ✅ gap-handoff covered the emitted module-divergence gap in report and prompt"
+            )
     finally:
         if previous_skip_lock is None:
             os.environ.pop("QS_SKIP_POETRY_LOCK", None)

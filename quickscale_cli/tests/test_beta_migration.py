@@ -4839,6 +4839,98 @@ def test_run_fresh_first_writes_handoff_prompt_matching_snapshot(
     assert normalized == _HANDOFF_PROMPT_SNAPSHOT_PATH.read_text()
 
 
+def test_handoff_prompt_omits_module_divergence_action_when_module_content_matches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A completed run whose donor module content matches emits no triage action."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    _install_verification_success_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    classification = report.donor_file_classification
+    assert classification is not None
+    assert classification.module_edited == []
+    assert all(
+        action.action != "triage-module-divergences"
+        for action in report.pending_manual_actions
+    )
+
+
+def test_module_divergence_action_allows_accepting_current_module_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cross-version module file is triaged, not forced into re-expression.
+
+    Classification compares donor module bytes against the recipient's current
+    module content, so an older copy of an unchanged upstream file classifies
+    as a divergence; the emitted action must allow keeping the current content
+    for exactly that case instead of assigning every path to re-expression.
+    """
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    (recipient / "modules" / "auth" / "README.md").write_text("auth module v2\n")
+    _install_verification_success_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    classification = report.donor_file_classification
+    assert classification is not None
+    assert classification.module_edited == ["modules/auth/README.md"]
+    actions = {action.action: action for action in report.pending_manual_actions}
+    action = actions["triage-module-divergences"]
+    assert action.paths == ["modules/auth/README.md"]
+    assert "keep the current content" in action.detail
+    assert "upstream or re-express" in action.rule
+
+
 def test_handoff_prompt_requires_completed_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -72,8 +72,9 @@ class PendingManualAction:
     """A manual follow-up action preserved in the report handoff.
 
     ``paths`` are recipient-relative locations the action touches (``.`` is the
-    recipient root) and ``rule`` is the constraint that governs how the action
-    must be done.
+    recipient root); the module-divergence action carries the donor-relative
+    ``modules/<name>/...`` paths the port triages. ``rule`` is the constraint
+    that governs how the action must be done.
     """
 
     action: str
