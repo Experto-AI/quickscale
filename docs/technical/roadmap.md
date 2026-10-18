@@ -47,18 +47,19 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (e3, e4) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA153 (e4) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a1) ──► SA277 (a2)
 Track 3: — (SA204 (j) landed)
-     release path:  SA153 (e3) ──► publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
-     critical path: SA153 (e3, e4) ──► SA191 (cutover) ──► SA153 (f)
+     release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
+     critical path: SA153 (e4) ──► SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
-waits on the 0.89.0 publication, which waits on SA153 (e3) so the reverted contract step never
-ships; SA153 (f) waits on the cutover, with the migration freeze it also waited on landed. SA277 (a1)
-builds on SA191's landed port and rehearsal; only SA277 (a2) waits on the cutover, whose evidence
-confirms the line between what `beta_migration` automates and what the prompt handles.
+waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
+never ships; SA153 (f) waits on the cutover, with the migration freeze it also waited on landed.
+SA277 (a1) builds on SA191's landed port and rehearsal; only SA277 (a2) waits on the cutover,
+whose evidence confirms the line between what `beta_migration` automates and what the prompt
+handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -76,7 +77,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA153 (e3) | yes | yes | yes | yes | yes |
+| 1 | SA153 (e4) | yes | yes | yes | yes | yes |
 | 2 | SA277 (a1) | yes | yes | yes | yes | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -181,10 +182,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices** (in order; (e1) and (e2) built a build-time prerender from a committed snapshot,
   which Decision 2 replaces):
-  - [ ] (e3) QuickScale: revert the prerendered `publicPage` variant, the `hydrateRoot` boot and
-    the static-location render in the theme, the `sa153e1-properties-public-page` contract step
-    (0.89.0 is unpublished), its CHANGELOG bullet, and frontend.md's prerender text, so the seam
-    and boot match `v89` before (e1) and frontend.md matches Decision 2 (Tier 2-fast).
+  - [x] (e3): landed on QuickScale as the revert: the theme's `publicPage` seam carries the social
+    shapes only, `main.tsx` mounts with `createRoot` (no hydration), the static-location render is
+    gone, the prerender contract step is retired (replaced by `sa153e3-public-page-prerender-reverted`
+    — the contract gate requires a fresh id on a template change), its CHANGELOG bullet is out, and
+    frontend.md matches Decision 2. (e4) is next.
   - [ ] (e4) `bap-web-new`: the catalog and detail routes' Django view fills the SPA document's
     head and a crawler summary from published, organization-scoped listings; `sitemap.xml` and
     `robots.txt` become Django views over the same data; remove the prerender build step, the
