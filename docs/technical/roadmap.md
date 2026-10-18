@@ -48,11 +48,11 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (e1…e3) ──► SA204 (j) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA153 (e3, e4) ──► SA204 (j) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a)
 Track 3: —
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
-     critical path: SA153 (e1…e3) ──► SA204 (j) ──► SA153 (f)
+     critical path: SA153 (e3, e4) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
@@ -64,7 +64,7 @@ prompt handles.
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
 its last slice lands; slices are not scheduled.
 
-**Order.** SA204 (j) freezes migration history after SA153 (e3) and before SA153 (f) puts
+**Order.** SA204 (j) freezes migration history after SA153 (e4) and before SA153 (f) puts
 non-reseedable tenant data on `bap-web`. Any module `0001` edit before then reaches `bap-web` by
 a reseed. SA153's own tables live in the project-owned extension as `0002+` migrations. No open
 ticket changes a module schema. SA153 (a…e) builds on the `v89` pin, re-pinned at each `v89`
@@ -123,7 +123,7 @@ A track is **truly green** only when all three states are yes.
   re-exports, the conformance harness with its registry row, parity families and
   `module-extension.md`'s authoring checklist, and the five `_anonymization.py` handlers with
   core's redaction helpers.
-- **Cross-track edits.** SA153 (e1) extends Track 3's `publicPage` seam type, with Track 3
+- **Cross-track edits.** SA153 (e3) reverts Track 3's `publicPage` seam type, with Track 3
   review; SA204 (j) sets `MIGRATION_FREEZE_VINTAGE` in core. Both land through the serialized
   merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -160,7 +160,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [ ] (j) The decision record lifting rule 1 of § Clean-Break Migration History from this
     release, the freeze commit of the manifest, and `MIGRATION_FREEZE_VINTAGE` set to this
-    release; after SA153 (e3), before SA153 (f), with the maintainer's sign-off. If a module
+    release; after SA153 (e4), before SA153 (f), with the maintainer's sign-off. If a module
     `0001` changed after (i), re-run the (i) rehearsal first (Tier 2-fast; the one-way step,
     kept to docs, the manifest, and that one constant).
 
@@ -181,10 +181,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Target `buenosairesproperties.com` with one React public property surface over a project-owned
   JSON read API under the [extension contract](module-extension.md), building on the React pages
-  and `/api/properties/` SA191 carried over. No Django-rendered property pages, no public API in
-  `listings`, no generic property behavior in generated projects. Module-coupled data on new
-  pages comes through seam-declared hooks in managed files (arch
-  `generated-file-ownership-unmodeled`, Next (b)).
+  and `/api/properties/` SA191 carried over. No public API in `listings`, no generic property
+  behavior in generated projects. Module-coupled data on new pages comes through seam-declared
+  hooks in managed files (arch `generated-file-ownership-unmodeled`, Next (b)).
 
   **Landed (a)–(d)** on `bap-web-new`: explicit per-listing currency labels, the tenant-owned
   `PropertyImage`/`PropertyFeature`/`PropertyInquiry` tables (own `organization_id`, forced RLS,
@@ -192,35 +191,31 @@ suite, and merge only the reviewed delivery through the serialized queue.
   reference.
 
   **Acceptance (remaining):** catalog and detail pages reach a crawler that runs no JavaScript
-  with their content and Open Graph tags, by frontend.md's prerender mechanism (Vite SSR at
-  build/deploy, Django serves, React hydrates); `sitemap.xml` and `robots.txt` derive from
-  published listings; the search → detail → inquiry journey and organization isolation hold
-  through the rendered pages; then the deployed site. Every `*_id` field on a property model is
-  classified through SA208's declaration and every personal field carries an SA246 declaration,
-  both checks passing in the project.
+  with their content and Open Graph tags by decisions § Frontend Rendering Decisions, Decision 2
+  (Django fills the SPA document per request from published listings); `sitemap.xml` and
+  `robots.txt` are live Django views; the search → detail → inquiry journey and organization
+  isolation hold through the served documents; then the deployed site. Every `*_id` field on a
+  property model is classified through SA208's declaration and every personal field carries an
+  SA246 declaration, both checks passing in the project.
 
-  **Slices** (in order):
-  - [x] (e1): landed on `bap-web-new` as the build-time render path: the `publicPage` seam
-    carries a properties surface (catalog/detail) with the dehydrated react-query state the
-    document was rendered with, `StaticRouter` boots in the SSR entry, the snapshot command
-    exports the public API's exact JSON shape, and the Node prerender writes the catalog and
-    detail documents with Open Graph tags from that snapshot; Django serves them and the boot
-    hydrates cache and markup (decision: image-build prerender from the committed snapshot,
-    documents committed and served by Django). The chromium crawler test fetches both with
-    JavaScript disabled.
-  - [x] (e2): landed on `bap-web-new` as the build step's crawler surface: the Node prerender
-    writes `sitemap.xml` (the catalog plus one URL per published listing) and `robots.txt`
-    (allow all, pointing at the sitemap) from the same committed snapshot, and Django serves
-    both ahead of the SPA catch-all; the sitemap fails closed with a 404 while public listings
-    are off or the artifact is missing or malformed. (e3) is next.
-  - [ ] (e3) Rendered-page organization isolation and the journey test over the prerendered
-    pages (Tier 2-fast).
+  **Slices** (in order; (e1) and (e2) built a build-time prerender from a committed snapshot,
+  which Decision 2 replaces):
+  - [ ] (e3) QuickScale: revert the prerendered `publicPage` variant, the `hydrateRoot` boot and
+    the static-location render in the theme, the `sa153e1-properties-public-page` contract step
+    (0.89.0 is unpublished), its CHANGELOG bullet, and frontend.md's prerender text, so the seam
+    and boot match `v89` before (e1) and frontend.md matches Decision 2 (Tier 2-fast).
+  - [ ] (e4) `bap-web-new`: the catalog and detail routes' Django view fills the SPA document's
+    head and a crawler summary from published, organization-scoped listings; `sitemap.xml` and
+    `robots.txt` become Django views over the same data; remove the prerender build step, the
+    snapshot command, and the committed artifacts, and drop the reverted contract step's
+    record; the no-JavaScript crawler test, rendered-document organization isolation, and the
+    journey test pass (Tier 2-fast).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA204 (j) and SA191's cutover; re-prove
     the journey on the deployed site (Tier 2-full; production deploy, maintainer action).
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
-  Inventory only: generalizing the property API, React pages, or prerender step into reusable
+  Inventory only: generalizing the property API, React pages, or crawler fill into reusable
   modules or the theme; React read API and pages for the blog, generic listings, and the CRM
   dashboard; React `auth` and `billing` flows; broader translations; maps/geocoding; saved
   searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
