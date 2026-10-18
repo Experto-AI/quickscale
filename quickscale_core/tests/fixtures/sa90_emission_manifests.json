@@ -58,8 +58,7 @@
       "sa289-b-theme-request-client-and-seam-paths": "Regenerated 2026-10-16 \u2014 the theme's hooks send every request through the shared apiRequest client, the SPA's blog, listings, and crm page routes, navigation, and Dashboard card links take their paths from the seam's modulePaths (which gains blog and listings entries), and the launcher pages' server-rendered document links take theirs from the new moduleDocumentPaths table (blogIndex, blogFeed, listingsIndex, crmDashboard) in every mode, so no module path is written by hand; the theme's ESLint config rejects a raw fetch( in src/hooks outside useApi.ts (SA289 slice b). 30 fixture hashes updated per variant: frontend/eslint.config.js, frontend/src/App.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/Dashboard.tsx, frontend/src/quickscaleSeam.d.ts, frontend/src/quickscaleSeam.keys.ts, the frontend/src/test suite (App, AppRoutes, FormRenderer, PublicSocialPages, RootDispatch, csrf, formFields, layoutComponents, orgComponents, orgListPage, seamFixtures, settingsPage, socialLinkTreeStates, useModules, useOrgNavigation, useOrgs, validateQuickScaleSeam), and templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa153e1-properties-public-page": "Regenerated 2026-10-17 \u2014 SA153 (e1): the theme's publicPage seam accepts a prerendered project public page carrying its route and dehydrated react-query state, main.tsx hydrates the query cache and adopts the served markup with hydrateRoot, and renderQuickScaleRoot.tsx renders the app tree at a caller-provided static location for an SSR entry. 6 fixture hashes updated per variant: frontend/src/hooks/useModules.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/main.tsx, frontend/src/renderQuickScaleRoot.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts; all three variants carry identical frontend/src trees. All unrelated paths, hashes, and modes remain authoritative."
+      "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -307,7 +306,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "644",
-      "sha256": "7623aed5653e9991413faea44a83bfa1a560d0aa6fca7e17c3d5e1447c445bbf"
+      "sha256": "37ddab4ce9d98b6534a16b1a80959a10e95654de6134426d125459a46bcb0b32"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "644",
@@ -339,11 +338,11 @@
     },
     "frontend/src/lib/validateQuickScaleSeam.ts": {
       "mode": "644",
-      "sha256": "5859e03686bad5c34b40c52beade9c1d3845cc73e1e731a9bad295ca72906ebd"
+      "sha256": "9e35a8f0e1dc2d2d68d25d23877d68aaf4dd7cf33f37f77a1a37e608aeadb184"
     },
     "frontend/src/main.tsx": {
       "mode": "644",
-      "sha256": "93389de856e56d48724b1aef4f06e03a26a0361c26c1b7345e8423f3b59ac0e8"
+      "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "644",
@@ -423,7 +422,7 @@
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
       "mode": "644",
-      "sha256": "d8e75fb194ef06dd16ea70713f1458874622d5cbd41ae6cfabb8f7d121b8fe9b"
+      "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
     },
     "frontend/src/stores/themeStore.ts": {
       "mode": "644",
@@ -447,7 +446,7 @@
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "644",
-      "sha256": "0219f7c3590b6e485dec200c9073c925c2fca386b85ba325903116b2b887c1aa"
+      "sha256": "2441ed0abe2232d42341b8976020b368a51b5044e7e98aba60c9c73fc4408dfe"
     },
     "frontend/src/test/analytics.test.ts": {
       "mode": "644",
@@ -515,7 +514,7 @@
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
-      "sha256": "fd8ba2b1494fe5606d738421e71d740e6682cdfe1e0662fa483530a3bb775145"
+      "sha256": "746a183fb2350755b5e7843a0f2d645b68fa74200632e750cca7faa2eb3c0dde"
     },
     "frontend/src/test/viteAssetRouting.test.ts": {
       "mode": "644",
@@ -877,7 +876,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "644",
-      "sha256": "7623aed5653e9991413faea44a83bfa1a560d0aa6fca7e17c3d5e1447c445bbf"
+      "sha256": "37ddab4ce9d98b6534a16b1a80959a10e95654de6134426d125459a46bcb0b32"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "644",
@@ -909,11 +908,11 @@
     },
     "frontend/src/lib/validateQuickScaleSeam.ts": {
       "mode": "644",
-      "sha256": "5859e03686bad5c34b40c52beade9c1d3845cc73e1e731a9bad295ca72906ebd"
+      "sha256": "9e35a8f0e1dc2d2d68d25d23877d68aaf4dd7cf33f37f77a1a37e608aeadb184"
     },
     "frontend/src/main.tsx": {
       "mode": "644",
-      "sha256": "93389de856e56d48724b1aef4f06e03a26a0361c26c1b7345e8423f3b59ac0e8"
+      "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "644",
@@ -993,7 +992,7 @@
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
       "mode": "644",
-      "sha256": "d8e75fb194ef06dd16ea70713f1458874622d5cbd41ae6cfabb8f7d121b8fe9b"
+      "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
     },
     "frontend/src/stores/themeStore.ts": {
       "mode": "644",
@@ -1017,7 +1016,7 @@
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "644",
-      "sha256": "0219f7c3590b6e485dec200c9073c925c2fca386b85ba325903116b2b887c1aa"
+      "sha256": "2441ed0abe2232d42341b8976020b368a51b5044e7e98aba60c9c73fc4408dfe"
     },
     "frontend/src/test/analytics.test.ts": {
       "mode": "644",
@@ -1085,7 +1084,7 @@
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
-      "sha256": "fd8ba2b1494fe5606d738421e71d740e6682cdfe1e0662fa483530a3bb775145"
+      "sha256": "746a183fb2350755b5e7843a0f2d645b68fa74200632e750cca7faa2eb3c0dde"
     },
     "frontend/src/test/viteAssetRouting.test.ts": {
       "mode": "644",
@@ -1447,7 +1446,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "644",
-      "sha256": "7623aed5653e9991413faea44a83bfa1a560d0aa6fca7e17c3d5e1447c445bbf"
+      "sha256": "37ddab4ce9d98b6534a16b1a80959a10e95654de6134426d125459a46bcb0b32"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "644",
@@ -1479,11 +1478,11 @@
     },
     "frontend/src/lib/validateQuickScaleSeam.ts": {
       "mode": "644",
-      "sha256": "5859e03686bad5c34b40c52beade9c1d3845cc73e1e731a9bad295ca72906ebd"
+      "sha256": "9e35a8f0e1dc2d2d68d25d23877d68aaf4dd7cf33f37f77a1a37e608aeadb184"
     },
     "frontend/src/main.tsx": {
       "mode": "644",
-      "sha256": "93389de856e56d48724b1aef4f06e03a26a0361c26c1b7345e8423f3b59ac0e8"
+      "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "644",
@@ -1563,7 +1562,7 @@
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
       "mode": "644",
-      "sha256": "d8e75fb194ef06dd16ea70713f1458874622d5cbd41ae6cfabb8f7d121b8fe9b"
+      "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
     },
     "frontend/src/stores/themeStore.ts": {
       "mode": "644",
@@ -1587,7 +1586,7 @@
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "644",
-      "sha256": "0219f7c3590b6e485dec200c9073c925c2fca386b85ba325903116b2b887c1aa"
+      "sha256": "2441ed0abe2232d42341b8976020b368a51b5044e7e98aba60c9c73fc4408dfe"
     },
     "frontend/src/test/analytics.test.ts": {
       "mode": "644",
@@ -1655,7 +1654,7 @@
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
-      "sha256": "fd8ba2b1494fe5606d738421e71d740e6682cdfe1e0662fa483530a3bb775145"
+      "sha256": "746a183fb2350755b5e7843a0f2d645b68fa74200632e750cca7faa2eb3c0dde"
     },
     "frontend/src/test/viteAssetRouting.test.ts": {
       "mode": "644",

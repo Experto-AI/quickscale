@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
-import { createRoot, hydrateRoot } from 'react-dom/client'
-import { hydrate, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import { initializeAnalytics } from '@/lib/analytics'
 import { validateQuickScaleConfig } from '@/lib/validateQuickScaleSeam'
@@ -27,26 +27,11 @@ initializeAnalytics()
 // This ensures a missing/malformed window.__QUICKSCALE__ produces a clear
 // diagnostic (throw) rather than silently rendering a blank or disabled UI.
 const quickScaleConfig = validateQuickScaleConfig()
-const publicPage = quickScaleConfig.publicPage
 
-// A prerendered document arrives with the react-query state its markup was
-// rendered from; seeding the cache before the first render keeps hydration
-// aligned with the served HTML, and hydrateRoot adopts that markup instead of
-// replacing it with a fresh client tree.
-if (publicPage?.module === 'properties') {
-  hydrate(queryClient, publicPage.dehydratedState)
-}
-
-const tree = (
+createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      {renderQuickScaleRoot(publicPage?.module === 'social' ? publicPage.surface : undefined)}
+      {renderQuickScaleRoot(quickScaleConfig.publicPage?.surface)}
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 )
-
-if (publicPage?.module === 'properties') {
-  hydrateRoot(rootElement, tree)
-} else {
-  createRoot(rootElement).render(tree)
-}

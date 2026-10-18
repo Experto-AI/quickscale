@@ -29,12 +29,9 @@ import {
  * own (SA276).
  *
  * Optional fields validated when present:
- *   - publicPage must be a well-formed object whose module selects its shape:
- *     a social page requires module 'social', surface 'link_tree'|'embeds',
- *     and non-empty endpoint and navigation fields; a prerendered project
- *     public page requires module 'properties', surface 'catalog'|'detail',
- *     a non-empty path, and a dehydratedState carrying the react-query
- *     mutations and queries arrays the cache hydration reads.
+ *   - publicPage must be a well-formed object with required children;
+ *     module must be 'social', surface must be 'link_tree'|'embeds',
+ *     endpoint and navigation fields must be non-empty strings
  */
 export function validateQuickScaleConfig(): QuickScaleConfig {
   const seam = window.__QUICKSCALE__
@@ -174,96 +171,58 @@ export function validateQuickScaleConfig(): QuickScaleConfig {
     }
 
     const pp = seam.publicPage as unknown as Record<string, unknown>
+    const requiredPublicFields = ['module', 'surface', 'endpoint', 'navigation'] as const
 
-    if (pp.module === 'social') {
-      const requiredPublicFields = ['module', 'surface', 'endpoint', 'navigation'] as const
-
-      for (const field of requiredPublicFields) {
-        if (pp[field] == null || (typeof pp[field] === 'string' && (pp[field] as string).trim() === '')) {
-          throw new Error(
-            `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.${field} ` +
-            `is required when publicPage is present.`,
-          )
-        }
-      }
-
-      // publicPage.surface must be exactly 'link_tree' or 'embeds'
-      if (pp.surface !== 'link_tree' && pp.surface !== 'embeds') {
+    for (const field of requiredPublicFields) {
+      if (pp[field] == null || (typeof pp[field] === 'string' && (pp[field] as string).trim() === '')) {
         throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.surface ' +
-          'must be "link_tree" or "embeds".',
+          `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.${field} ` +
+          `is required when publicPage is present.`,
         )
       }
+    }
 
-      // publicPage.endpoint must be a non-empty string (not array/object)
-      if (typeof pp.endpoint !== 'string' || (pp.endpoint as string).trim() === '') {
-        throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.endpoint ' +
-          'must be a non-empty string.',
-        )
-      }
-
-      if (!pp.navigation || typeof pp.navigation !== 'object' || Array.isArray(pp.navigation)) {
-        throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.navigation ' +
-          'must be an object when publicPage is present.',
-        )
-      }
-
-      const nav = pp.navigation as Record<string, unknown>
-      const requiredNavFields = ['home', 'linkTree', 'embeds'] as const
-
-      for (const field of requiredNavFields) {
-        if (typeof nav[field] !== 'string' || (nav[field] as string).trim() === '') {
-          throw new Error(
-            `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.navigation.${field} ` +
-            `must be a non-empty string when publicPage is present.`,
-          )
-        }
-      }
-    } else if (pp.module === 'properties') {
-      // publicPage.surface must be exactly 'catalog' or 'detail'
-      if (pp.surface !== 'catalog' && pp.surface !== 'detail') {
-        throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.surface ' +
-          'must be "catalog" or "detail" for a properties public page.',
-        )
-      }
-
-      // publicPage.path must be the document's own non-empty route
-      if (typeof pp.path !== 'string' || (pp.path as string).trim() === '') {
-        throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.path ' +
-          'must be a non-empty string for a properties public page.',
-        )
-      }
-
-      // publicPage.dehydratedState carries the react-query state the document
-      // was rendered with: an object with the mutations and queries arrays the
-      // cache hydration reads.
-      if (
-        !pp.dehydratedState ||
-        typeof pp.dehydratedState !== 'object' ||
-        Array.isArray(pp.dehydratedState)
-      ) {
-        throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.dehydratedState ' +
-          'must be an object with mutations and queries arrays.',
-        )
-      }
-
-      const dehydrated = pp.dehydratedState as Record<string, unknown>
-      if (!Array.isArray(dehydrated.queries) || !Array.isArray(dehydrated.mutations)) {
-        throw new Error(
-          'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.dehydratedState ' +
-          'must be an object with mutations and queries arrays.',
-        )
-      }
-    } else {
+    // publicPage.module must be exactly 'social'
+    if (pp.module !== 'social') {
       throw new Error(
         'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.module ' +
-        'must be "social" or "properties".',
+        'must be "social".',
       )
+    }
+
+    // publicPage.surface must be exactly 'link_tree' or 'embeds'
+    if (pp.surface !== 'link_tree' && pp.surface !== 'embeds') {
+      throw new Error(
+        'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.surface ' +
+        'must be "link_tree" or "embeds".',
+      )
+    }
+
+    // publicPage.endpoint must be a non-empty string (not array/object)
+    if (typeof pp.endpoint !== 'string' || (pp.endpoint as string).trim() === '') {
+      throw new Error(
+        'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.endpoint ' +
+        'must be a non-empty string.',
+      )
+    }
+
+    if (!pp.navigation || typeof pp.navigation !== 'object' || Array.isArray(pp.navigation)) {
+      throw new Error(
+        'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.navigation ' +
+        'must be an object when publicPage is present.',
+      )
+    }
+
+    const nav = pp.navigation as Record<string, unknown>
+    const requiredNavFields = ['home', 'linkTree', 'embeds'] as const
+
+    for (const field of requiredNavFields) {
+      if (typeof nav[field] !== 'string' || (nav[field] as string).trim() === '') {
+        throw new Error(
+          `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.publicPage.navigation.${field} ` +
+          `must be a non-empty string when publicPage is present.`,
+        )
+      }
     }
   }
 
