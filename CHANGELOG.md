@@ -23,7 +23,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 
 ## Releases
 
-- v0.89.0 — prepared, not published — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
+- v0.89.0 — released 2026-10-18 — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
   - **One owner per URL prefix, and theme API bases from the seam.** Storage mounts the shared
     staff-guarded Markdownx endpoints and writes their settings, listings depends on storage, and
     new editor uploads land under `markdownx/` no matter which modules are installed; `apply`

@@ -1,6 +1,6 @@
 # Release v0.89.0 — Development Maintenance
 
-**Date:** unreleased · **Status:** Prepared release artifact (no tag, GitHub release or package upload exists)
+**Date:** 2026-10-18 · **Status:** Released
 
 ## Summary
 
