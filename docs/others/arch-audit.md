@@ -6,7 +6,7 @@ are in git history (`git log -- docs/others/arch-audit.md`). Cite a finding only
 ## Open findings
 
 ### 1. `generated-file-ownership-unmodeled` — module contracts live in user-owned generated files
-**Horizon:** now (trigger: SA191 repins `bap-web-new` to 0.89.0) · **Size:** M · two-way door
+**Horizon:** now (trigger: SA299 regenerates `bap-web-new` on 0.89.0) · **Size:** M · two-way door
 
 - **Problem.** Only six emitted paths are managed: `settings/modules.py`, `urls_modules.py`,
   the two theme seam files, `.github/quickscale-ci-env` and `quickscale-operations.md`. Module
