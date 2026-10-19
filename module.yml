@@ -1,6 +1,6 @@
 # CRM Module Manifest
 # Defines configuration options and their mutability for the CRM module
-# See decisions.md §Module Manifest Architecture for schema specification
+# See docs/technical/module_architecture.md §Module Manifest Architecture for schema specification
 
 name: crm
 version: "0.89.0"
