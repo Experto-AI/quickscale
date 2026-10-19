@@ -10,11 +10,13 @@ once, onto the standardized names (SA191), and carries the first property portal
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.
 
-**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0, which has no open
-release requirement. A live 0.88.0 install moves to 0.89.0 on a fresh database. Part 1 is green on
+**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0; SA191 now supplies the
+local-candidate validation and cutover required before PyPI publication. A live 0.88.0 install moves to 0.89.0 on a fresh database. Part 1 is green on
 the SA298 tip and the Phase 4b pre-linked live check passed there; the local `0.89.0` tag is
 re-pointed at the roadmap-only close commit whose product bytes match that tip. The operator's
 Phases 5–6 sealing and publication remain, in [publish_procedure.md](publish_procedure.md).
+For this release, the operator's chosen order is SA191 on the local 0.89.0 candidate first,
+then PyPI publication after successful validation and cutover; publication does not block SA191.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -38,7 +40,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
@@ -49,16 +51,17 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 Track 1: SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2)
 Track 3: — (SA204 (j) landed)
-     release path:  operator seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
-     critical path: operator publish ──► SA191 (cutover) ──► SA153 (f)
+     release path:  SA191 (local 0.89.0 validation + cutover) ──► operator publish 0.89.0
+     critical path: SA191 (local candidate + cutover) ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
-waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
-never ships; SA153 (e4) has landed, so Track 1's queue head is the cutover, which the operator's
-publication unblocks. SA153 (f) waits on the cutover, with the migration freeze it also waited on
-landed. SA277 (a1) has landed; only SA277 (a2) waits on the cutover, whose evidence confirms the
-line between what `beta_migration` automates and what the prompt handles.
+Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
+head is SA191: validate the local 0.89.0 candidate in `bap-web-new`, then stage the cutover for
+operator authorization. PyPI publication follows successful validation and cutover. SA153 (e3–e4)
+have landed, so the reverted contract step never ships. SA153 (f) waits on SA191's cutover, with
+the migration freeze it also waited on landed. SA277 (a1) has landed; only SA277 (a2) waits on the
+cutover, whose evidence confirms the line between what `beta_migration` automates and what the
+prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -76,7 +79,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 (cutover) | no | no | yes | no | yes |
+| 1 | SA191 (cutover) | yes | no | yes | no | yes |
 | 2 | SA277 (a2) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -156,13 +159,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `CUTOVER.md` rebuild a fresh database, reseed the catalog under the restricted runtime role
   (billing disabled), verify, and roll back, rehearsed on scratch.
 
-  **Remaining:** the cutover. After 0.89.0 is published, an assistant swaps the pin to `0.89.0`,
-  re-runs the rehearsal, so the unpublished pin never reaches production, and stages the
-  production run (exact commands, media manifest, invite list, rollback). The operator then gives
-  the go: the Railway cutover against production, the media carry, the user re-invites, and the
-  old repository's archive. The
-  pre-cutover database is retained until the reseeded site is verified. The production dump at
-  `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
+  **Remaining (Tier 2-full):** validate and cut over using the local 0.89.0 candidate; PyPI
+  publication is not a prerequisite. An assistant records the exact QuickScale source commit,
+  local installation method and module refs, and ensures the deployed build can install the same
+  candidate without relying on the developer's filesystem or unpublished PyPI packages. Re-run
+  the rehearsal and verification in `bap-web-new`, then stage the production run (exact commands,
+  media manifest, invite list, rollback). The operator must explicitly authorize the Railway
+  cutover against production, the media carry, the user re-invites, and the old repository's archive.
+  Retain the pre-cutover database until the reseeded site is verified. Close SA191 only after its
+  validation, cutover, and remaining acceptance complete; sealing alone does not close it.
+  Successful `bap-web-new` validation and cutover are the operator's proof before publishing
+  0.89.0 to PyPI. Any QuickScale defect found follows the release re-entry loop; revalidate the
+  final candidate before publication. Switching the recipient to published packages can follow
+  publication. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data
+  and stays out of every repository.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
