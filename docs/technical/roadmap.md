@@ -10,12 +10,11 @@ once, onto the standardized names (SA191), and carries the first property portal
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.
 
-**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0; SA298 owns the remaining
-release validation and deployment proof. A live 0.88.0 install moves to 0.89.0 on a fresh database.
-Part 1 is green on the SA292 tip; the local `0.89.0` tag is re-pointed at the roadmap-only close commit whose product
-bytes match that tip. The Phase 4b live check on a pre-linked directory is still pending and must
-pass before the operator's Phases 5–6 sealing and publication in
-[publish_procedure.md](publish_procedure.md).
+**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0, which has no open
+release requirement. A live 0.88.0 install moves to 0.89.0 on a fresh database. Part 1 is green on
+the SA298 tip and the Phase 4b pre-linked live check passed there; the local `0.89.0` tag is
+re-pointed at the roadmap-only close commit whose product bytes match that tip. The operator's
+Phases 5–6 sealing and publication remain, in [publish_procedure.md](publish_procedure.md).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -39,8 +38,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA298 | Complete 0.89.0 final release validation and live deployment proof | 1 | — | Required |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA298 | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
@@ -48,20 +46,19 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA298 (release proof) ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2)
 Track 3: — (SA204 (j) landed)
-     release path:  SA298 ──► operator seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
-     critical path: SA298 ──► operator publish ──► SA191 (cutover) ──► SA153 (f)
+     release path:  operator seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
+     critical path: operator publish ──► SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
 waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
-never ships; SA153 (e4) has landed. Track 1's queue head is SA298; its completion does not
-authorize SA191 until the operator publishes 0.89.0. SA153 (f) waits on
-the cutover, with the migration freeze it also waited on landed. SA277 (a1) has landed; only
-SA277 (a2) waits on the cutover, whose evidence confirms the line between what `beta_migration`
-automates and what the prompt handles.
+never ships; SA153 (e4) has landed, so Track 1's queue head is the cutover, which the operator's
+publication unblocks. SA153 (f) waits on the cutover, with the migration freeze it also waited on
+landed. SA277 (a1) has landed; only SA277 (a2) waits on the cutover, whose evidence confirms the
+line between what `beta_migration` automates and what the prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -79,7 +76,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA298 (release proof) | yes | no | yes | no | yes |
+| 1 | SA191 (cutover) | no | no | yes | no | yes |
 | 2 | SA277 (a2) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -150,37 +147,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA292 — Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs.**
 
-- [ ] **SA298 — Complete 0.89.0 final release validation and live deployment proof.**
-
-  **Tier 2-full.** Execute release preparation on integration branch `v89` under
-  [publish_procedure.md](publish_procedure.md); inspect the existing scratch build, Phase 4a
-  verification project, and Railway access first. Use the designated verification project only.
-  SA292 remains closed; this task owns the outstanding release proof, not the production cutover.
-
-  **Scope and acceptance:**
-
-  1. Reconcile `docs/releases/release-v0.89.0.md` status with the procedure; preserve the
-     publish-ready CHANGELOG line required by the workflow. Finalize and merge all intended
-     release documentation before the final validation; do not mark pending acceptance complete.
-     Point the local `0.89.0` tag at that clean final `v89` commit; do not push it.
-  2. Run Part 1 in full on that exact tagged commit: `make version-check`,
-     `make check-core-compat`, `QS_E2E_INTEGRATION_REF=v89 QS_E2E_PARALLEL=0 make ci-e2e`,
-     and `QS_E2E_XDIST_WORKERS=3 make release-gate`. Isolate the gates from an ambient
-     `QUICKSCALE_LOCAL_WHEELHOUSE`; the E2E lanes build their own wheels. Report this known
-     procedure/test-isolation deviation and any cache preparation explicitly.
-  3. Complete Phase 4b with the verified 0.89.0 scratch build and Phase 4a generated project.
-     Ensure its directory is already linked with `railway link` before `quickscale deploy railway`;
-     record the linked project identity before/after and evidence that no initialization occurs.
-     Require successful deployment without warnings, boot, healthcheck, and all Phase 4b site
-     checks. Missing Railway access blocks this acceptance; report it rather than claiming a pass.
-  4. Follow the procedure's re-entry loop for defects. Any later tracked edit invalidates the
-     exact-commit handoff: finalize it, re-point the local tag, and revalidate before reporting green.
-     Report final SHA/tag, exact commands, exit statuses, live-check evidence, and remaining gates
-     in the assistant response; do not create another post-validation documentation commit.
-
-  **Boundary:** stop before Phases 5–7. Do not seal modules, push tags, publish, perform the
-  production cutover, or delete Railway projects. The operator owns sealing, the installed
-  no-override `quickscale apply` check, publication, and close-out; SA191 still waits for publication.
+- [x] **SA298 — Complete 0.89.0 final release validation and live deployment proof.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
