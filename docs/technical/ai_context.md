@@ -1,80 +1,57 @@
 # AI Context Baseline
 
-Compact baseline for AI hydration in QuickScale. This file is derivative and intentionally non-navigational. It summarizes repository-wide facts that every AI role should share; it does not replace the authoritative sources.
-
-> **Drift notice**: This file is a best-effort derivative of `decisions.md` and the companion technical docs. It may lag behind those canonical sources. If any fact here conflicts with `decisions.md`, `implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, or `repository_layout.md`, treat those documents as authoritative immediately — before this file is corrected.
+Compact, derived baseline every AI role shares. It never overrides its sources: on any conflict
+the owning document wins immediately and this file is corrected.
 
 ## Authority Order
 
-1. [decisions.md](./decisions.md) owns repo-wide policy, tie-breakers, prohibitions, and the document ownership map ([§ Document Responsibilities](./decisions.md#document-responsibilities) names the owner of every other document).
-2. [implementation_contract.md](./implementation_contract.md) owns the current shipped contract, feature matrix, CLI surface summary, and architecture-boundary notes.
-3. [validation_policy.md](./validation_policy.md) owns validation entrypoints, testing standards, coverage expectations, and E2E guidance.
-4. [generated_project_structure.md](./generated_project_structure.md) owns generated-project structure, generated artifact placement, and generation guardrails.
-5. [repository_layout.md](./repository_layout.md) owns maintainer-repository layout plus naming and import guidance.
-6. [docs/contrib/rules.md](../contrib/rules.md) owns contributor engineering rules (scope, design, failure handling, style, testing, debugging, documentation).
-7. Stage guides in `docs/contrib/*.md` apply those rules and prescribe no workflow order; they never override the authorities above.
-Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs are informational or human-first references and do not override the technical authorities above.
+1. [decisions.md](./decisions.md): repo-wide policy, tie-breakers, prohibitions; its
+   [§ Document Responsibilities](./decisions.md#document-responsibilities) names the owner of every
+   topic and marks the authoritative (**A**) documents.
+2. The **A** companions: [implementation_contract.md](./implementation_contract.md) (shipped
+   contract, CLI), [module_architecture.md](./module_architecture.md),
+   [module_conventions.md](./module_conventions.md),
+   [validation_policy.md](./validation_policy.md),
+   [generated_project_structure.md](./generated_project_structure.md),
+   [repository_layout.md](./repository_layout.md).
+3. [docs/contrib/rules.md](../contrib/rules.md): contributor engineering rules. Stage guides in
+   `docs/contrib/` apply them and never override them.
+
+READMEs, `START_HERE.md` and contributor routers are human-first and never authoritative.
 
 ## Workflow Baseline
 
-- Default workflow: run `quickscale plan <project>`, enter the generated directory, then run `quickscale apply`.
-- `quickscale.yml` is the desired-state file. `.quickscale/state.yml` is the sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
-- `quickscale apply` acquires an advisory lock around `state.yml` read/modify/write so concurrent applies fail closed instead of racing.
-- `quickscale status` reports drift and compatibility diagnostics on demand (state consolidation, legacy files, module tracking, managed-file drift, version drift).
-- Generated projects are standalone Django projects. Do not assume automatic settings inheritance from `quickscale_core`. Generated settings import their executable runtime contracts (middleware, proxy trust, DRF composition, command-mode selection, SECRET_KEY guard) from the versioned `quickscale_core.runtime.settings` facade, and every generated project declares the bounded `quickscale-core` lockstep pin.
-- Modules are embedded runtime dependencies managed through the documented git-subtree workflow. Themes are one-time scaffolding copied into user-owned project files.
+- `quickscale plan <project>` writes `quickscale.yml` (desired state); `quickscale apply` inside
+  the project materializes it. `.quickscale/state.yml` is the sole applied-state store, written
+  under an advisory lock. `quickscale status` reports drift.
+- Generated projects are standalone Django projects with no settings inheritance; they import
+  runtime contracts from the versioned `quickscale_core.runtime.settings` facade and pin
+  `quickscale-core` in lockstep.
+- Modules are embedded runtime dependencies (git subtree, `modules/<name>/`); themes are one-time
+  scaffolding copied into user-owned files.
 
 ## Stack Baseline
 
-- Packaging and dependency management: Poetry with `pyproject.toml`.
-- Python package layout: `src/` layout across first-party packages.
-- Shared quality tools: Ruff for format and lint, MyPy for type checking, pytest + pytest-django + pytest-cov for testing and coverage.
-- Production baseline: Docker and PostgreSQL are part of the current shipped contract.
-- Do not introduce or document `requirements.txt`, `setup.py`, Black, or Flake8 as current QuickScale standards.
+Poetry + `pyproject.toml`, `src/` layout, Ruff (format and lint), MyPy, pytest + pytest-django +
+pytest-cov, Docker, PostgreSQL only. `requirements.txt`, `setup.py`, Black and Flake8 are
+prohibited.
 
 ## Validation Entry Points
 
-- Shared workflows run through repository `make` targets, never lower-level helper scripts directly.
-- Use the narrowest relevant validation first, then widen only as needed.
-- Depth is chosen by tier, and the tier bounds the obligation — see
-  [validation_policy.md §Validation Tiers](./validation_policy.md#validation-tiers),
-  which is authoritative:
-  - `change` (default, one phase or one correction): `make lint`, `make typecheck`,
-    and a focused run over the changed behavior — `make test-unit K=<expr>`, or a
-    direct `pytest` invocation.
-  - `task` (completed plan, convergence pass, cross-package delta): the owning
-    section suite, or `make check QUIET=1`.
-  - `release` (closeout, version bump, generator-template change): `make ci`, or
-    `make ci-e2e` when an E2E trigger applies.
-- Each tier's command subsumes the narrower ones; run one command per tier. Never
-  run a wider tier to establish a baseline — a pre-existing failure is discovered
-  at the tier that reaches it.
-- Scoped and partial runs shorten a fix cycle; they satisfy no tier. `K=`/`ARGS=`
-  disable the coverage gate, and `make ci ONLY=`/`FROM=`/`SKIP_INSTALL=` report
-  `PARTIAL CI — NOT a full pass`. Both say so on every run — do not report one as
-  the tier's obligation met. See
-  [validation_policy.md §Scoping and Rerun Variables](./validation_policy.md#scoping-and-rerun-variables).
-- Shared entrypoints:
-  - `make lint`
-  - `make format`
-  - `make test`
-  - `make test-unit`
-  - `make test-e2e`
-  - `make ci-e2e`
-  - `make retry` (re-run only the last recorded failures)
-  - `make version-check`
+Shared workflows run through `make` targets. The tier bounds the obligation
+([validation_policy.md §Validation Tiers](./validation_policy.md#validation-tiers)):
+
+| Tier | When | Command |
+|---|---|---|
+| `change` | one phase or one correction | `make lint`, `make typecheck`, `make test-unit K=<expr>` |
+| `task` | completed plan, cross-package delta | owning section suite or `make check QUIET=1` |
+| `release` | closeout, version bump, generator-template change | `make ci` (`make ci-e2e` when an E2E trigger applies) |
+
+Scoped runs (`K=`, `ARGS=`, `make ci ONLY=/FROM=/SKIP_INSTALL=`) satisfy no tier
+([§Scoping and Rerun Variables](./validation_policy.md#scoping-and-rerun-variables)).
+`make retry` re-runs the last failures.
 
 ## Generated-Project Ownership
 
-- Generated projects are user-owned code.
-- Themes are copied into project-owned templates and frontend files; they are not live runtime packages.
-- Embedded modules live under `modules/<name>/` in generated projects and can be updated through the documented module workflow.
-- Maintainer-side repository layout such as `quickscale_modules/` is repository context, not generated-project structure.
-
-## Maintenance Rule
-
-Update the authoritative companion doc first when a covered fact changes. Update [decisions.md](./decisions.md) in the same change when the repository-wide ownership map, policy, or tie-breakers change. Update this file only to keep the derivative AI baseline aligned and concise.
-
-## Conflict Policy
-
-If this summary drifts from the authoritative technical docs, those technical docs win immediately and this file must be corrected. If a role-specific guide conflicts with them, follow the authoritative technical docs and fix the guide.
+Generated projects are user-owned code. `quickscale_modules/` is maintainer-repository context,
+not generated-project structure.

@@ -155,9 +155,9 @@ Available fixtures (`quickscale_cli/tests/conftest.py`):
 Global module replacement such as `sys.modules[...] = MagicMock()` leaks across
 tests unless you pair it with reliable teardown logic.
 
-### Prefer local patching or fixture-scoped setup
+### Use local patching or fixture-scoped setup
 
-Prefer local patching or fixture-scoped setup so cleanup is automatic and
+Use local patching or fixture-scoped setup so cleanup is automatic and
 readable.
 
 ### Restore environment and temporary resources

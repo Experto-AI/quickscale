@@ -17,8 +17,7 @@ Apply [rules.md §7](rules.md#7-debugging) with this practical loop:
 
 ## Repo-Specific Debugging Commands
 
-For focused failure analysis, these commands are usually the best starting
-points:
+For focused failure analysis, start with these commands:
 
 ```bash
 # Re-run only the tests that failed in the last run
@@ -58,7 +57,7 @@ When using an AI assistant or LLM to analyze failures:
 
 - capture the smallest useful failing command output first
 - include recent changes, expected behavior, and the test context
-- prefer one failing test or `-x`/`--exitfirst` output before pasting broader suite logs
+- paste one failing test or `-x`/`--exitfirst` output before pasting broader suite logs
 - treat suggestions as hypotheses until they are verified against the code and reruns
 
 ## Scope Guardrails While Debugging

@@ -4,7 +4,6 @@ merge_strategy: append
 ---
 
 # Shared
-<!-- Add reusable principles to be included by reference here -->
 - This is the maintainer-side module inventory. It is not generated into user projects by default.
 - Each module directory under quickscale_modules/<name>/ is independently packaged.
 - module.yml is the canonical source for a module's shipped version and configuration metadata.
@@ -14,28 +13,22 @@ merge_strategy: append
 - Packaged modules: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage.
 
 # Adaptive
-<!-- Add rules for the main orchestrator agent here -->
 [include](#shared)
 
 # Plan
-<!-- Add rules for planning and architectural design here -->
 [include](#shared)
 
 # Codebase Discovery
-<!-- Add rules for discovery and comprehension here -->
 [include](#shared)
 
 # External Research
-<!-- Add rules for researching external APIs and docs here -->
 [include](#shared)
 
 # Implement
-<!-- Add rules for writing code (e.g. backend specific syntax) here -->
 [include](#shared)
 - For packaged modules, `module.yml` owns version metadata. Update it in the same change as any version bump.
 
 # Quality Gate
-<!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
 - Each packaged module has its own test suite. Run the module-specific target rather than the root suite for module-scoped work.
 - Tier commands for this domain (see `docs/technical/validation_policy.md#validation-tiers`):
@@ -44,5 +37,4 @@ merge_strategy: append
 - Module suites need PostgreSQL and live on the integration gate, never on `make test-unit`.
 
 # Change Review
-<!-- Add rules for PR review and change management here -->
 [include](#shared)

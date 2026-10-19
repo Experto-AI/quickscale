@@ -25,7 +25,7 @@ Before implementation starts, make sure the plan captures:
 
 Use these prompts while translating [rules.md](rules.md) into a concrete plan:
 
-- Responsibility boundaries: which responsibilities belong together, and which should remain in separate layers or modules?
+- Responsibility boundaries: which responsibilities belong together, and which stay in separate layers or modules?
 - Existing seams: which current service, adapter, helper, or managed wiring seam can be reused before introducing a new abstraction?
 - Explicit failure: what invalid input, missing configuration, or unsupported state must fail clearly instead of silently?
 - Testability: what evidence will prove the requested behavior and its meaningful edge cases?

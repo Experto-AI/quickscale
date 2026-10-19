@@ -12,7 +12,7 @@ Review the change against these questions:
 - does it apply the project code principles without unnecessary complexity or silent fallbacks?
 - are naming, imports, type hints, logging, and public interfaces consistent with local standards?
 - do tests cover the changed behavior at the right level without contamination or brittle implementation-detail coupling?
-- does documentation match the code and explain non-obvious rationale or operator impact where needed?
+- does documentation match the code and explain non-obvious rationale or operator impact?
 - for bug fixes, is the verified root cause addressed and is regression protection in place?
 
 ## Evidence to Require
@@ -25,10 +25,9 @@ Review the change against these questions:
   names the wider tier that owns it
 - documentation impact is handled or intentionally not needed
 - any remaining follow-up work is clearly separated from close blockers
-- security-gate evidence names both blocking scanners (`Trivy v0.74.0` for
-  committed locks and `Bandit 1.9.4` for focused source analysis), confirms the
-  negative probes, and records all seventeen registry-bound hosted gates rather than
-  treating scanner execution as an unregistered workflow step
+- security-gate evidence names the blocking scanners and the registry-bound hosted gates listed in
+  [validation_policy.md](../technical/validation_policy.md); scanner execution is never an
+  unregistered workflow step
 
 ## Review Outcome Guidance
 

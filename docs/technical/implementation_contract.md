@@ -48,11 +48,11 @@ Legacy release-era labels in older text are historical only. Documentation descr
 
 - `quickscale plan <project>` creates or updates `quickscale.yml` as the user-owned desired-state file.
 - Users then enter the generated project directory and run `quickscale apply` to materialize the configuration.
-- `.quickscale/state.yml` records applied state after execution and is the sole authoritative applied-state store, with consolidated sub-sections for module-tracking metadata and managed-file drift records. Legacy `.quickscale/config.yml` is a compatibility input only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
+- `.quickscale/state.yml` records applied state after execution and is the sole authoritative applied-state store ([module_architecture.md §Plan/Apply Architecture](module_architecture.md#planapply-architecture)).
 - `quickscale status` reports drift and compatibility diagnostics on demand, including state consolidation status, legacy files on disk, per-module tracking completeness, managed-file drift, and version drift.
 - Apply acquires an advisory lock around `state.yml` read/modify/write so concurrent `apply` operations fail closed instead of racing.
-- Apply is expected to be declarative, incremental, and idempotent for the current shipped contract.
-- **Recovery semantics:** Each apply step carries an `is_satisfied()`/`apply()` contract. After each non-destructive step completes, a checkpoint is written to the recovery ledger (`.quickscale/apply-recovery.yml`) via `ApplyExecutor.checkpoint_step()`. On rerun, `ApplyExecutor.find_first_unsatisfied_step()` reads the `RecoveryLedger.resume_checkpoint` field and returns the first incomplete step — recovery resumes from that step instead of rerunning all prior steps. The executor also handles legacy ledgers that lack the `resume_checkpoint` field (treated as `None`, which triggers a full rerun).
+- Apply is declarative, incremental and idempotent.
+- **Recovery semantics:** Each apply step carries an `is_satisfied()`/`apply()` contract. After each non-destructive step completes, a checkpoint is written to the recovery ledger (`.quickscale/apply-recovery.yml`) via `ApplyExecutor.checkpoint_step()`. On rerun, `ApplyExecutor.find_first_unsatisfied_step()` reads the `RecoveryLedger.resume_checkpoint` field and returns the first incomplete step — recovery resumes from that step instead of rerunning all prior steps.  A ledger without `resume_checkpoint` triggers a full rerun.
 - **Late destructive confirmation gate:** Steps 11–16 (mutable config, Docker startup, database migrations, Railway deploy, state finalization, next-steps display) are grouped into a separately-confirmable phase after step 10 completes. The operator is prompted with an explicit list of pending destructive/remote operations and must confirm before the phase executes. A test-only bypass flag (`_AF5_DESTRUCTIVE_CONFIRM_BYPASS`) exists for automated test scenarios. This design keeps the non-destructive steps 1–10 (embed, wiring, env-sync, dependency setup) always safe to re-run.
 - **Fault-injection harness:** A deterministic test harness kills apply execution after step N, verifies the recovery ledger captures the correct checkpoint, then reruns and asserts convergence to a fully satisfied state across all 16 steps.
 
@@ -62,17 +62,15 @@ Legacy release-era labels in older text are historical only. Documentation descr
 - Modules are selected during `quickscale plan` and configured through `quickscale.yml` before `quickscale apply` runs.
 - `quickscale apply` owns the managed backend/runtime wiring for installed modules, including settings and URL integration where the shipped contract defines them.
 - Supported module configuration never requires a manual edit of generated `settings.py`, `urls.py`, or Poetry metadata.
-- If a desired-config rule changes, update this file and the owning module documentation in the same change.
 
 <a id="module-manifest-architecture"></a>
 ## Module Manifest Contract
 
 - `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) do not carry per-module config normalization/validation/derivation; all callers resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
-- Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. A module directory that lacks a `module.yml` is reported as `INCOMPLETE` and fails closed rather than being silently excluded ([module_conventions.md](module_conventions.md#module-conventions) rule 18). The static `MODULE_CATALOG` is supplementary; callers MUST use `get_discovered_module_entries()` for the authoritative list.
+- Module discovery is manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. A module directory that lacks a `module.yml` is reported as `INCOMPLETE` and fails closed rather than being silently excluded ([module_conventions.md](module_conventions.md#module-conventions) rule 18). The static `MODULE_CATALOG` is supplementary; callers MUST use `get_discovered_module_entries()` for the authoritative list.
 - Manifest adapters are module-owned. Each module ships its own ``adapter.py`` and declares its wiring in its own ``module.yml``; core discovers and executes adapters but holds no per-module wiring. There is no fallback adapter path. See [Manifest Adapter Architecture](#manifest-adapter-architecture) and [module_architecture.md §Module Wiring Authority](module_architecture.md#module-wiring-authority).
 - Generated projects remain standalone even when modules are embedded.
-- When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 
 <a id="billing-module-contract"></a>
 ## Billing Module Contract
@@ -273,34 +271,9 @@ section describes the mechanism only.
    ``ResolverResult`` (permitted only when the module needs a custom post-hook) must
    still read the manifest rather than carry a Python literal.
 
-**Current state versus this contract.** All twelve shipped modules are module-owned today:
-each exposes ``get_manifest_adapter()`` from its package, and
-``entry_point.py`` contains only generic registry/dispatch logic. Their app contributions
-are no longer Python literals in core: **`SA167a`** (v88, merge #8) completed the
-five-module declaration phase, and those manifests own the exact app projections consumed
-by the adapters. **`SA167b`** (v88, retired merge #17) completed the remaining adapter
-relocation and P4 acceptance; the accepted adapter boundary is merged integration-branch
-state, not an alternate wiring path.
-The "compatibility fallback for bundled/installed contexts" rationale previously recorded
-here was retired by the AF7 fail-hard decision, which removed the context it described. The
-inert ``django_apps:`` surface and its parsed-but-unread implementation have been removed.
-The declaration-gate product bytes were delivered under **`SA167c`** (v88, merge #21): phases A-E
-were accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`, and the
-sole authorized Phase-F release verdict under `EV-7` subsequently exited 0 on frozen base
-`21a33fbf22b033cab07ba63b592e21b999667fb2`. Its twelve-stage CI chain reached the final
-all-checks-passed banner, with Core and CLI E2E plus exact-scope cleanup green. The release
-evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); SA167c is complete and merge
-position #21 is retired. SA166's subsequent testimony gate is also complete, merge position #24 is
-retired, and SA164's fail-loud migration-guardrail repair is complete with merge position #25
-retired. The [roadmap](roadmap.md#scheduling-table) owns subsequent work and scheduling. The
-settled product bytes no longer carry CLI per-module wiring logic. **`SA167d`**
-(v88) is a conditional post-integration completion-grade Phase C candidate; exact-tip integration
-remains pending; current acceptance and dependencies are tracked in the roadmap.
-SA170's final ordered serial and concurrent campaigns passed against retained product object
-`dcfb136f5980195afd69c2c168afc81e02e118c7` plus the reviewed local corrections. SA170 and TA70 are
-closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
-The SA167a ownership guard checks executable source rather than one constructor shape,
-including helper, variable, and alternate-constructor forms.
+**Current state.** All twelve shipped modules own their adapters (``get_manifest_adapter()``);
+``entry_point.py`` holds only generic registry/dispatch logic, app contributions come from the
+manifests, and an ownership guard rejects per-module wiring in core or CLI source.
 
 #### Module Derivation Schema Types
 
@@ -308,7 +281,7 @@ The declarative-derivation *rule* is authoritative in
 [module_architecture.md §Module Derivation Schema](module_architecture.md#module-derivation-schema);
 this is the type reference.
 
-**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The manifest loader parses the `derivation` section into these types; the resolver executes the wiring projections, derived settings, and per-option derivations, and the loader refuses a top-level `normalization_rules`, `validation_rules`, or `legacy_aliases` declaration that nothing would execute, as well as a per-option `validation_rules` or `legacy_aliases` declaration (rule 6). The per-module CLI contract-file path they replaced is gone.
+**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The manifest loader parses the `derivation` section into these types; the resolver executes the wiring projections, derived settings, and per-option derivations, and the loader refuses a top-level `normalization_rules`, `validation_rules`, or `legacy_aliases` declaration that nothing would execute, as well as a per-option `validation_rules` or `legacy_aliases` declaration (rule 6).
 
 **YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so `module.yml` `derivation:` sections round-trip through `yaml.safe_load` (via `load_manifest`/`build_schema_from_manifest`) without custom codecs.
 

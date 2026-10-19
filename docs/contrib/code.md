@@ -1,38 +1,17 @@
 # CODE - Implementation Guide
 
-Applies [rules.md](rules.md) to implementation. This guide keeps the
-implementation-stage checklist, scope guardrails, and repo-specific reminders
-that help you apply those rules locally.
+Applies [rules.md](rules.md) to implementation. The rules themselves (scope, design, failure
+handling, layering, style) are not repeated here.
 
-## Implementation Checklist
+## Repo-specific reminders
 
-During implementation, confirm that you are:
-
-- keeping changes inside the explicit task boundary
-- applying the simplest design that satisfies the request
-- reusing existing patterns before introducing new abstractions
-- placing code in the correct architectural layer and preserving interfaces unless change is required
-- handling invalid inputs, edge cases, and failures explicitly
-- following [rules.md §5](rules.md#5-code-style) for naming, typing, imports, formatting, logging, and local consistency
-- documenting rationale where needed without duplicating what the code already says
-- updating tests and documentation when the change requires them
-
-## Scope Guardrails in Practice
-
-- Do not change function signatures, public URLs, schema shape, or wiring unless the task explicitly requires it.
-- Keep unrelated cleanup, formatting, and refactors out of scoped implementation work.
-- When a genuinely needed adjacent change appears, note it explicitly instead of silently widening the edit.
-
-## Project-Specific Reminders
-
+- Function signatures, public URLs, schema shape and wiring change only when the task requires it (rule 1.3).
+- A genuinely needed adjacent change is reported, never folded in (rule 1.2).
 - Where `rules.md` is silent, match the surrounding package or module (rule 5.6).
-- Use [Quality Analysis Tools](../technical/quality_tools.md) when you need deeper static analysis beyond the immediate task.
+- Deeper static analysis: [quality_tools.md](../technical/quality_tools.md).
 
-## Implementation Exit Criteria
+## Exit criteria
 
-Implementation is in good shape when:
-
-- the change follows [rules.md](rules.md)
-- the scope is still tight and reviewable
-- validation requirements are identified or already updated
-- documentation impact is handled or explicitly noted
+- The change follows [rules.md](rules.md) and the scope is still reviewable.
+- Validation is identified at its [tier](../technical/validation_policy.md#validation-tiers) or already run.
+- Documentation impact is handled or explicitly noted (rule 8.2).
