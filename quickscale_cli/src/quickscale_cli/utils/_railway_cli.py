@@ -7,6 +7,7 @@ rule 28), so existing import paths and test patch targets keep working.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -214,11 +215,73 @@ def is_railway_authenticated() -> bool:
 
 
 def is_railway_project_initialized() -> bool:
-    """Check if Railway project is initialized in current directory."""
-    from pathlib import Path
+    """Check whether the current directory is linked to a Railway project.
 
-    railway_config = Path(".railway")
-    return railway_config.exists()
+    Railway CLI 5.x records directory links in its user configuration
+    (``~/.railway/config.json``) and writes no ``.railway`` marker, so the
+    filesystem check this function used to perform reported a linked directory
+    as unlinked.  Ask the CLI for the live link state instead; the deploy flow
+    only runs ``railway init`` when this returns ``False``.
+
+    Returns
+    -------
+        True when ``railway status --json`` reports a linked project.  False
+        only when the CLI explicitly reports that no project is linked.
+
+    Raises
+    ------
+        ValueError: If the live link state cannot be read as a linked or an
+            unlinked directory: the CLI is unavailable, the status call times
+            out or fails without an unlinked report, or the output is not a
+            non-empty JSON object.  Treating any of those as unlinked would
+            re-initialize a linked directory and create a second project.
+
+    """
+    try:
+        result = run_railway_command(["status", "--json"], timeout=10)
+    except FileNotFoundError as exc:
+        raise ValueError(
+            "Railway CLI is not available to read the live link state "
+            f"({exc}); refusing to treat the directory as unlinked."
+        ) from exc
+    except TimeoutError as exc:
+        raise ValueError(
+            "Railway status timed out without reporting the live link state "
+            f"({exc}); refusing to treat the directory as unlinked."
+        ) from exc
+
+    if result.returncode != 0:
+        detail = f"{result.stderr or ''}\n{result.stdout or ''}".casefold()
+        if "no linked project" in detail or "not linked" in detail:
+            return False
+        raise ValueError(
+            "Railway status failed without reporting an unlinked directory; "
+            "refusing to treat the directory as unlinked. "
+            f"Output: {(result.stderr or result.stdout or '').strip()[:200]}"
+        )
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Railway status succeeded but its JSON output could not be parsed; "
+            "refusing to treat the directory as unlinked."
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "Railway status succeeded but its JSON output was not an object "
+            f"(got {type(payload).__name__}); refusing to treat the directory "
+            "as unlinked."
+        )
+
+    if not payload:
+        raise ValueError(
+            "Railway status succeeded but reported an empty object; refusing "
+            "to treat the directory as unlinked."
+        )
+
+    return True
 
 
 def get_railway_project_info() -> dict[str, Any] | None:

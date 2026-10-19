@@ -183,7 +183,13 @@ def _ensure_railway_auth_step() -> None:
 
 def _init_railway_project_step() -> None:
     """Initialize Railway project if needed."""
-    if not _railway_cli.is_railway_project_initialized():
+    try:
+        project_initialized = _railway_cli.is_railway_project_initialized()
+    except ValueError as exc:
+        click.secho(f"❌ Error: {exc}", fg="red", err=True)
+        sys.exit(1)
+
+    if not project_initialized:
         click.echo("\n📦 Initializing Railway project...")
         click.echo("💡 You can create a new project or link to an existing one")
 

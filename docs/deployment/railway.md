@@ -65,7 +65,7 @@ The `quickscale deploy railway` command automatically:
 - ✅ Authenticates via browserless login if not logged in (shows pairing code)
 
 **Deployment Setup:**
-- ✅ Initializes Railway project (if needed) - creates one when the directory has no ``.railway`` marker
+- ✅ Initializes Railway project (if needed) - reuses a linked directory and creates a project only when none is linked
 - ✅ Adds PostgreSQL 18 database service
 - ✅ Creates application service
 - ✅ Retries `DATABASE_URL` reference linking while PostgreSQL finishes provisioning
@@ -132,22 +132,17 @@ railway add --database postgres
 # 4. Create app service (Railway CLI v4+ required)
 railway add --service myapp
 
-# 5. Deploy to app service
+# 5. Configure environment variables, one write per variable.
+#    --skip-deploys keeps each write from starting a deployment of its own;
+#    the single deploy below picks up every value.
+railway variable set 'SECRET_KEY=your-secret-key' --service myapp --skip-deploys
+railway variable set 'ALLOWED_HOSTS=myapp.railway.app' --service myapp --skip-deploys
+railway variable set 'DEBUG=False' --service myapp --skip-deploys
+railway variable set 'DJANGO_SETTINGS_MODULE=myapp.settings.production' --service myapp --skip-deploys
+railway variable set 'RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:password@host:port/db' --service myapp --skip-deploys
+
+# 6. Deploy to app service
 railway up --service myapp
-
-# 6. Configure environment variables
-# IMPORTANT: Set all variables in ONE command to avoid multiple deployments!
-railway variable set \
-  SECRET_KEY=your-secret-key \
-  ALLOWED_HOSTS=myapp.railway.app \
-  DEBUG=False \
-  DJANGO_SETTINGS_MODULE=myapp.settings.production \
-  RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:password@host:port/db \
-  --service myapp
-
-# Alternative (NOT RECOMMENDED - triggers multiple deployments):
-# railway variable set SECRET_KEY=your-secret-key --service myapp
-# etc.
 
 # 7. Run migrations
 railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"
@@ -212,7 +207,7 @@ Railway projects support multiple services within a single project. When you dep
 
 The `quickscale deploy railway` command follows this config-first workflow:
 
-1. **Initialize Project**: Creates the Railway project when the directory has no ``.railway`` marker (see **Project Initialization** under Important Notes)
+1. **Initialize Project**: Reuses the linked Railway project, and creates one only when the directory is not linked (see **Project Initialization** under Important Notes)
 2. **Add PostgreSQL**: Provisions PostgreSQL 18 database service
 3. **Create App Service**: Creates empty service container via `railway add --service <app-name>`
 4. **Link DATABASE_URL Reference**: Links app `DATABASE_URL` to PostgreSQL with retry/backoff
@@ -241,7 +236,7 @@ The `quickscale deploy railway` command follows this config-first workflow:
 - Environment variables are service-specific. The CLI automatically targets the correct service for each operation.
 - **Optimized Variable Setting**: QuickScale writes each variable with `railway variable set KEY --stdin --skip-deploys` (values stay out of process arguments) and triggers one deployment after the writes succeed, so environment setup never causes multiple deployments.
 - **Module Vendor Credentials**: the CLI's environment configuration writes the core variables only. Set any credentials the selected modules require (see [Module Vendor Credentials](#module-vendor-credentials)) on the service before the first boot, or the deployment fails its module startup checks.
-- **Project Initialization**: the command runs `railway init` itself when the directory has no ``.railway`` marker, and that invocation creates a project rather than selecting an existing one. Do not pre-create or pre-link the project with `railway init`/`railway link`: Railway CLI 5.x keeps directory links in ``~/.railway/config.json``, writes no ``.railway`` marker, and the command therefore initializes again, creating a second project (the application service still takes the directory slug as its name).
+- **Project Initialization**: the command checks the live link state with `railway status --json` and runs `railway init` only when the directory is not linked. Railway CLI 5.x keeps directory links in ``~/.railway/config.json`` and writes no ``.railway`` marker, so pre-creating or pre-linking the project with `railway init`/`railway link` is safe: the deploy reuses that link instead of creating a second project (the application service still takes the directory slug as its name). If the link state cannot be read, the command aborts rather than initializing again.
 - Railway CLI v4+ requires explicit service creation with `railway add --service` before deployment.
 - **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
 - **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available. Migrations use the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix so the superuser `DATABASE_URL` is used (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
@@ -305,8 +300,9 @@ leave ``RUNTIME_DB_PASSWORD`` unset (``start.sh`` then skips role creation) and:
    ```
 2. Set only ``RUNTIME_DATABASE_URL`` on the app service, in the same shell:
    ```bash
-   railway variables --service myapp --set \
-     "RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:${RUNTIME_DB_PASSWORD}"'@${{primary-db.PGHOST}}:${{primary-db.PGPORT}}/${{primary-db.PGDATABASE}}'
+   railway variable set \
+     "RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:${RUNTIME_DB_PASSWORD}"'@${{primary-db.PGHOST}}:${{primary-db.PGPORT}}/${{primary-db.PGDATABASE}}' \
+     --service myapp --skip-deploys
    ```
    Replace ``primary-db`` in both commands with the exact PostgreSQL service name shown by
    ``railway service list``. The double-quoted half expands your shell variable; the single-quoted
@@ -864,7 +860,7 @@ Problem processing request
 - Check your Railway account has available projects (free tier limit: 2 projects)
 - Verify network connectivity
 - Ensure you're authenticated: `railway whoami`
-- Prefer re-running `quickscale deploy railway`; a manually pre-linked directory is initialized again and creates a second project (see **Project Initialization**)
+- Prefer re-running `quickscale deploy railway`; it reuses a directory already linked with `railway link` (see **Project Initialization**)
 
 **Deployment Timeout**:
 - Large projects may take longer than expected (first deploy: 5-10 minutes)
@@ -1118,12 +1114,12 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - [ ] Create Railway project: `railway init`
 - [ ] Add PostgreSQL database: `railway add --database postgres`
 - [ ] Create app service: `railway add --service myapp`
-- [ ] Configure environment variables:
-  - `railway variable set SECRET_KEY=<generated-key> --service myapp`
-  - `railway variable set DEBUG=False --service myapp`
-  - `railway variable set DJANGO_SETTINGS_MODULE=myapp.settings.production --service myapp`
+- [ ] Configure environment variables, one write per variable:
+  - `railway variable set SECRET_KEY=<generated-key> --service myapp --skip-deploys`
+  - `railway variable set DEBUG=False --service myapp --skip-deploys`
+  - `railway variable set DJANGO_SETTINGS_MODULE=myapp.settings.production --service myapp --skip-deploys`
 - [ ] Generate public domain: `railway domain --service myapp`
-- [ ] Set ALLOWED_HOSTS with domain: `railway variable set ALLOWED_HOSTS=<domain> --service myapp`
+- [ ] Set ALLOWED_HOSTS with domain: `railway variable set ALLOWED_HOSTS=<domain> --service myapp --skip-deploys`
 - [ ] Deploy to Railway: `railway up --service myapp`
   - ✅ railway.json delegates runtime startup to `./start.sh` for migrations + gunicorn
   - ✅ Dockerfile handles `collectstatic` during the build

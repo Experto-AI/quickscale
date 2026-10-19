@@ -333,7 +333,8 @@ modules, expect the first boot to fail its module startup checks until the Phase
 credentials are set on the application service; `railway redeploy --service myapp` then picks them
 up ([railway.md § Module Vendor Credentials](../deployment/railway.md#module-vendor-credentials)).
 Run without a TTY, the deploy's initialization creates the Railway project non-interactively and
-names it automatically; record the created project for cleanup, and do not pre-link the project
+names it automatically; record the created project for cleanup. A directory already linked with
+`railway link` is reused, so a pre-linked project is not initialized again
 ([railway.md § Deployment Workflow](../deployment/railway.md#deployment-workflow)).
 
 **Step 2 — Watch it boot.**
@@ -361,8 +362,9 @@ creates the user on the next deploy.
 Phase 4a, including `/admin/`.
 
 **Cleanup.** When the loop is finished, delete the Railway project in the dashboard or with
-`railway delete --project <name-or-id> --yes` (the deletion is scheduled, not immediate). Each
-re-run of this phase creates a new one, and the free tier allows two.
+`railway delete --project <name-or-id> --yes` (the deletion is scheduled, not immediate). A re-run
+in the same linked directory reuses that project; a fresh project requires an unlinked directory
+or deleting the previous one first, and the free tier allows two.
 
 A failure in any step is routed by its cause: a wrong Railway setting is an environment defect
 (re-entry step 4); anything the CLI or the generated project gets wrong is a repository defect

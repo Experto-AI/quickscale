@@ -338,6 +338,27 @@ class TestInitRailwayProjectStep:
         with pytest.raises(SystemExit):
             _init_railway_project_step()
 
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_project_initialized")
+    def test_unreadable_link_state_aborts_without_initializing(
+        self, mock_init, mock_run
+    ):
+        """Test that format drift aborts instead of creating a second project"""
+        mock_init.side_effect = ValueError("status JSON could not be parsed")
+        with pytest.raises(SystemExit):
+            _init_railway_project_step()
+        mock_run.assert_not_called()
+
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
+    def test_status_timeout_aborts_without_initializing(self, mock_run):
+        """Test that a status timeout never reaches railway init"""
+        mock_run.side_effect = TimeoutError("Railway command timed out after 10s")
+
+        with pytest.raises(SystemExit):
+            _init_railway_project_step()
+
+        mock_run.assert_called_once_with(["status", "--json"], timeout=10)
+
 
 # ============================================================================
 # _setup_postgres_step

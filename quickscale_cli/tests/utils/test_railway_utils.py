@@ -158,19 +158,96 @@ class TestIsRailwayAuthenticated:
 class TestIsRailwayProjectInitialized:
     """Tests for is_railway_project_initialized function."""
 
-    def test_project_initialized_returns_true(self, tmp_path, monkeypatch):
-        """Test that initialized project returns True."""
+    def test_linked_directory_without_railway_marker_returns_true(
+        self, tmp_path, monkeypatch
+    ):
+        """Railway CLI 5.x links live in user config, not a .railway marker."""
         monkeypatch.chdir(tmp_path)
-        railway_config = tmp_path / ".railway"
-        railway_config.mkdir()
+        assert not (tmp_path / ".railway").exists()
+        completed = Mock(returncode=0, stdout='{"id": "project-1"}')
 
-        assert is_railway_project_initialized() is True
+        with patch.object(
+            _railway_cli, "run_railway_command", return_value=completed
+        ) as runner:
+            assert is_railway_project_initialized() is True
+
+        runner.assert_called_once_with(["status", "--json"], timeout=10)
 
     def test_project_not_initialized_returns_false(self, tmp_path, monkeypatch):
-        """Test that non-initialized project returns False."""
+        """A non-zero status reports an unlinked directory."""
         monkeypatch.chdir(tmp_path)
+        completed = Mock(
+            returncode=1,
+            stdout="",
+            stderr="No linked project found. Run railway link to connect.",
+        )
 
-        assert is_railway_project_initialized() is False
+        with patch.object(_railway_cli, "run_railway_command", return_value=completed):
+            assert is_railway_project_initialized() is False
+
+    def test_legacy_marker_does_not_replace_live_state(self, tmp_path, monkeypatch):
+        """A stale .railway directory is not evidence of a live link."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".railway").mkdir()
+        completed = Mock(returncode=1, stdout="No linked project found.")
+
+        with patch.object(_railway_cli, "run_railway_command", return_value=completed):
+            assert is_railway_project_initialized() is False
+
+    def test_cli_not_found_refuses_to_treat_directory_as_unlinked(self):
+        """A missing CLI cannot read the live link state."""
+        with patch.object(
+            _railway_cli,
+            "run_railway_command",
+            side_effect=FileNotFoundError("Railway CLI not found"),
+        ):
+            with pytest.raises(ValueError, match="not available to read the live link"):
+                is_railway_project_initialized()
+
+    def test_timeout_refuses_to_treat_directory_as_unlinked(self):
+        """A status timeout must not authorize initialization."""
+        with patch.object(
+            _railway_cli, "run_railway_command", side_effect=TimeoutError("timed out")
+        ):
+            with pytest.raises(ValueError, match="timed out without reporting"):
+                is_railway_project_initialized()
+
+    def test_empty_object_refuses_to_treat_directory_as_unlinked(self):
+        """A successful status without link evidence must not authorize init."""
+        completed = Mock(returncode=0, stdout="{}")
+
+        with patch.object(_railway_cli, "run_railway_command", return_value=completed):
+            with pytest.raises(ValueError, match="reported an empty object"):
+                is_railway_project_initialized()
+
+    def test_unreadable_status_refuses_to_treat_directory_as_unlinked(self):
+        """A failed status that is not an unlinked report must not trigger init."""
+        completed = Mock(
+            returncode=1,
+            stdout="",
+            stderr="Unauthorized. Please run railway login",
+        )
+
+        with patch.object(_railway_cli, "run_railway_command", return_value=completed):
+            with pytest.raises(ValueError, match="without reporting an unlinked"):
+                is_railway_project_initialized()
+
+    def test_malformed_json_refuses_to_treat_directory_as_unlinked(self):
+        """A successful status with unreadable JSON must not trigger init."""
+        completed = Mock(returncode=0, stdout="not json")
+
+        with patch.object(_railway_cli, "run_railway_command", return_value=completed):
+            with pytest.raises(ValueError, match="JSON output could not be parsed"):
+                is_railway_project_initialized()
+
+    @pytest.mark.parametrize("payload", ["[]", "null", '"project"'])
+    def test_non_object_json_refuses_to_treat_directory_as_unlinked(self, payload):
+        """A linked status payload is an object; other shapes are format drift."""
+        completed = Mock(returncode=0, stdout=payload)
+
+        with patch.object(_railway_cli, "run_railway_command", return_value=completed):
+            with pytest.raises(ValueError, match="was not an object"):
+                is_railway_project_initialized()
 
 
 class TestGetRailwayProjectInfo:
@@ -180,16 +257,23 @@ class TestGetRailwayProjectInfo:
         """Test that function returns None when project not initialized."""
         monkeypatch.chdir(tmp_path)
 
-        result = get_railway_project_info()
+        with patch.object(
+            _railway_cli, "is_railway_project_initialized", return_value=False
+        ):
+            result = get_railway_project_info()
+
         assert result is None
 
     def test_returns_project_info_when_initialized(self, tmp_path, monkeypatch):
         """Test that function returns project info when initialized."""
         monkeypatch.chdir(tmp_path)
-        railway_config = tmp_path / ".railway"
-        railway_config.mkdir()
 
-        with patch("subprocess.run") as mock_run:
+        with (
+            patch.object(
+                _railway_cli, "is_railway_project_initialized", return_value=True
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.return_value = Mock(returncode=0, stdout="Project: test-project")
             result = get_railway_project_info()
 
@@ -200,10 +284,13 @@ class TestGetRailwayProjectInfo:
     def test_returns_none_on_command_failure(self, tmp_path, monkeypatch):
         """Test that function returns None when Railway command fails."""
         monkeypatch.chdir(tmp_path)
-        railway_config = tmp_path / ".railway"
-        railway_config.mkdir()
 
-        with patch("subprocess.run") as mock_run:
+        with (
+            patch.object(
+                _railway_cli, "is_railway_project_initialized", return_value=True
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.side_effect = subprocess.CalledProcessError(1, "railway")
             result = get_railway_project_info()
 
