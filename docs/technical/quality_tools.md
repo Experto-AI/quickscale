@@ -189,34 +189,7 @@ Compact machine-readable gate result:
 
 The duplication checker is the one analyzer run twice: the 5-option pass feeds the warn band (and the `duplication.observed` list in the report), and the 19-option pass defines the fail column. A block reported by the fail pass fails; the remaining observed blocks warn. Both boundaries are inclusive in policy — exactly 6 similar lines warns, exactly 20 fails — while pylint's option is exclusive, hence the option values being one below each floor.
 
-## Integration with Existing Tools
-
-| Command | Purpose | When to Run |
-|---------|---------|-------------|
-| `make lint` | Format + basic linting (ruff) | Before every commit |
-| `make ci` | Primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available) | Before push to GitHub |
-| `make quality` | Deep quality analysis (dead code, complexity, duplication, file length) with the fixed thresholds; a registered gate in `make ci` | Every local CI run, or directly for a quality-only pass |
-
-## Workflow Recommendations
-
-1. **Daily development:** Use `make lint` for quick fixes
-2. **Before push:** Run `make ci` to run primary local development checks before pushing
-3. **Quality-only pass:** Run `make quality` to check the thresholds without the rest of local CI
-4. **Before releases:** Review quality reports and address failing findings
-
-## Interpreting Results
-
-**Immediate action required (fail column):**
-- Functions with CC >= 21
-- Files at or above 800 lines
-- Duplication blocks of 20 or more similar lines
-- Dead code at 100% confidence
-
-**Plan for next sprint (warn band):**
-- Functions with CC 11-20
-- Files of 500-799 lines
-- Duplication blocks of 6-19 similar lines
-- Dead code at 80-99% confidence
+Fail lines and warn bands: [release_gates_policy.md § Quality Thresholds Gate](release_gates_policy.md#quality-thresholds-gate). Which validation tier runs `make quality`: [validation_policy.md](validation_policy.md#validation-tiers).
 
 ## Configuration
 

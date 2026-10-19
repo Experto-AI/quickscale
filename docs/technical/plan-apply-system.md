@@ -1,11 +1,5 @@
 # QuickScale Plan/Apply System
 
-**Technical Specification for Terraform-style Project Configuration**
-
-**Status**: Current shipped contract
-
----
-
 ## Overview
 
 QuickScale implements a Terraform-style plan/apply workflow for project configuration. Users declare desired state in YAML, and QuickScale applies changes incrementally.
@@ -25,43 +19,9 @@ QuickScale implements a Terraform-style plan/apply workflow for project configur
 | `quickscale status` | Show current vs desired state |
 | `quickscale remove <module>` | Remove embedded module |
 
-**Note**: Interactive mode is default. No `--no-interactive` flag exists.
+Full CLI surface: [implementation_contract.md § CLI Commands](implementation_contract.md#cli-command-matrix). Interactive mode is the default; there is no `--no-interactive` flag.
 
 ---
-
-## Complete Command Structure
-
-QuickScale uses a clean command structure:
-
-```
-quickscale
-├── Project Configuration (plan/apply)
-│   ├── plan <project-slug>   Create new project config
-│   ├── plan --add            Add modules to existing project
-│   ├── plan --reconfigure    Reconfigure mutable options
-│   ├── apply                 Execute configuration
-│   ├── status                Show current vs desired state
-│   └── remove <module>       Remove embedded module
-│
-├── Module Code Sync (git subtree)
-│   ├── update                Pull latest module code from upstream
-│   └── push                  Push improvements back to QuickScale
-│
-├── Development (Docker)
-│   ├── up                    Start services
-│   ├── down                  Stop services
-│   ├── logs                  View logs
-│   ├── shell                 Container shell
-│   ├── manage <cmd>          Django management commands
-│   └── ps                    Service status
-│
-└── Deployment
-    └── deploy railway        Deploy to Railway
-```
-
-**Removed Commands** (replaced by plan/apply):
-- ~~`quickscale init`~~ → Use `quickscale plan <project-slug>` + `quickscale apply`
-- ~~`quickscale embed`~~ → Use `quickscale plan --add` + `quickscale apply`
 
 **Two Orthogonal Concerns**:
 | Concern | Commands | Purpose |

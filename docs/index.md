@@ -27,10 +27,9 @@ rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflic
 - [quality_tools.md](technical/quality_tools.md): analyzers and threshold gate
 - [versioning.md](technical/versioning.md): `VERSION` single source
 - [roadmap.md](technical/roadmap.md): open work and scheduling
-- [user_manual.md](technical/user_manual.md): commands and workflows
-- [development.md](technical/development.md): dev environment
+- [user_manual.md](technical/user_manual.md): `quickscale` CLI workflows and examples
+- [development.md](technical/development.md): contributor environment, repository commands, E2E setup, local wheelhouse
 - [docker_workflows.md](technical/docker_workflows.md): Docker workflows
-- [local-wheelhouse.md](technical/local-wheelhouse.md): local wheelhouse
 - [ai_context.md](technical/ai_context.md): compact AI hydration baseline (derived, never authoritative)
 - [ai_hydration_topology.md](technical/ai_hydration_topology.md) **A**: Adaptive wiring and which docs each agent role hydrates
 
@@ -40,15 +39,11 @@ rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflic
 - Stage guides: [plan](contrib/plan.md), [code](contrib/code.md), [review](contrib/review.md), [testing](contrib/testing.md), [debug](contrib/debug.md)
 
 ## Overview
-- [quickscale.md](overview/quickscale.md): strategy and positioning
-- [competitive_analysis.md](overview/competitive_analysis.md): comparison with alternatives
-- [commercial.md](overview/commercial.md): commercial-use rights
+- [positioning.md](overview/positioning.md): positioning, comparison with alternatives, commercial use
 
 ## Operations
-- [deployment/railway.md](deployment/railway.md): deploy to Railway
+- [deployment/railway.md](deployment/railway.md): deploy to Railway; [operations](deployment/railway-operations.md) (backups, DR, media), [config as code](deployment/railway-config-as-code.md), [troubleshooting](deployment/railway-troubleshooting.md)
 - [planning/beta-site-migration.md](planning/beta-site-migration.md): keep `bap-web` current with releases
-- [planning/beta-site-migration-prompt.md](planning/beta-site-migration-prompt.md): maintained copy of the port's working prompt (`bap-web-new`'s copy stays the cutover's source)
-- [planning/beta-site-cutover.md](planning/beta-site-cutover.md): maintained copy of the cutover and rollback runbook
 - [planning/migration-upgrade-path-draft.md](planning/migration-upgrade-path-draft.md): draft decision record for the two-stage upgrade path (not policy until it lands in decisions)
 
 ## Audits (open findings only; not authoritative)

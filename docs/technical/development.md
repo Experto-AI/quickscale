@@ -101,7 +101,7 @@ poetry install
 #### 2. Verify Installation (1 minute)
 ```bash
 poetry run quickscale --version
-# Should show version number (e.g., 0.76.0)
+# Prints the repository VERSION
 
 poetry show
 # Should show quickscale_core, quickscale_cli, and dependencies
@@ -153,8 +153,6 @@ poetry run pytest
 # Expected: 5/5 tests passing
 ```
 
-**Total time**: ~15 minutes ✅
-
 **Note**: If you're just using QuickScale (not contributing), install via `pip install quickscale` instead. See the [README](../../README.md) for user installation instructions.
 
 ---
@@ -182,7 +180,7 @@ poetry install
 
 Prevention:
 - Never run `poetry` commands with `sudo` in this repository
-- Use `./scripts/bootstrap.sh` (it now detects and handles root-owned `.venv`)
+- Use `./scripts/bootstrap.sh` (it detects and handles a root-owned `.venv`)
 
 ---
 
@@ -317,65 +315,7 @@ E2E run — are documented in
 
 ---
 
-## Repository Structure
-
-```
-quickscale/
-├── quickscale_core/          # Core package (scaffolding, templates)
-│   ├── src/quickscale_core/  # Source code
-│   ├── tests/                # Tests (NOT in src/)
-│   └── pyproject.toml        # Package config
-├── quickscale_cli/           # CLI package
-│   ├── src/quickscale_cli/   # Source code
-│   ├── tests/                # Tests
-│   └── pyproject.toml        # Package config
-├── quickscale_modules/       # Installable modules
-│   └── auth/                 # Authentication module
-├── docs/                     # Documentation
-│   ├── technical/            # Technical specs
-│   ├── contrib/              # Contributing guides
-│   └── releases/             # Official tagged GitHub release notes
-├── scripts/                  # Helper scripts
-│   ├── bootstrap.sh          # Development setup
-│   ├── test_unit.sh          # Run unit tests only
-│   ├── lint.sh               # Run all linters
-│   └── publish_module.sh     # Publish module changes to split branches
-├── pyproject.toml            # Root config (centralized dev dependencies)
-├── ruff.toml                 # Centralized Ruff configuration
-└── mypy.ini                  # Centralized mypy configuration
-```
-
-**Important locations:**
-- Generated project templates: `quickscale_core/src/quickscale_core/generator/templates/`
-- CLI command implementations: `quickscale_cli/src/quickscale_cli/commands/`
-- Tests parallel source structure: `quickscale_core/tests/` mirrors `src/quickscale_core/`
-
-**Centralized Configuration:**
-- All dev dependencies are centralized in root `pyproject.toml`
-- All modules are installed in editable mode via root `pyproject.toml`
-- Shared Ruff config: `ruff.toml` (linting rules)
-- Shared mypy config: `mypy.ini` (type checking + module-specific overrides)
-- Run `poetry install` from root to install all packages + dev tools
-
-**Monorepo Virtual Environment Architecture:**
-- **Single venv at root**: All packages share the root `.venv/` directory
-- **Sub-packages MUST NOT have their own `.venv`**: Sub-packages that could be independently invoked have a `poetry.toml` with `virtualenvs.create = false`; the root Poetry configuration also prevents accidental venv creation elsewhere
-- **Why?** Prevents version drift (e.g., `pytest-cov 4.x` vs `6.x`) that causes cryptic errors like `TempliteSyntaxError: Don't understand tag`
-- **CI enforces this**: The CI workflow fails if any sub-package `.venv` is detected
-- **If you see stale `.venv` errors**: Delete all sub-package `.venv` directories:
-  ```bash
-  rm -rf quickscale_core/.venv quickscale_cli/.venv quickscale/.venv
-  rm -rf quickscale_modules/*/.venv
-  poetry install  # From root
-  ```
-
-**Module Testing Architecture:**
-- Modules use ROOT poetry environment (not their own `.venv`)
-- Module `pyproject.toml` has minimal dev dependencies (only `pytest-django`)
-- `make MODULE=<name> test -- --modules` runs module tests with `PYTHONPATH` set correctly
-- `make test-integration` runs all module integration suites (requires PostgreSQL)
-- `make lint` lints modules using the ROOT poetry environment
-- See [Building a Module](./module-extension.md#building-a-module-authoring-checklist) for new module setup, and [Module Implementation Requirements](module_architecture.md#module-implementation-checklist) for the rules it must satisfy
+Repository layout: [repository_layout.md](repository_layout.md).
 
 ---
 
@@ -571,45 +511,67 @@ pip install quickscale_cli/dist/*.whl
 quickscale --version
 ```
 
----
+### E2E prerequisites
 
-## Getting Help
+E2E runs need Docker and the Playwright Chromium browser (one-time install from the repo root):
 
-**Documentation:**
-- Technical decisions: [docs/technical/decisions.md](./decisions.md)
-- User commands: [docs/technical/user_manual.md](./user_manual.md)
-- Contributing workflow: [docs/contrib/contributing.md](../contrib/contributing.md)
+```bash
+poetry run playwright install chromium --with-deps
+poetry run pytest -m e2e --headed   # visible browser for debugging
+```
 
-**Commands Quick Reference:**
-- Bootstrap: `./scripts/bootstrap.sh`
-- Install: `poetry install`
-- Tests: `make test-unit` or `poetry run pytest`
-- Linters: `make lint`
-- CLI: `poetry run quickscale --help`
+### Dependency management
 
-**Troubleshooting:**
-- Check [Common Issues](#common-issues--solutions) section above
-- Review test output for specific errors
-- Check Poetry dependencies: `poetry show`
-- Verify Python version: `poetry run python --version`
+```bash
+poetry add --group dev <package>     # shared dev dependency (repo root)
+poetry lock --no-update && poetry install
+```
 
-**Need more help?**
-- GitHub Issues: https://github.com/Experto-AI/quickscale/issues
-- See existing issues for similar problems
-- Create new issue with environment details (OS, Python version, error output)
+A package's runtime dependency goes in that package's `pyproject.toml`; the root
+`pyproject.toml` resolves everything into one `poetry.lock`
+([decisions.md § Package Structure](decisions.md#package-structure)).
 
----
+### Local wheelhouse resolution
 
-## Success Criteria
+QuickScale can replace the generated project's published `quickscale-core`
+dependency range with an exact local wheel during development and
+installed-wheel acceptance testing. The dependency synchronizer applies this
+seam to both the direct project dependency update and the embedded module
+`pyproject.toml` path-repair pass. Published third-party dependencies keep the specs
+declared in the module `pyproject.toml`; the wheelhouse is not a replacement package
+index.
 
-You have a working development environment when:
+#### Wheelhouse selection
 
-- ✅ `poetry run quickscale --version` shows version number
-- ✅ `make test-unit` meets the repository coverage policy (90% overall mean and 80% per-file minimum)
-- ✅ `make lint` passes all checks
-- ✅ `quickscale plan testproject`, then `cd testproject`, then `quickscale apply` generates a working Django project
-- ✅ Can make changes, run tests, and see results in <2 minutes
+The `QUICKSCALE_LOCAL_WHEELHOUSE` environment variable is an explicit override.
+When it is set, it must contain an absolute path to an existing directory; an
+empty value is invalid.
+For a dependency named `quickscale-core`, the synchronizer searches that
+directory for exactly one wheel matching the normalized pattern
+`quickscale_core-*.whl`.
 
-**Target: Clone → working dev environment in <15 minutes** 🎯
+When the variable is unset, an installed CLI may implicitly use
+`sys.prefix/quickscale_wheels`, the wheelhouse staged by the global-install
+workflow. If that implicit wheelhouse has no matching wheel, the synchronizer
+keeps the canonical published `quickscale-core` lockstep pin; this preserves the
+normal fallback for locally installed builds whose wheelhouse is incomplete. An
+unset variable with no staged wheelhouse also keeps the canonical lockstep pin.
 
-If you completed this guide in <15 minutes, the setup is working as intended!
+#### Failure modes
+
+- A non-absolute or nonexistent explicit path raises `DependencySyncError` and
+  names the required environment-variable contract.
+- An explicit directory with no matching `quickscale-core` wheel raises
+  `DependencySyncError`.
+  The error names `QUICKSCALE_LOCAL_WHEELHOUSE`, the searched directory, the
+  attempted normalized glob pattern, and the wheels that were available, so an
+  acceptance run cannot silently test a published artifact instead.
+- More than one matching wheel raises `DependencySyncError` because the local
+  artifact is ambiguous.
+- With no explicit wheelhouse, no staged wheelhouse, or an unmatched implicit
+  wheelhouse, the canonical published `quickscale-core` lockstep pin remains
+  authoritative.
+
+To use local resolution, build or copy one matching `.whl` into the explicit
+directory and rerun the command. To use the published dependency range, unset
+`QUICKSCALE_LOCAL_WHEELHOUSE`.

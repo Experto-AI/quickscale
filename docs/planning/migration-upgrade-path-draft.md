@@ -54,5 +54,3 @@ From the landed `bap-web-new` run report and the prompt's recorded slices:
 
 **Related docs:** [roadmap](../technical/roadmap.md) | [arch-audit](../others/arch-audit.md)
 | [beta-site migration playbook](beta-site-migration.md)
-| [maintained prompt copy](beta-site-migration-prompt.md)
-| [maintained cutover copy](beta-site-cutover.md)

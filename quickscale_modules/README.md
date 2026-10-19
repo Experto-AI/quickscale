@@ -1,34 +1,21 @@
 # quickscale_modules
 
-First-party module workspace for QuickScale maintainers.
+Maintainer-side workspace of the first-party modules. Each module directory is a packaged Django
+app; its `module.yml` is the canonical source for version and configuration, and its README is
+its PyPI description. Repository policy: [decisions.md](../docs/technical/decisions.md); module
+rules: [module_conventions.md](../docs/technical/module_conventions.md).
 
-This directory is a maintainer-side inventory of reusable modules. It is not generated into user projects by default, and root documentation remains authoritative for repository-wide policy and scope.
-
-## Module inventory
-
-For packaged modules, `module.yml` is the canonical source for shipped version and configuration metadata. When a module also exposes package-local version metadata, its `pyproject.toml` version and exported `__version__` value should match the manifest.
-
-### Packaged modules
-
-These directories currently include packaging and implementation scaffolding. Use each module README for module-specific setup, behavior, and constraints.
-
-| Module | Notes |
+| Module | Scope |
 |--------|-------|
-| [auth](./auth/README.md) | Authentication module with local packaging, tests, and manifest |
-| [billing](./billing/README.md) | Credits-first Stripe billing module with local packaging, tests, manifest, and module-owned pricing/dashboard routes |
-| [blog](./blog/README.md) | Blog/content module with local packaging, tests, and manifest |
-| [crm](./crm/README.md) | CRM module with local packaging, tests, and manifest |
-| [forms](./forms/README.md) | Forms module with local packaging, tests, and manifest |
-| [listings](./listings/README.md) | Listings module with local packaging, tests, and manifest |
-| [analytics](./analytics/README.md) | Service-style PostHog analytics module with flat settings, capture helpers, and template-tag support |
-| [social](./social/README.md) | Social module with packaged Django app, managed runtime services, admin workflows, and React-facing contracts |
-| [storage](./storage/README.md) | Storage module with local packaging, tests, and manifest |
-| [backups](./backups/README.md) | Admin/ops-first backups module with private local/remote artifact workflows |
-
-Every directory here is a packaged module; there are no placeholder directories.
-
-## Notes for maintainers
-
-- Use this README as a directory-level index only.
-- Use each per-module README for module-specific details.
-- For architecture, scope, and structural rules, defer to [../README.md](../README.md), [../docs/technical/decisions.md](../docs/technical/decisions.md), and [../docs/technical/repository_layout.md](../docs/technical/repository_layout.md).
+| [analytics](./analytics/README.md) | Service-style PostHog analytics: capture helpers and template tags |
+| [auth](./auth/README.md) | Authentication (django-allauth) |
+| [backups](./backups/README.md) | Admin/ops backups with private local/remote artifacts |
+| [billing](./billing/README.md) | Credits-first Stripe billing with module-owned pricing and dashboard routes |
+| [blog](./blog/README.md) | Blog and content |
+| [crm](./crm/README.md) | CRM |
+| [forms](./forms/README.md) | Forms and submissions |
+| [listings](./listings/README.md) | Structured listings |
+| [notifications](./notifications/README.md) | Email notifications through django-anymail |
+| [orgs](./orgs/README.md) | Organizations and multi-tenancy (Solo/SaaS, RBAC, FORCE-RLS) |
+| [social](./social/README.md) | Social links and embeds with React-facing contracts |
+| [storage](./storage/README.md) | Media storage (local or S3-compatible) |

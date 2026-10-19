@@ -396,6 +396,10 @@ MUST / MUST NOT (enforced by `quickscale_core/tests/test_doc_phrasing.py`).
 | quality_tools.md | quality analyzers, threshold gate spec | |
 | versioning.md | `VERSION` single source and propagation | |
 | user_manual.md | CLI workflows and worked examples | |
+| development.md | contributor environment and repository commands | |
+| docker_workflows.md | Docker configuration and auto-start in generated projects | |
+| docs/deployment/railway*.md | Railway deployment, operations, config as code, troubleshooting | |
+| docs/overview/positioning.md | positioning, comparison, commercial use | |
 | roadmap.md | open work; its scheduling table is canonical for tracks, dependencies, next actions. Completed work moves to CHANGELOG.md | |
 | CHANGELOG.md | release history, one entry per version | |
 | docs/releases/ | one public note per version | |

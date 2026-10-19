@@ -1,15 +1,6 @@
 # QuickScale Docker Workflows
 
-Complete guide to Docker integration, auto-start behavior, and troubleshooting.
-
-## Table of Contents
-1. [Docker Configuration](#docker-configuration)
-2. [Auto-Start Behavior](#auto-start-behavior)
-3. [Manual Control](#manual-control)
-4. [Common Scenarios](#common-scenarios)
-5. [Troubleshooting](#troubleshooting)
-
----
+Owns Docker integration for generated projects: configuration, auto-start behavior, manual control and troubleshooting.
 
 ## Docker Configuration
 
@@ -383,90 +374,6 @@ quickscale up --build
 # For settings changes:
 quickscale down
 quickscale up  # No rebuild needed
-```
-
----
-
-## Summary Decision Tree
-
-```
-┌─ quickscale plan myapp
-│
-├─ docker.start: true (default)
-│  ├─ cd myapp
-│  ├─ quickscale apply
-│  └─ ✅ Fresh and existing applies auto-start Docker and run migrations in the backend container
-│
-├─ docker.start: false
-│  ├─ cd myapp
-│  ├─ quickscale apply
-│  ├─ Fresh project → ❌ no auto-start; startup and migrations stay manual
-│  └─ Existing project → ✅ local migrations run, but Docker stays stopped
-│
-└─ --no-docker flag
-   ├─ cd myapp
-   ├─ quickscale apply --no-docker
-  └─ ❌ Skip Docker (startup stays manual; migrations are manual unless this is an existing project with docker.start: false)
-```
-
----
-
-## Best Practices
-
-### Development Workflow
-
-**Day 1 (First setup):**
-```bash
-quickscale plan myapp
-cd myapp
-quickscale apply
-# Services auto-start ✅
-
-quickscale manage createsuperuser
-# Open http://localhost:8000 and start coding
-```
-
-**End of day:**
-```bash
-quickscale down
-# Free up resources
-```
-
-**Day 2 (Resume work):**
-```bash
-cd myapp
-quickscale up  # Manual start needed
-quickscale manage migrate  # If you added migrations
-# Resume coding
-```
-
-### Production Deployment
-
-For production, use Docker Compose or container orchestration:
-
-```bash
-# Build production image
-docker build -t myapp:latest .
-
-# Run with production settings
-docker run -d \
-  -p 8000:8000 \
-  -e SECRET_KEY="production-secret" \
-  -e DEBUG=False \
-  -e DATABASE_URL="postgresql://..." \
-  myapp:latest
-```
-
-### CI/CD Pipeline
-
-```yaml
-# .github/workflows/test.yml
-- name: Test with Docker
-  run: |
-    quickscale plan testapp
-    cd testapp
-    quickscale apply --no-docker  # Skip Docker in CI
-    poetry run pytest
 ```
 
 ---

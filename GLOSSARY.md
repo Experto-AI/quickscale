@@ -34,20 +34,7 @@
 - `quickscale update` → Pulls latest module changes
 - `quickscale push --module <name>` → Contributes improvements back
 
-**See**: [decisions.md - Git Subtree Workflow](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree), [plan-apply-system.md](./docs/technical/plan-apply-system.md)
-
----
-
-<a id="historical-release-era-labels"></a>
-### Historical Documentation Labels
-**Definition**: Older QuickScale documents may use legacy release-era shorthand from earlier planning and repository organization.
-
-**Current Guidance**:
-- Treat those labels as historical shorthand for earlier planning and release discussions
-- Use versioned release history, the roadmap, and the implementation surface matrix for the current authoritative picture
-- Do not use those labels to redefine current behavior or active documentation scope
-
-**See**: [CHANGELOG.md](./CHANGELOG.md), [roadmap.md](./docs/technical/roadmap.md), [decisions.md - Implementation Surface Matrix](./docs/technical/implementation_contract.md#mvp-feature-matrix-authoritative)
+**See**: [decisions.md - Module & Theme Architecture](./docs/technical/decisions.md#module-theme-architecture), [plan-apply-system.md](./docs/technical/plan-apply-system.md)
 
 ---
 
@@ -134,8 +121,6 @@ quickscale/
 
 **Principle**: Declarative YAML (WHAT, not HOW). The YAML describes what you want; the execution engine knows the correct order.
 
-**Introduced**: v0.68.0
-
 **See**: [plan-apply-system.md](./docs/technical/plan-apply-system.md), [user_manual.md](./docs/technical/user_manual.md)
 
 ---
@@ -165,9 +150,7 @@ quickscale/
 **Definition**: Minimal starter theme demonstrating QuickScale's frontend capabilities with minimal code, designed as a foundation for custom development.
 
 **Current Theme**:
-- `showcase_react` - React + TypeScript + Vite + shadcn/ui (default, v0.74.0+)
-
-The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA94. Existing generated projects that used it keep their user-owned files.
+- `showcase_react` - React + TypeScript + Vite + shadcn/ui (the only theme)
 
 **Characteristics**:
 - Minimal code (ready for customization)
@@ -217,7 +200,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 **Definition**: Complete frontend scaffolding for generated projects, ranging from minimal starters to full vertical applications. Unlike modules, themes are one-time generation (not updated after creation).
 
 **Categories**:
-1. **Showcase Themes** - Minimal foundations (React-only since SA94; the former HTML secondary option `showcase_html` has been removed)
+1. **Showcase Themes** - Minimal foundations
 2. **Vertical Themes** - Complete industry apps when they are explicitly implemented and documented
 
 **Distribution**: Generator templates (one-time copy)
@@ -226,7 +209,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 - Themes: Frontend-focused, one-time generation, not updated automatically after project creation
 - Modules: Backend-focused, ongoing updates via git subtree
 
-**Examples**: `showcase_react` (the former `showcase_html` option was removed in SA94)
+**Examples**: `showcase_react`
 
 **See**: [decisions.md - Theme Architecture](./docs/technical/decisions.md#module-theme-architecture)
 
@@ -269,5 +252,5 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 - **[decisions.md](./docs/technical/decisions.md)** - Authoritative technical rules and architectural decisions
 - **[generated_project_structure.md](./docs/technical/generated_project_structure.md)** - Directory structures and file layouts
 - **[plan-apply-system.md](./docs/technical/plan-apply-system.md)** - Plan/apply workflow specification
-- **[quickscale.md](./docs/overview/quickscale.md)** - Current positioning and evolution rationale
+- **[positioning.md](./docs/overview/positioning.md)** - Positioning and comparison
 - **[roadmap.md](./docs/technical/roadmap.md)** - Development timeline and milestones

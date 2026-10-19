@@ -8,353 +8,74 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Experto-AI/quickscale?color=green)](https://github.com/Experto-AI/quickscale/releases)
 [![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-> **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md)
+> **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md) | [All docs](docs/index.md)
 
-<!--
-README.md - User-Focused Introduction
+<!-- README: first contact for users and evaluators. Max ~200 lines; link to the owning doc instead of restating it. -->
 
-PURPOSE: This file serves as the first contact point for users, developers, and evaluators visiting the QuickScale project.
+## QuickScale: Compose your Django SaaS
 
-CONTENT GUIDELINES:
-- Keep content user-facing and accessible to newcomers
-- Focus on "what" and "how to get started" rather than "why" or technical details
-- Include quick examples and development workflows
-- Avoid deep architectural explanations (those belong in DECISIONS.md)
-- Avoid competitive analysis or strategic context (those belong in QUICKSCALE.md)
-- Maximum length: ~200 lines to ensure quick readability
-- Link to other documents for detailed information
+QuickScale is a **Django project generator and first-party module workspace** for solo developers
+and agencies building repeated client SaaS projects:
 
-TARGET AUDIENCE: New users, potential adopters, GitHub visitors, developers evaluating QuickScale
--->
+- **Production foundations**: Docker, PostgreSQL, testing, CI/CD and security defaults
+- **Full ownership**: generated projects are plain Django code you own, with no vendor lock-in
+- **First-party modules**: analytics, auth, backups, billing, blog, crm, forms, listings,
+  notifications, orgs, social, storage
+- **One-command deployment**: `quickscale deploy railway`
 
----
-
-## QuickScale: Compose your Django SaaS.
-
-QuickScale is a **creator-led Django project generator and module workspace** for building client SaaS applications. It grew out of repeated owner/client work and now turns those patterns into reusable starter themes, first-party modules, and production-ready foundations.
-
----
-
-## What is QuickScale?
-
-QuickScale is a **Django project generator** that creates production-ready SaaS applications with one command. Designed for **solo developers and development agencies**, it gives you:
-
-- **Production-ready foundations**: Docker, PostgreSQL, testing, CI/CD, and security out-of-the-box
-- **One-command deployment**: Deploy to Railway with `quickscale deploy railway`
-- **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
-- **Standardized stack**: Build multiple client projects faster with consistent best practices
-- **Implemented first-party modules in the current release line**: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage
-- **Creator-led evolution**: New capabilities land because they solve real project needs first, then get generalized into the shared stack
-
-## Documentation Guide
-
-**Start here for your needs:**
-- 📖 **New user?** You're in the right place. This README shows you what QuickScale is and how to get started.
-- 🔧 **Need commands?** See [user_manual.md](./docs/technical/user_manual.md) for all commands and workflows
-- 🚀 **Deploying to Railway?** See [railway.md](./docs/deployment/railway.md) for Railway deployment guide
-- 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative implementation scope and technical rules
-- 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
-- 🏗️ **Project structure?** See [generated_project_structure.md](./docs/technical/generated_project_structure.md) for complete directory layouts
-- ⚛️ **Working on the frontend?** See [frontend.md](./docs/technical/frontend.md) for the Django/React seam, URL ownership, and the static pipeline
-- 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
-
-**Quick Reference:**
-- **Current distribution** = Modules embed via git subtree; starter themes generate once and become user-owned code
-- **Release history** = [CHANGELOG.md](./CHANGELOG.md) plus official tagged release notes in `docs/releases/`
-- **Generated Project** = Output of `quickscale plan`, then entering the generated directory and running `quickscale apply`
-
-Terms: [GLOSSARY.md](./GLOSSARY.md). Which document owns what: [decisions.md § Document Responsibilities](./docs/technical/decisions.md#document-responsibilities). Every document: [docs/index.md](./docs/index.md).
-
-**Package reference docs (informational context only):**
-- [quickscale/README.md](./quickscale/README.md) - meta-package packaging notes
-- [quickscale_cli/README.md](./quickscale_cli/README.md) - CLI package scope and command groups
-- [quickscale_core/README.md](./quickscale_core/README.md) - core scaffolding package boundaries
-
-If package README text differs from repo docs, [README.md](./README.md) and [decisions.md](./docs/technical/decisions.md) win.
-
-### Primary Use Cases:
-- **Solo Developer**: Build client projects faster with production-ready foundations
-- **Development Agency**: Standardize your tech stack across client engagements
-- **Creator Maintaining Multiple Projects**: Reuse working patterns across owner-led or client-facing Django applications
-
-### Development Flow
-1. `quickscale plan myapp` → Interactive configuration wizard
-2. `cd myapp` → Navigate to your project directory
-3. `quickscale apply` → Generates production-ready Django project
-4. Add your custom Django apps and features
-5. Build your unique client application
-6. Deploy to Railway with `quickscale deploy railway` (or use standard Django deployment)
-
-`quickscale.yml` now uses explicit identity fields:
-- `project.slug`: filesystem/service slug (for directory names)
-- `project.package`: Python package/import name (for Django module paths)
-
-ℹ️ The [implementation surface matrix](./docs/technical/implementation_contract.md#mvp-feature-matrix-authoritative) is the single source of truth for what QuickScale currently owns.
-
-### What You Get
-
-Running `quickscale plan myapp`, entering the generated directory, and then running `quickscale apply` generates a **production-ready Django project** with:
-
-- ✅ **React + shadcn/ui** frontend (TypeScript, Vite, Tailwind CSS) — **NEW in v0.74.0**
-- ✅ **Docker** setup (development + production)
-- ✅ **PostgreSQL** configuration
-- ✅ **Environment-based** settings (dev/prod split)
-- ✅ **Security** best practices (SECRET_KEY, ALLOWED_HOSTS, etc.)
-- ✅ **Testing** infrastructure (pytest + factory_boy)
-- ✅ **CI/CD** pipeline (GitHub Actions)
-- ✅ **Code quality** hooks (ruff format + ruff check)
-- ✅ **Advanced quality analysis** (dead code detection, complexity metrics, duplication)
-- ✅ **Poetry** for dependency management
-- ✅ **One-Command Deployment**: Deploy to Railway with `quickscale deploy railway` - fully automated setup
-
-**Note**: The `showcase_html` (pure HTML/CSS) theme option was removed in SA94. `showcase_react` is the sole supported theme.
-
-**See the complete project structure:** [generated_project_structure.md](./docs/technical/generated_project_structure.md#generated-project-output)
-
-The generated project is **yours to own and modify** - no vendor lock-in, just Django best practices.
-
-## Why QuickScale vs. Alternatives?
-
-✅ **Faster than Cookiecutter** - One command vs. 30+ interactive prompts
-✅ **More flexible than SaaS Pegasus** - Open source with full code ownership ($0 vs. $349+)
-✅ **Simpler than building from scratch** - Production-ready in 5 minutes vs. days of setup
-✅ **Railway deployment automation** - Competitors require manual platform configuration
-
-**QuickScale is a development accelerator**, not a complete solution. You start with production-ready foundations and build your unique client application on top.
-
-See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detailed comparison with SaaS Pegasus and Cookiecutter.
-
----
+Positioning and comparison with alternatives: [positioning.md](docs/overview/positioning.md).
+The shipped surface is defined by the
+[implementation surface matrix](./docs/technical/implementation_contract.md#mvp-feature-matrix-authoritative).
 
 ## Installation
 
-QuickScale can be installed in two ways:
-
-### Method 1: Install from PyPI (Recommended)
-
-**Quick install:**
 ```bash
-pip install quickscale
+pip install quickscale            # or: poetry add quickscale
 ```
 
-**Or with Poetry:**
-```bash
-poetry add quickscale
-```
+From source: `git clone https://github.com/Experto-AI/quickscale.git && cd quickscale && ./scripts/install_global.sh`
+(installs into `~/.local/share/quickscale` and links `~/.local/bin/quickscale`).
+Contributors: [development.md](./docs/technical/development.md).
 
-**Then use directly:**
+## Quickstart
+
 ```bash
-quickscale plan myapp
+quickscale plan myapp            # interactive wizard → myapp/quickscale.yml
 cd myapp
-quickscale apply
-```
-
-### Method 2: Install from Source
-
-**For those who prefer building from source:**
-```bash
-git clone https://github.com/Experto-AI/quickscale.git
-cd quickscale
-./scripts/install_global.sh
-```
-
-This builds the packages with Poetry, installs them into an isolated user environment under `~/.local/share/quickscale`, and links the `quickscale` command at `~/.local/bin/quickscale`.
-
-**Then use directly:**
-```bash
-quickscale plan myapp
-cd myapp
-quickscale apply
-```
-
-**Both methods use the same command syntax:** `quickscale plan`, `quickscale apply`, etc.
-
----
-
-### For Contributors
-
-If you want to contribute to QuickScale development, see the [Development Guide](./docs/technical/development.md) for setup instructions.
-
----
-
-## 🚀 5-Minute Quickstart
-
-**Want to see QuickScale in action right now?** Here's the fastest path to a working Django SaaS:
-
-```bash
-# 1. Install QuickScale for your user
-./scripts/install_global.sh
-
-# 2. Create your project configuration
-quickscale plan myapp
-# → Accept defaults: theme (showcase_react), no modules, Docker enabled
-
-# 3. Generate and enter the project
-cd myapp
-quickscale apply
-# → Docker services auto-start! (default: docker.start=true)
-
-# 4. Setup and verify
-quickscale manage migrate
+quickscale apply                 # generate the project; Docker services auto-start by default
 quickscale manage createsuperuser
-quickscale ps  # Check services are running
-
-# 5. Open http://localhost:8000
+quickscale ps                    # then open http://localhost:8000
 ```
 
-**That's it!** 🎉 You now have a production-ready Django SaaS running with Docker + PostgreSQL.
+Without Docker: `quickscale apply --no-docker`, then `poetry install`,
+`poetry run python manage.py migrate` and `poetry run python manage.py runserver`.
+When services auto-start and how to control them: [docker_workflows.md](./docs/technical/docker_workflows.md).
 
-**Note**: Services started automatically during `quickscale apply`. No need to run `quickscale up` manually!
+`quickscale.yml` carries two identity fields: `project.slug` (directory and service name) and
+`project.package` (Python import name).
 
-**Prefer native Python?** After step 3, run:
-```bash
-poetry install
-poetry run python manage.py migrate
-poetry run python manage.py runserver
-# Open http://localhost:8000
-```
+## What you get
 
----
+A Django project with a React + TypeScript + shadcn/ui frontend (`showcase_react`, the only theme),
+Docker for development and production, PostgreSQL, environment-split settings, pytest, GitHub
+Actions CI, Ruff hooks, Poetry, and Railway deployment automation. Full layout:
+[generated_project_structure.md](./docs/technical/generated_project_structure.md#generated-project-output).
 
-## Understanding Docker Auto-Start
+## Documentation
 
-**When does `quickscale apply` start Docker automatically?**
+| Need | Read |
+|---|---|
+| CLI commands and workflows | [user_manual.md](./docs/technical/user_manual.md) |
+| Deploy to Railway | [railway.md](./docs/deployment/railway.md) |
+| Rules and document ownership | [decisions.md](./docs/technical/decisions.md#document-responsibilities) |
+| Frontend seam and URLs | [frontend.md](./docs/technical/frontend.md) |
+| Open work / release history | [roadmap.md](./docs/technical/roadmap.md) / [CHANGELOG.md](./CHANGELOG.md) and `docs/releases/` |
+| Contributing | [contrib/contributing.md](./docs/contrib/contributing.md) |
+| Code quality gate (`make quality`) | [quality_tools.md](./docs/technical/quality_tools.md) |
 
-✅ **Services auto-start** (no `quickscale up` needed):
-- First-time project generation
-- Existing-project re-applies, including incremental module adds
-- When `docker.start: true` in quickscale.yml (**default**)
-- When `--no-docker` flag is NOT used
-
-❌ **Manual start required** (`quickscale up` needed):
-- You set `docker.start: false` during `quickscale plan` wizard
-- After stopping services with `quickscale down`
-- When running `quickscale apply --no-docker`
-
-**Example - No manual start needed:**
-```bash
-quickscale plan myapp  # Accept defaults (docker.start: true)
-cd myapp
-quickscale apply       # ← Docker services auto-start!
-
-# Already running - just check status:
-quickscale ps
-curl http://localhost:8000  # ✅ Works immediately
-```
-
-**Example - Manual start needed:**
-```bash
-quickscale plan myapp
-# During wizard, set: "Docker start? [Y/n]: n"
-cd myapp
-quickscale apply       # Services do NOT start
-
-# Must start manually:
-quickscale up
-```
-
-**Docker configuration options** in quickscale.yml:
-
-```yaml
-docker:
-  start: true   # Auto-start services during apply?
-  build: true   # Rebuild images? (slower but ensures latest)
-  create_superuser: false  # Run interactive createsuperuser on first quickscale up?
-```
-
-- `start: true` + `build: true` → Full rebuild + start (slowest, most reliable)
-- `start: true` + `build: false` → Start with cached images (faster)
-- `start: false` → Manual control with `quickscale up`
-
-**Need more details?** See [Docker Workflows Guide](./docs/technical/docker_workflows.md) for comprehensive scenarios and troubleshooting.
-
----
-
-## Full Documentation & Setup
-
-```bash
-# Install QuickScale for your user
-./scripts/install_global.sh
-
-# Create a configuration interactively
-quickscale plan myapp
-# → Select theme, modules, Docker options
-# → Generates quickscale.yml in myapp/ directory
-
-# Navigate to project and execute the configuration
-cd myapp
-quickscale apply
-```
-
-**Choose your development workflow:**
-
-### Option 1: Docker (Recommended for production parity)
-
-```bash
-# Verify services started during quickscale apply
-quickscale ps
-
-# Migrations run automatically when quickscale apply starts Docker (safe to run repeatedly)
-# Optional manual run:
-quickscale manage migrate
-
-# Create superuser
-quickscale manage createsuperuser
-
-# View logs
-quickscale logs -f backend
-
-# Open a shell in the container
-quickscale shell
-
-# Stop services
-quickscale down
-```
-
-Run `quickscale up` only if you disabled Docker auto-start (`docker.start: false`), used `quickscale apply --no-docker`, or previously stopped services with `quickscale down`.
-
-**Visit http://localhost:8000** - Your app is running in Docker with PostgreSQL!
-
-### Option 2: Native Poetry (Simpler for quick testing)
-
-```bash
-# Install dependencies
-poetry install
-
-# Run migrations
-poetry run python manage.py migrate
-
-# Start development server
-poetry run python manage.py runserver
-```
-
-**Visit http://localhost:8000** - Your app is running natively!
-
-**For complete command reference and workflows**, see the [user_manual.md](./docs/technical/user_manual.md).
-
-## Code Quality Analysis
-
-QuickScale includes comprehensive code quality checks:
-
-```bash
-# Run quality analysis
-make quality
-
-# View reports
-cat .quickscale/quality_report.md     # Human-readable
-cat .quickscale/quality_report.json   # Machine-readable
-cat .quickscale/quality_gate_status.json  # Gate verdict summary
-```
-
-`make quality` always preserves the raw findings in the report artifacts above. The gate applies fixed thresholds with no baseline: a function at cyclomatic complexity 21 or higher, a Python file at 800 lines or more, a duplication block of 20 or more similar lines, or a 100%-confidence dead-code finding fails the run; the CC 11-20, file 500-799, duplication 6-19, and 80-99% confidence bands print as advisories and still exit 0.
-
-**Detects:**
-- Dead code (unused imports, functions, variables)
-- High complexity (cyclomatic complexity >10)
-- Large files (500-799 lines warning, >=800 fail)
-- Code duplication (6+ similar lines warning, >=20 fail)
-
-**Exit codes:** 0 (no fail-column finding; warn-column findings print as advisories), 1 (a fail-column finding, a missing analyzer dependency, or unreadable analyzer output). GNU Make reports a failed recipe as its own exit 2.
+Package READMEs ([quickscale](./quickscale/README.md), [quickscale_cli](./quickscale_cli/README.md),
+[quickscale_core](./quickscale_core/README.md)) are informational; this README and decisions.md win
+on any difference.
 
 ## Packages
 
@@ -366,11 +87,7 @@ cat .quickscale/quality_gate_status.json  # Gate verdict summary
 | `quickscale_devtools` | maintainer tooling; never shipped into generated projects |
 | `quickscale_modules/<name>` | one first-party module; Python package and Django app label `quickscale_modules_<name>` |
 
-## Learn More
+## License
 
-- **[decisions.md](./docs/technical/decisions.md)** - Technical specifications and implementation rules
-- **[quickscale.md](./docs/overview/quickscale.md)** - Strategic vision and competitive positioning
-- **[competitive_analysis.md](./docs/overview/competitive_analysis.md)** - Comparison vs SaaS Pegasus and alternatives
-- **[roadmap.md](./docs/technical/roadmap.md)** - Development roadmap and implementation plan
-- **[user_manual.md](./docs/technical/user_manual.md)** - Commands and workflows
-- **[contributing.md](./docs/contrib/contributing.md)** - Development workflow and coding standards
+Apache 2.0. Commercial client work and paid services on generated projects are allowed; see
+[positioning.md § Commercial use](docs/overview/positioning.md#commercial-use).

@@ -10,30 +10,10 @@ once, onto the standardized names (SA191), and carries the first property portal
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.
 
-**Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
-webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)). 0.89.0's one open release requirement is SA292. A live
-0.88.0 install moves to 0.89.0 on a fresh database, and the 0.89.0 release notes say so.
-Publication is assistant-driven up to the two operator commands. Done on `v89` (pre-SA292 bytes):
-Part 1 is green on those release bytes — `7821db42` readies the CHANGELOG and release note,
-`f4c8c79f` brings three
-quality-gate functions under the CC threshold, and `make ci-e2e` and `make release-gate` pass with
-the E2E lanes serial (`QS_E2E_PARALLEL=0`; concurrent-lane Poetry installs exceed the per-test
-timeout on this machine) — and Phases 2–3 re-pointed the local `0.89.0` tag at the tip and
-published the four outdated split branches. Phases 4a–4b then passed on this tip: an all-module
-generated project (`quickscale plan` + `quickscale apply --split-refs-from-branches`) answered its
-twelve documented routes locally, and `quickscale deploy railway` booted the same project's runtime
-role, migrations, and Gunicorn on the deployed URL. The run recorded what the phases needed but the
-procedure did not name — the test-only vendor credentials a billing/notifications/analytics
-selection needs before `apply` and before the deployment serves, and the non-interactive Railway
-initialization behavior — in [publish_procedure.md](publish_procedure.md) Phases 4a–4b and
-[railway.md](../deployment/railway.md). Remaining: SA292's fix is committed on the track branch
-(`75f36923`) and its task-tier gates pass, but the Part 1 re-run is blocked on this machine's E2E
-preconditions — the core lane needs a locally staged wheelhouse for the unpublished `0.89.0`, and
-the CLI lane needs host port 5173 free — so the local `0.89.0` tag is not yet re-pointed at the
-tip; the operator then runs `make seal-modules VERSION=0.89.0` and `make seal-status VERSION=0.89.0`
-(Phase 5), then `git push origin 0.89.0` (Phase 6); the assistant then verifies PyPI and the GitHub
-Release and opens the release PR.
+**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0, whose one open
+release requirement is SA292. A live 0.88.0 install moves to 0.89.0 on a fresh database. Remaining
+publication steps follow [publish_procedure.md](publish_procedure.md) from the Part 1 re-run on the
+SA292 tip (Phases 5–6 are operator commands).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -262,9 +242,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     remaining-work form — the pre-port surfaces and the donor's module divergences (older copies
     the current module content supersedes, and local edits to upstream or re-express), each with
     paths and a governing rule — and the smoke gate's gap-handoff case proves the handoff file
-    carries them. The working prompt and `CUTOVER.md` are copied into the maintained tree
-    (`docs/planning/beta-site-migration-prompt.md`, `docs/planning/beta-site-cutover.md`; the
-    `bap-web-new` copies stay the cutover's source). This slice's handoff note carries the
+    carries them. The working prompt and `CUTOVER.md` live in `bap-web-new` only. This slice's handoff note carries the
     decision-record and boundary-rule draft:
     `docs/planning/migration-upgrade-path-draft.md`. Next: (a2), after the cutover.
   - [ ] (a2) After SA191's cutover: the decision record and boundary rule in decisions, the

@@ -32,15 +32,11 @@ Rules for the current maintainer tool:
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
 - the tool owns the fresh-first phases end to end; the remaining operator actions are local smoke testing and the repository/release handoff
 
-## Maintained copies
+## Working documents
 
-[`beta-site-migration-prompt.md`](beta-site-migration-prompt.md) and
-[`beta-site-cutover.md`](beta-site-cutover.md) are maintained-tree copies of the working
-`MIGRATION_PROMPT.md` and `CUTOVER.md` carried by `bap-web-new`. The `bap-web-new` copies stay
-the cutover's source until it runs; afterwards the maintained copies are the source, and a new
-recipient's documents remain the tool's and the port's to produce. The two-stage path they take
-part in is drafted in
-[`migration-upgrade-path-draft.md`](migration-upgrade-path-draft.md).
+The port's `MIGRATION_PROMPT.md` and `CUTOVER.md` live in the recipient repository
+(`bap-web-new`), which the tool writes them into; this repository keeps no copies. The two-stage
+upgrade path is drafted in [`migration-upgrade-path-draft.md`](migration-upgrade-path-draft.md).
 
 ---
 
@@ -336,7 +332,7 @@ Set in Railway dashboard before deploying. Required only for the listed modules.
 
 ### `storage`
 
-See [railway.md § Minimum environment variable contract](../deployment/railway.md#media-storage-on-railway) for the canonical env var list (S3 and R2 variants).
+See [railway.md § Minimum environment variable contract](../deployment/railway-operations.md#media-storage-on-railway) for the canonical env var list (S3 and R2 variants).
 
 ### `notifications`
 

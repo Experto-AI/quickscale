@@ -1,0 +1,44 @@
+---
+description: review
+globs:
+alwaysApply: false
+---
+
+# REVIEW - Quality Control Guide
+
+Use this guide for review-stage questions, evidence requirements, and outcome
+language. [rules.md](rules.md) is authoritative for engineering rules.
+
+## Review Checklist
+
+Review the change against these questions:
+
+- does it stay inside the requested scope and preserve approved boundaries?
+- does it fit the documented architecture and approved stack?
+- does it apply the project code principles without unnecessary complexity or silent fallbacks?
+- are naming, imports, type hints, logging, and public interfaces consistent with local standards?
+- do tests cover the changed behavior at the right level without contamination or brittle implementation-detail coupling?
+- does documentation match the code and explain non-obvious rationale or operator impact?
+- for bug fixes, is the verified root cause addressed and is regression protection in place?
+
+## Evidence to Require
+
+- validation commands or checks are explicit, and name the
+  [validation tier](../technical/validation_policy.md#validation-tiers) they
+  were run at
+- changed behavior is covered by tests or an explicit gap is recorded; evidence
+  from a tier below `release` is complete at that tier when every deferred check
+  names the wider tier that owns it
+- documentation impact is handled or intentionally not needed
+- any remaining follow-up work is clearly separated from close blockers
+- security-gate evidence names the blocking scanners and the registry-bound hosted gates listed in
+  [validation_policy.md](../technical/validation_policy.md); scanner execution is never an
+  unregistered workflow step
+
+## Review Outcome Guidance
+
+When review finds issues:
+
+- separate blockers from optional follow-up improvements
+- call out missing evidence such as validation gaps or documentation gaps explicitly
+- tie each finding to the rule it breaks (a `rules.md` number or a `decisions.md` section)

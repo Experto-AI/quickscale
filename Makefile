@@ -42,7 +42,7 @@
 #   make quality              - Run full code quality analysis
 #   make ci                   - Run primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available)
 #   make ci-e2e               - Run CI checks including E2E tests
-#   make docs                 - Compile contributing docs
+#   make docs                 - Mirror docs/contrib guides into .cursor/rules
 #   make install              - Install QuickScale globally
 #   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
 #   make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first
@@ -312,7 +312,7 @@ help:
 	@echo "  PYTEST_XDIST_WORKERS=0|N  - Serial run (0) or pinned worker count (default: auto)"
 	@echo ""
 	@echo "Docs:"
-	@echo "  make docs                 - Compile contributing docs from docs/contrib/"
+	@echo "  make docs                 - Mirror docs/contrib guides into .cursor/rules"
 	@echo ""
 	@echo "Build & Publish:"
 	@echo "  make build                - Build all distribution packages"

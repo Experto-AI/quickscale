@@ -16,7 +16,7 @@ quickscale up           # run it in Docker
 
 | Goal | Read |
 |---|---|
-| Evaluate QuickScale | [README.md](README.md) → [overview/quickscale.md](docs/overview/quickscale.md) → [competitive_analysis.md](docs/overview/competitive_analysis.md) |
+| Evaluate QuickScale | [README.md](README.md) → [positioning.md](docs/overview/positioning.md) |
 | Build a project | [README.md](README.md) Quick Start → [user_manual.md](docs/technical/user_manual.md) |
 | Deploy | [deployment/railway.md](docs/deployment/railway.md) |
 | Contribute | [contrib/contributing.md](docs/contrib/contributing.md) → [development.md](docs/technical/development.md) |

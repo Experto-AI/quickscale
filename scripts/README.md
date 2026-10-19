@@ -90,7 +90,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 - [lint.sh](./lint.sh) — runs standardized Ruff auto-fixes plus MyPy checks for Python packages (prefer `make lint-fix` / `make typecheck`)
 - [lint_agentic_flow.sh](./lint_agentic_flow.sh) — runs focused linting for agentic-flow work (`make lint-agent`)
 - [lint_frontend.sh](./lint_frontend.sh) — validates the React theme frontend toolchain (`make lint-frontend`)
-- [compile_docs.sh](./compile_docs.sh) — rebuilds the aggregated contributing guide from docs sources (`make docs`)
+- [compile_docs.sh](./compile_docs.sh) — mirrors the `docs/contrib/` guides into `.cursor/rules/` (`make docs`)
 
 ### Test runners
 

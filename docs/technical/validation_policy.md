@@ -313,7 +313,7 @@ the committed gate/parity checks remain local.
 - Release CI includes E2E with `pytest -m e2e`.
 - Separate workflows preserve fast feedback for daily development.
 
-**Usage:** See [user_manual.md](./user_manual.md#21-end-to-end-e2e-tests) for operator-facing run instructions.
+**Usage:** See [user_manual.md](./development.md#e2e-prerequisites) for operator-facing run instructions.
 
 ### Clean-Initial Migration Acceptance (SA151)
 
