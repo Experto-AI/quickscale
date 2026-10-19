@@ -169,7 +169,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [ ] (a) Salvage before deletion: `bap-web-new` has no git remote, so deletion is final. Copy
     `scripts/cutover.sh`, `CUTOVER.md`, `MIGRATION_PROMPT.md`, the gap handoff, the run report
-    SA277's draft cites, and SA153 (a)–(e4) as a patch or bundle to a location outside the
+    SA277's draft cites, and SA153 (a)–(e4) as a patch or bundle to `~/code/bap-web-new-salvage/`, outside the
     repository, and verify the copy opens. Do not salvage `.quickscale/wheels/`: it holds a
     `quickscale_core` wheel built on 2026-10-09, before the final 0.89.0 tag, so (d) rebuilds
     wheels from the recorded tag commit (Tier 1).
@@ -179,8 +179,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `storage` (listings), `analytics` (forms), and `notifications` (orgs, forms), so
     `bap-web-new` is generated with `auth`, `listings`, `forms`, `orgs`, `storage`, `analytics`,
     `notifications`; their package dependencies come from each `module.yml`.
-  - [ ] (c) Delete `bap-web-new`: after (a)'s copy is verified and the operator explicitly
-    authorizes it, remove `/home/victor/code/bap-web-new` entirely, including its git history,
+  - [ ] (c) Delete `bap-web-new`: the operator authorized the deletion on 2026-10-19,
+    conditional on (a)'s verified copy; once it is verified, remove `/home/victor/code/bap-web-new` entirely, including its git history,
     `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
   - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s seven
     modules, carrying the donor through the `beta_migration` loop in
@@ -190,13 +190,31 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 
+  The live buenosairesproperties.com is the reference, read through a browser, so parity does
+  not depend on the local `bap-web` checkout matching the deployed commit.
+
+  **Page list.** Required: the home page and every page reachable from a menu item. Any other
+  page is listed in (b)'s handoff and the operator decides whether it joins the required set.
+
+  **Parity bar.** A required page has no differences when, at desktop (1440×900) and mobile
+  (390×844) viewports, against the live page:
+  - the screenshot pixel diff is at most 1% of the page area, with an anti-aliasing tolerance
+    (`pixelmatch` threshold 0.1) and with data-driven regions masked (listing photos, prices,
+    counts, and dates, since the catalog is reseeded);
+  - the visible static text, the menu items and their targets, and the fields of every form
+    are identical;
+  - computed fonts, colors, and spacing of the header, footer, menu, buttons, and form controls
+    match;
+  - the page shows no console errors and no broken links or images the live page lacks.
+  A difference the operator accepts as an improvement is recorded as such, not as a failure.
+
   **Slices:**
   - [ ] (a) Extract the coding styles of the current `bap-web` (tokens, typography, spacing,
     components) into a design system in the regenerated project's theme, and apply it (Tier 2-full).
-  - [ ] (b) Browser harness: fix the stale `e2e/home.spec.ts.j2` and add page-by-page screenshot
-    comparison of the local `bap-web-new` deployment against the live buenosairesproperties.com
-    (Tier 2-full).
-  - [ ] (c) Iterate until the agreed page list shows no differences. Spotted improvements are
+  - [ ] (b) Browser harness: fix the stale `e2e/home.spec.ts.j2`, crawl the live menu to fix the
+    required page list, and add the page-by-page comparison above of the local `bap-web-new`
+    deployment against the live site (Tier 2-full).
+  - [ ] (c) Iterate until every required page meets the parity bar. Spotted improvements are
     recorded as a separate list and do not block parity (Tier 2-fast).
 
 - [ ] **SA301 — Inventory and port `bap-web`'s custom forms and features.**
@@ -211,7 +229,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Targets the project SA299 regenerated, with SA300's parity and SA301's features in place.
   `scripts/cutover.sh` and `CUTOVER.md` are re-ported from SA299 (a)'s salvage; they rebuild a
   fresh database, reseed the catalog under the restricted runtime role (billing disabled),
-  verify, and roll back, and are rehearsed on scratch again.
+  verify, and roll back, and are rehearsed on scratch again. The modules the donor did not run
+  (`orgs`, `storage`, `analytics`, `notifications`) are added as SA299 (b) requires, and their
+  production settings (analytics key, email provider and sender, storage backend, the site
+  organization) are configured and verified here.
 
   **Remaining (Tier 2-full):** validate and cut over using the local 0.89.0 candidate; PyPI
   publication is not a prerequisite. An assistant records the exact QuickScale source commit,
