@@ -167,18 +167,27 @@ suite, and merge only the reviewed delivery through the serialized queue.
   locally installed QuickScale 0.89.0.
 
   **Slices:**
-  - [ ] (a) Salvage before deletion: copy `scripts/cutover.sh`, `CUTOVER.md`,
-    `MIGRATION_PROMPT.md`, the gap handoff, the run report SA277's draft cites, and SA153
-    (a)–(e4) as a patch or branch to a location outside the repository (Tier 1).
-  - [ ] (b) Module inventory from the **deployed `bap-web` on Railway**, not the local
-    `bap-web-new`: installed packages, `INSTALLED_APPS`, and applied migrations read from the
-    running service by read-only commands, plus every QuickScale module dependency they need,
-    recorded in the handoff note (Tier 2-full).
-  - [ ] (c) Delete and regenerate: the operator authorizes the deletion; generate with the local
-    0.89.0 using exactly (b)'s module set and dependencies, carrying the donor through the
-    `beta_migration` loop in [beta-site-migration.md](../planning/beta-site-migration.md) so the
-    fresh run report becomes SA277's evidence; record the QuickScale commit, install method, and
-    module refs (Tier 2-fast).
+  - [ ] (a) Salvage before deletion: `bap-web-new` has no git remote, so deletion is final. Copy
+    `scripts/cutover.sh`, `CUTOVER.md`, `MIGRATION_PROMPT.md`, the gap handoff, the run report
+    SA277's draft cites, and SA153 (a)–(e4) as a patch or bundle to a location outside the
+    repository, and verify the copy opens. Do not salvage `.quickscale/wheels/`: it holds a
+    `quickscale_core` wheel built on 2026-10-09, before the final 0.89.0 tag, so (d) rebuilds
+    wheels from the recorded tag commit (Tier 1).
+  - [ ] (b) Module inventory of the **deployed `bap-web`**, not the local `bap-web-new`: read
+    the deployed commit from the Railway dashboard, confirm the local `bap-web` checkout is at
+    that commit, then take the module set from its `quickscale.yml` and `INSTALLED_APPS`, plus
+    every QuickScale module dependency they need, recorded in the handoff note. Only if the
+    commits differ, or environment variables switch apps, read the running service with
+    read-only `railway run` commands; linking the directory is otherwise deferred to SA191,
+    which needs it for the cutover (Tier 2-fast).
+  - [ ] (c) Delete `bap-web-new`: after (a)'s copy is verified and the operator explicitly
+    authorizes it, remove `/home/victor/code/bap-web-new` entirely, including its git history,
+    `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
+  - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s module
+    set and dependencies, carrying the donor through the `beta_migration` loop in
+    [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
+    SA277's evidence; record the QuickScale commit, install method, and module refs
+    (Tier 2-fast).
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 
