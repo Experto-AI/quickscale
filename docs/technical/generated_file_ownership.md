@@ -1,17 +1,154 @@
 # Generated-File Ownership Categories (Beta-Migration Taxonomy)
 
-> **Related docs**: [Decisions § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy) (authoritative rules) | [Generated Project Structure](generated_project_structure.md) | [Beta-site migration](../planning/beta-site-migration.md)
+> **Related docs**: [Generated Project Structure](generated_project_structure.md) | [Beta-site migration](../planning/beta-site-migration.md)
 
-**Purpose:** Inventory of the `INTENTIONALLY_UNMANAGED` replacement/merge
-categories carried by `quickscale_devtools/beta_migration/`, with the rationale
-for each. Existing files in these categories are not structurally replaced or
-merged, but a path may participate in copy-if-missing adoption or the fresh
-scaffold's one-time field-aware identity reconciliation. Neither operation
-overwrites existing user-owned contents. This file owns the *inventory*; the *rules*
-that govern it (explicit-only classification, identity-only overlap,
-conformance-gate behaviour, donor-owned `production.py`, fresh-first `start.sh`
-identity reconciliation) are authoritative in
-[decisions.md § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy).
+**Purpose:** Rules for generated-file ownership during beta migration, and the inventory of the `INTENTIONALLY_UNMANAGED` categories carried by `quickscale_devtools/beta_migration/`. Existing files in these categories are never structurally replaced or merged; a path may still take part in copy-if-missing adoption or the fresh scaffold's one-time identity reconciliation, neither of which overwrites user-owned contents.
+
+## Rules
+
+**Rule:** The beta-migration maintainer tooling
+(``quickscale_devtools/beta_migration/``) carries a file taxonomy that
+classifies every generator-emitted file by its migration path. The taxonomy
+combines explicit path tuples with operation-derived directory selectors; a conformance gate
+(``test_beta_migration_ownership_conformance.py``) derives the expected file
+inventory from the template tree (``quickscale_core/generator/templates/``)
+and asserts every emitted file is classified.
+
+**Key policy rules:**
+
+1. **``settings/production.py`` is donor-owned; the tool owns rewriting a
+   recognized pre-facade database-selection block onto the facade.** The
+   fresh-first migration path copies the **donor's**
+   ``settings/production.py`` onto the fresh recipient (via
+   ``FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`` and
+   ``FRESH_FIRST_DONOR_DJANGO_FILES``).  The donor's production settings carry
+   the real deploy-time configuration and must not be replaced by the fresh
+   scaffold's defaults.  The effective file must call the versioned
+   ``quickscale_core.runtime.settings`` facade.  When the donor file predates
+   the facade, the migration rewrites only its inline database/command-selection
+   block onto ``resolve_runtime_database_url`` (reusing the donor's canonical
+   read names) and carries every other donor setting unchanged, naming the
+   rewritten line span and each carried setting in the report; it never asks
+   the read-only donor repository to adopt the facade.  Shapes the rewrite does
+   not recognize, and rewritten files whose database selection still does not
+   resolve through the facade, are refused before any mutation.  Ownership of
+   the site customizations therefore stays donor-side, while ownership of the
+   database-selection contract moves to the tool, which re-expresses it
+   versioned rather than copying it forward.
+
+2. **``start.sh`` follows the recipient scaffold's identity.**  The fresh
+   scaffold's ``start.sh`` is the effective launcher and is reconciled in
+   place: its embedded slug/package references follow the reconciled
+   identity, so the createcachetable env-pair fix reaches the migrated
+   project through the fresh-first path.  Classified under
+   ``FRESH_FIRST_IDENTITY_ROOT_FILES``.
+
+3. **``INTENTIONALLY_UNMANAGED`` is an explicit-only replacement/merge
+   ownership class.** Existing files listed there are deliberately outside
+   structural replacement and merge paths. A listed path may be created only
+   by an explicit copy-if-missing adoption rule, which never overwrites an
+   existing user-owned file. The tuple must be empty unless a current template has a
+   documented exemption rationale in
+   § Inventory below. A
+   listed file may also receive fresh-first identity-only reconciliation when
+   it contains scaffold-derived slug, package, database-role, or frontend
+   package values; that bounded rewrite does not transfer file ownership. No
+   implicit fallback — every emitted file must be explicitly accounted for.
+
+4. **The conformance gate fails on unclassified files.**  When a new template
+   is added or an existing template is renamed without updating the taxonomy,
+   the gate surfaces the gap as a test failure listing every unclassified
+   emitted path.  This is the systematic prevention for the class of defect
+   where a new or renamed template file is silently missed by the migration
+   path (e.g. ``start.sh``/``production.py``).
+
+5. **Every ``INTENTIONALLY_UNMANAGED`` entry carries an explicit category and
+   rationale.** No entry may be added without stating why that generated file is
+   deliberately outside replacement and merge paths. The inventory itself
+   (categories U1–U13, § Inventory) is data the
+   conformance gate cross-checks, not policy.
+
+6. **Directory-level classification support.** The conformance gate
+   (``_classify_emitted_path``) checks whether any parent directory of an
+   emitted path appears in the classified map as a directory entry (path
+   ending in ``/``).  This allows grouping many files under a common
+   directory without enumerating every path individually. The conflict gate
+   derives replacement, merge, and copy-if-missing dispositions from the same
+   constants used by the executor. It prevents a path from being both
+   structurally replaced/merged and ``INTENTIONALLY_UNMANAGED``; identity-only
+   reconciliation and copy-if-missing adoption are the permitted overlaps
+   because neither overwrites user-owned contents.
+
+7. **``MODE_REQUIRED_SPECS`` entries are classification sources, not mutation
+   authority.**
+   The beta-migration preflight validation specs
+   (``COMMON_REQUIRED_SPECS`` and ``MODE_REQUIRED_SPECS`` in the
+   ``quickscale_devtools.beta_migration`` package) define files and directories that must exist
+   before a migration step can proceed. Some of these specs (notably
+   ``frontend/src/App.tsx``) independently appear in an executor-owned
+   replacement or merge disposition, but merely being required does not make
+   a path structurally managed. The
+   conformance test includes all ``MODE_REQUIRED_SPECS`` entries as
+   classification sources so that a file like ``frontend/src/App.tsx`` is
+   properly categorized as part of the fresh-first required recipient
+   surface. The operation-derived disposition model, not this preflight list,
+   decides whether overlap with ``INTENTIONALLY_UNMANAGED`` is a conflict.
+
+8. **Fresh-first identity reconciliation covers the complete generated
+   identity seam.** The recipient is a throwaway, newly generated scaffold,
+   so changing its identity must reconcile every generated occurrence of the
+   old slug/package, including derived database role/password values and the
+   frontend package name. Reconciliation is field-aware when the source slug
+   and package share one token, token-boundary-aware for underscore-bearing
+   slugs, and non-cascading. A file can remain user-owned and structurally
+   unmanaged while participating in this one-time identity rewrite.
+
+9. **Every structural executor path has an operation-derived disposition.**
+   The conformance gate models direct file replacement, directory replacement,
+   donor-authoritative merge, and copy-if-missing adoption from the executor's
+   constants and selectors. This includes fresh-first component and utility
+   directory replacement; a path
+   cannot remain ``INTENTIONALLY_UNMANAGED`` merely because the mutation is
+   implemented by a directory walk or a dedicated merge helper rather than a
+   named copy tuple.
+
+10. **The project-owned design layer is never overwritten.** The
+    ``showcase_react`` theme ships ``frontend/design/`` as one folder holding
+    the tokens stylesheet, the Tailwind preset, fonts, and brand assets
+    (``INTENTIONALLY_UNMANAGED`` directory entry). No QuickScale upgrade or
+    ``quickscale apply`` run replaces or merges its files. The beta-migration
+    tool ports the donor's design into it once (the ``port-donor-design``
+    step): every file of a donor that carries its own design layer, or the
+    legacy ``frontend/src/index.css`` and ``frontend/tailwind.config.js``
+    sources for a donor generated before the layer existed. The React entry
+    ``frontend/src/index.css`` imports the layer, and the Django-rendered
+    shell resolves the same tokens through that entry, so React and Django
+    share one design source.
+
+11. **Project-owned app migrations: model state is regenerated, operations the
+    autodetector cannot reproduce are carried.** The fresh-first migration
+    drops a donor project-owned app's migration history and regenerates the
+    model state with a recipient-local ``makemigrations``.  Non-autodetector
+    operations (``RunPython``/``RunSQL``/``SeparateDatabaseAndState`` or a
+    custom operation) are never silently dropped: after ``makemigrations``
+    succeeds, the tool renders each into an appended recipient migration that
+    carries the module-level code the operation references, chained from the
+    regenerated terminal migration (which can be a multi-file initial graph).
+    It fails closed before any mutation, naming
+    the migration, line, and construct, when an operation cannot be carried
+    safely — an unresolved module-level reference, no ``Migration`` class
+    declaring the operations, a dynamic ``operations`` declaration, or a
+    dependency on another app's migration.  The report, the planned action, and
+    the handoff prompt name every carried operation.  This is the migration
+    tool's answer to the clean-break migration history: the recipient's model
+    state is fresh, while migration-owned invariants travel with it.  The tool
+    does not statically prove that a carried callback is compatible with the
+    regenerated final model state; a callback that depends on state a later
+    donor migration removed fails loudly at the recipient's ``migrate`` before
+    any deploy, and the named carry inventory is what the handoff review
+    checks.
+
+## Inventory
 
 Entries are organized by category. Add new entries to the appropriate category;
 add a new category only when the existing ones do not fit, with rationale. Every
@@ -19,24 +156,14 @@ generator-emitted file must be explicitly accounted for — the conformance gate
 (`test_beta_migration_ownership_conformance.py`) derives the expected inventory
 from the template tree and fails on any unclassified path.
 
-### Settings files and the runtime facade (SA206)
+### Settings files and the runtime facade
 
-``{package}/settings/base.py``, ``production.py``, ``local.py``, and ``modules.py``
-are user-owned generated settings and are not ``INTENTIONALLY_UNMANAGED``
-entries: ``production.py`` is donor-owned by policy
-(``FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES``), and the others are recipient-owned
-fresh-first requirements.  Since SA206 every generated settings module imports
-its executable runtime contracts (middleware, proxy-trust derivation, DRF
-composition, privileged-command/runtime-database selection, SECRET_KEY guard)
-from the versioned ``quickscale_core.runtime.settings`` facade and keeps only
-user configuration; an effective ``production.py`` must select its database
-through ``resolve_runtime_database_url``.  A recognized pre-facade donor file
-has only its inline database/command-selection block rewritten onto the facade
-by the beta-migration tool, with the donor's other settings carried unchanged;
-an inline copy whose shape the rewrite cannot preserve is refused before any
-mutation.  This changes what those files contain, not who owns them.
+``{package}/settings/base.py``, ``production.py``, ``local.py`` and ``modules.py`` are user-owned
+and not ``INTENTIONALLY_UNMANAGED``: ``production.py`` is donor-owned (rule 1), the others are
+recipient-owned fresh-first requirements. All import their runtime contracts from
+``quickscale_core.runtime.settings``.
 
-### Managed theme seam files (SA276)
+### Managed theme seam files
 
 ``frontend/src/quickscaleSeam.d.ts`` is the theme's managed seam declaration:
 it carries the seam's module-key types, rendered from the shipped module set
@@ -45,7 +172,7 @@ guard.  ``frontend/src/quickscaleSeam.keys.ts`` is its generated runtime
 companion: the same tables as key arrays, which the theme's seam validator
 requires every seam entry against and the theme's tests build their fixtures
 from, so the module set has one generated home and a module that joins the set
-changes no user-owned theme file (SA276).  Both are classified as
+changes no user-owned theme file.  Both are classified as
 recipient-managed protected root files
 (``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the recipient's
 copies and never writes donor content over them, and a project does not
@@ -53,7 +180,7 @@ hand-edit the files because the next apply that regenerates the managed files
 overwrites them (``quickscale apply --confirm-contract-adoption`` does so
 without a configuration change; a plain no-delta apply reports nothing to do).
 
-### Managed CI environment file (SA286)
+### Managed CI environment file
 
 ``.github/quickscale-ci-env`` is the generated project's managed CI
 environment file: it carries each installed module's declared non-live CI
@@ -69,7 +196,7 @@ recipient's copy and never writes donor content over it, and
 under the managed-file hash guard, so a local edit is reported as drift and a
 module release that changes a placeholder changes only this managed file.
 
-### Managed operations page (SA286)
+### Managed operations page
 
 ``quickscale-operations.md`` is the generated project's managed operations
 page: it renders each installed module's declared operations text (the

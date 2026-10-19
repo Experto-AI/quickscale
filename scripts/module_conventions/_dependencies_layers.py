@@ -5,7 +5,7 @@ Implementation detail of :mod:`scripts.module_conventions.rules_dependencies`;
 that module re-exports every public name defined here, so existing import
 paths keep working.  Rule 5's layer table is checked here too: the table's
 repository-wide clause is that every shipped module has a layer and that
-``MODULE_LAYERS`` matches the table decisions.md declares.
+``MODULE_LAYERS`` matches the table module_conventions.md declares.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def _module_layer_findings(module: Module, layer: int | None) -> tuple[list[str]
     Return a module's rule 5 findings and its same-layer import targets.
 
     A migration may reach another module's ``models``: the schema layer is
-    shared, and the migration exception is listed in decisions.  An upward
+    shared, and the migration exception is listed in module_conventions.md.  An upward
     import of any other component is a finding; a same-layer import becomes a
     cycle edge.
     """
@@ -73,7 +73,7 @@ def _core_module_setting_findings(core_files: Mapping[str, str]) -> list[str]:
     return violations
 
 
-#: Rule 5's layer table as decisions.md writes it; the header pins the table a
+#: Rule 5's layer table as module_conventions.md writes it; the header pins the table a
 #: reworded document must not silently turn into agreement.
 LAYER_TABLE_HEADER = "| Layer | Modules |"
 
@@ -83,9 +83,9 @@ _LAYER_TABLE_DIVIDER = re.compile(r"^[\s|:-]+$")
 _LAYER_TABLE_LAYER_CELL = re.compile(r"^(\d+)\s*\u2014")
 
 
-def decisions_layer_table(text: str) -> dict[str, int]:
+def conventions_layer_table(text: str) -> dict[str, int]:
     """
-    Return decisions.md's rule 5 layer table as module name -> layer number.
+    Return module_conventions.md's rule 5 layer table as module name -> layer number.
 
     Layer 0's row is core, not a module, and is dropped.  A missing header, a
     row of another shape, or a module listed twice raises ``ValueError``: the
@@ -126,7 +126,7 @@ def layer_table_findings(corpus: Corpus) -> list[str]:
     Return rule 5's layer-table findings over the whole repository.
 
     Every shipped module has a layer, no layer entry names a module that does
-    not ship, and ``MODULE_LAYERS`` agrees with the table decisions.md
+    not ship, and ``MODULE_LAYERS`` agrees with the table module_conventions.md
     declares (SA296 (c)).  The table is a repository-wide fact, so it is
     checked once here rather than per module source.
     """
@@ -141,22 +141,22 @@ def layer_table_findings(corpus: Corpus) -> list[str]:
         for name in sorted(set(MODULE_LAYERS) - shipped)
     )
     try:
-        recorded = decisions_layer_table(corpus.decisions_text)
+        recorded = conventions_layer_table(corpus.conventions_text)
     except ValueError as exc:
-        findings.append(f"rule 5: decisions.md layer table unreadable: {exc}")
+        findings.append(f"rule 5: module_conventions.md layer table unreadable: {exc}")
         return sorted(findings)
     for name in sorted(set(recorded) | set(MODULE_LAYERS)):
         if name not in MODULE_LAYERS:
             findings.append(
-                f"rule 5: decisions.md layer table names {name}, which MODULE_LAYERS does not"
+                f"rule 5: conventions layer table names {name}, which MODULE_LAYERS does not"
             )
         elif name not in recorded:
             findings.append(
-                f"rule 5: MODULE_LAYERS names {name}, which decisions.md layer table does not"
+                f"rule 5: MODULE_LAYERS names {name}, which conventions layer table does not"
             )
         elif recorded[name] != MODULE_LAYERS[name]:
             findings.append(
-                f"rule 5: {name} is layer {recorded[name]} in decisions.md and layer "
+                f"rule 5: {name} is layer {recorded[name]} in module_conventions.md and layer "
                 f"{MODULE_LAYERS[name]} in MODULE_LAYERS"
             )
     return sorted(findings)

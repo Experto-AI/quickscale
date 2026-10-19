@@ -1,6 +1,6 @@
 # Forms Module Manifest
 # Defines configuration options and their mutability for the Forms module
-# See decisions.md §Module Manifest Architecture for schema specification
+# See docs/technical/module_architecture.md §Module Manifest Architecture for schema specification
 
 name: forms
 version: "0.89.0"

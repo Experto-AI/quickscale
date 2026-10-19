@@ -375,7 +375,7 @@ quickscale/
 - `make MODULE=<name> test -- --modules` runs module tests with `PYTHONPATH` set correctly
 - `make test-integration` runs all module integration suites (requires PostgreSQL)
 - `make lint` lints modules using the ROOT poetry environment
-- See [Building a Module](./module-extension.md#building-a-module-authoring-checklist) for new module setup, and [Module Implementation Requirements](./decisions.md#module-implementation-checklist) for the rules it must satisfy
+- See [Building a Module](./module-extension.md#building-a-module-authoring-checklist) for new module setup, and [Module Implementation Requirements](module_architecture.md#module-implementation-checklist) for the rules it must satisfy
 
 ---
 

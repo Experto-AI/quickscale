@@ -1,6 +1,6 @@
 # Publish Quality Check and Release Procedure (Authoritative)
 
-> **Related docs**: [Decisions](decisions.md#module-version-lockstep) | [Validation policy](validation_policy.md) | [Versioning](versioning.md) | [Railway deployment](../deployment/railway.md) | [Changelog](../../CHANGELOG.md)
+> **Related docs**: [Decisions](release_gates_policy.md#module-version-lockstep) | [Validation policy](validation_policy.md) | [Versioning](versioning.md) | [Railway deployment](../deployment/railway.md) | [Changelog](../../CHANGELOG.md)
 
 This document is the single source of truth for **how a QuickScale release is quality-checked and
 published**. It is version-generic: substitute `X.Y.Z` for the release being published.
@@ -12,7 +12,7 @@ re-entrancy rules, and the irreversibility boundary.
 
 | Concern | Owner |
 |---|---|
-| Why the ordering exists; lockstep, embed, and seal *rules* | [decisions.md §Module Version Lockstep](decisions.md#module-version-lockstep) |
+| Why the ordering exists; lockstep, embed, and seal *rules* | [release_gates_policy.md § Module Version Lockstep](release_gates_policy.md#module-version-lockstep) |
 | Validation tiers and what each command covers | [validation_policy.md](validation_policy.md#validation-tiers) |
 | `VERSION` single-source semantics and the version tool's scope | [versioning.md](versioning.md) |
 | Railway mechanics, runtime role SQL, troubleshooting | [railway.md](../deployment/railway.md) |
@@ -123,7 +123,7 @@ the roadmap.
 ### 1.4 What CI re-checks at publish time
 
 `publish.yml` re-runs the full gate set on the tagged commit by the
-[publish-path full-coverage decision](decisions.md#publish-path-gate-coverage) — publish does not
+[publish-path full-coverage decision](release_gates_policy.md#publish-path-gate-coverage) — publish does not
 trust upstream. A gate failing there is a real defect; close it by fixing the cause, never by
 declaring an exclusion. The SA202 supply-chain gates join that set: `check-workflow-security` fails
 on an unpinned `uses:` ref or a workflow missing a top-level `permissions:` block, and
@@ -300,7 +300,7 @@ that is *not* its own split branch.
 
 Until the immutable tags exist, embedding needs one of those two flags, because the default embed path
 resolves `splits/<module>-module/X.Y.Z` and fails closed when that tag is absent
-([decisions.md Rule 5](decisions.md#module-version-lockstep)). Overrides must cover **exactly** the
+([decisions.md Rule 5](release_gates_policy.md#module-version-lockstep)). Overrides must cover **exactly** the
 modules being added, they resolve refs on `origin` rather than your working tree, and a local-only
 integration branch is therefore not a usable value — which is why Phase 3 comes first.
 
@@ -436,7 +436,7 @@ quickscale apply        # no --split-ref, no --split-refs-from-branches, no othe
 
 **Sealing is still correctable.** A tag is permanent at PyPI publication, not at push. Until
 Phase 6, fix a sealed mistake by deleting the affected remote and local tags, returning to Phase 3,
-and resealing ([decisions.md Rule 4](decisions.md#module-version-lockstep)). The tooling refuses to
+and resealing ([decisions.md Rule 4](release_gates_policy.md#module-version-lockstep)). The tooling refuses to
 move a tag on its own; the deletion is the explicit, deliberate override.
 
 ### Phase 6 — Publish
@@ -481,7 +481,7 @@ defect costs a new version.
 
 Split-tag permanence rests on client-side fail-closed checks and ordinary transport permissions, not
 a server-side policy; a force-privileged maintainer can still move a tag. That residual is accepted
-and recorded in [decisions.md](decisions.md#module-version-lockstep).
+and recorded in [decisions.md](release_gates_policy.md#module-version-lockstep).
 
 ## Ordering rationale
 

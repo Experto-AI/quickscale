@@ -63,7 +63,7 @@ def _expected_core_spec(version_str: str) -> str:
     """
     Return the lockstep specifier a module must declare for *version_str*.
 
-    The rule (decisions.md §Module Version Lockstep) is mechanical: the
+    The rule (release_gates_policy.md §Module Version Lockstep) is mechanical: the
     floor is the release being published, the ceiling is the next minor.
 
         >>> _expected_core_spec("0.88.0")

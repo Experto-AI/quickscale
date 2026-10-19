@@ -9,11 +9,11 @@ detectors for the rules the shipped tree already meets.  Each detector has a
 control case in ``scripts/tests_module_conventions/`` proving it rejects
 a violation.  Rule 5's layer table is checked over the whole repository: a
 module missing from ``MODULE_LAYERS``, an entry naming no shipped module, or
-a table that disagrees with decisions.md fails the check.  Rules not yet
+a table that disagrees with module_conventions.md fails the check.  Rules not yet
 enforced here are recorded in ``OPEN_RULES`` with
 the ticket or mechanism that closes them; rules whose clauses ride other rules
 or an external gate are listed in ``DELEGATED_RULES``.  The test suite keeps
-covered, open, and delegated a partition of the rule headings decisions.md
+covered, open, and delegated a partition of the rule headings module_conventions.md
 declares, so no rule can be silently omitted.
 
 Each covered rule is enforced over the statically checkable clauses of the
@@ -47,14 +47,14 @@ from scripts.module_conventions.core import (
     load_corpus,
 )
 from scripts.module_conventions.registry import (
-    DECISIONS_DOC_RELATIVE_PATH,
+    CONVENTIONS_DOC_RELATIVE_PATH,
     DELEGATED_RULES,
     OPEN_RULES,
     RULES,
     check_conventions,
-    decisions_rule_numbers,
+    conventions_rule_numbers,
     partition_violations,
-    rule_numbers_in_decisions,
+    rule_numbers_in_conventions,
 )
 from scripts.module_conventions.rule_44 import (
     rule_44_role_checks,
@@ -63,7 +63,7 @@ from scripts.module_conventions.rules_analytics import (
     rule_22_analytics_events,
 )
 from scripts.module_conventions.rules_dependencies import (
-    decisions_layer_table,
+    conventions_layer_table,
     layer_table_findings,
     rule_5_dependency_direction,
     rule_35_secrets,
@@ -135,7 +135,7 @@ __all__ = [
     "CORE_CONVENTIONS_RELATIVE_PATH",
     "CREDENTIAL_REFERENCE_NAMES",
     "Corpus",
-    "DECISIONS_DOC_RELATIVE_PATH",
+    "CONVENTIONS_DOC_RELATIVE_PATH",
     "DELEGATED_RULES",
     "MODULE_LAYERS",
     "Module",
@@ -146,8 +146,8 @@ __all__ = [
     "THEME_SEAM_TEMPLATES",
     "check_conventions",
     "core_capabilities",
-    "decisions_layer_table",
-    "decisions_rule_numbers",
+    "conventions_layer_table",
+    "conventions_rule_numbers",
     "layer_table_findings",
     "load_corpus",
     "main",
@@ -195,7 +195,7 @@ __all__ = [
     "rule_7_urls",
     "rule_8_templates",
     "rule_9_http_apis",
-    "rule_numbers_in_decisions",
+    "rule_numbers_in_conventions",
 ]
 
 

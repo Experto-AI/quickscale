@@ -230,7 +230,7 @@ Django's permission groups are global — a user in the "Admin" group is an admi
 
 Django's `is_staff` and `is_superuser` flags continue to control access to the Django admin panel. They have no relationship to org roles.
 
-> **SA215** ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 19): module
+> **SA215** ([module_conventions.md](module_conventions.md#module-conventions) rule 19): module
 > back offices (blog, listings, crm, forms) stop checking `is_staff` / `IsAdminUser` and check the
 > org role through this module's `permissions`, including a DRF `HasOrgRole(min_role)` that
 > delegates to `user_has_org_role`. The four back offices now do this; Django admin keeps its
@@ -317,7 +317,7 @@ class TenantModel(models.Model):
         base_manager_name = "all_objects"
 ```
 
-Inheritance is the only tenant marker ([decisions.md § Module Conventions](decisions.md#module-conventions)
+Inheritance is the only tenant marker ([module_conventions.md](module_conventions.md#module-conventions)
 rule 13): every tenant-scoped model, in a module or a project, inherits `TenantModel` (directly or
 through a module's abstract base such as `AbstractListing` or `BaseSocialItem`) with a `Meta` that
 inherits the base's, and a `TenantManager` on a model that does not inherit `TenantModel` fails
@@ -410,12 +410,12 @@ from quickscale_modules_billing.services import require_org_feature
 def crm_index(request): ...
 ```
 
-This decorator resolves the current organization's active subscription through billing's ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent. It is published by `quickscale_modules_billing.services`; orgs must not name billing, a higher-layer module ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 34).
+This decorator resolves the current organization's active subscription through billing's ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent. It is published by `quickscale_modules_billing.services`; orgs must not name billing, a higher-layer module ([module_conventions.md](module_conventions.md#module-conventions) rule 34).
 
 ### Migration Path from User-Scoped Billing
 
 The retired recovery command `migrate_billing_to_orgs` is deleted with its recovery documentation
-and reviewed invocations ([decisions.md § Module Conventions](decisions.md#module-conventions)
+and reviewed invocations ([module_conventions.md](module_conventions.md#module-conventions)
 rule 17). Current installs cannot contain user-scoped billing rows: every supported install
 requires organization ownership, so no supported deployment needs the repair. A historical
 deployment that still holds nullable user-scoped billing rows has no recovery path on this

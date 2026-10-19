@@ -69,8 +69,8 @@ Legacy release-era labels in older text are historical only. Documentation descr
 
 - `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) do not carry per-module config normalization/validation/derivation; all callers resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
-- Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. A module directory that lacks a `module.yml` is reported as `INCOMPLETE` and fails closed rather than being silently excluded ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 18). The static `MODULE_CATALOG` is supplementary; callers MUST use `get_discovered_module_entries()` for the authoritative list.
-- Manifest adapters are module-owned. Each module ships its own ``adapter.py`` and declares its wiring in its own ``module.yml``; core discovers and executes adapters but holds no per-module wiring. There is no fallback adapter path. See [Manifest Adapter Architecture](#manifest-adapter-architecture) and [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority).
+- Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. A module directory that lacks a `module.yml` is reported as `INCOMPLETE` and fails closed rather than being silently excluded ([module_conventions.md](module_conventions.md#module-conventions) rule 18). The static `MODULE_CATALOG` is supplementary; callers MUST use `get_discovered_module_entries()` for the authoritative list.
+- Manifest adapters are module-owned. Each module ships its own ``adapter.py`` and declares its wiring in its own ``module.yml``; core discovers and executes adapters but holds no per-module wiring. There is no fallback adapter path. See [Manifest Adapter Architecture](#manifest-adapter-architecture) and [module_architecture.md §Module Wiring Authority](module_architecture.md#module-wiring-authority).
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 
@@ -110,7 +110,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN | User-friendly wrappers for Docker and Django operations. |
 | CLI module management commands (`update`, `push`) | IN | Module update and push via split branches. Module embedding now happens through `quickscale apply`. |
 | Module configuration (plan/apply + declarative options) | IN | Modules are configured through `quickscale plan` and `quickscale.yml`, then materialized by `quickscale apply`. See [Module Configuration Strategy](#module-configuration-strategy). |
-| Module manifests (`module.yml`) with mutable/immutable config | IN | Each module includes `module.yml` declaring mutable and immutable config. See [Module Manifest Contract](#module-manifest-architecture). |
+| Module manifests (`module.yml`) with mutable/immutable config | IN | Each module includes `module.yml` declaring mutable and immutable config. See [Module Manifest Contract](module_architecture.md#module-manifest-architecture). |
 | `quickscale remove <module>` command | IN | Removes embedded modules with cleanup and explicit data-loss guidance. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If the user explicitly embeds `quickscale_core`, manual settings inheritance may be documented separately. |
 | **PRODUCTION-READY FOUNDATIONS** |
@@ -237,7 +237,7 @@ the instruction must be data. The adapter is that data, plus the function that
 projects it into a `ModuleWiringSpec`.
 
 Policy authority for what a module may and may not own is
-[decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority). This
+[module_architecture.md §Module Wiring Authority](module_architecture.md#module-wiring-authority). This
 section describes the mechanism only.
 
 **Discovery contract — single path, fail-hard:**
@@ -252,7 +252,7 @@ section describes the mechanism only.
    base path but its adapter is not importable, :func:`refresh_managed_adapters`
    raises :class:`ImproperlyConfigured`. Bundled-without-module-source is not a
    supported wiring context. This is guard **G4** of
-   [decisions.md §AF7](./decisions.md#bundled-module-inventory-and-source-required-paths-af7)
+   [module_architecture.md §AF7](module_architecture.md#bundled-module-inventory-and-source-required-paths-af7)
    and a direct expression of the
    [Fail-Hard Principle](./decisions.md#fail-hard-principle). Bundled manifests under
    ``quickscale_core/data/manifests/`` are inventory metadata for discovery only —
@@ -305,7 +305,7 @@ including helper, variable, and alternate-constructor forms.
 #### Module Derivation Schema Types
 
 The declarative-derivation *rule* is authoritative in
-[decisions.md §Module Derivation Schema](./decisions.md#module-derivation-schema);
+[module_architecture.md §Module Derivation Schema](module_architecture.md#module-derivation-schema);
 this is the type reference.
 
 **Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The manifest loader parses the `derivation` section into these types; the resolver executes the wiring projections, derived settings, and per-option derivations, and the loader refuses a top-level `normalization_rules`, `validation_rules`, or `legacy_aliases` declaration that nothing would execute, as well as a per-option `validation_rules` or `legacy_aliases` declaration (rule 6). The per-module CLI contract-file path they replaced is gone.

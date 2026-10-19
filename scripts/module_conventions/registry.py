@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.module_conventions.core import (
-    DECISIONS_DOC_RELATIVE_PATH,
+    CONVENTIONS_DOC_RELATIVE_PATH,
     Corpus,
     load_corpus,
 )
@@ -151,7 +151,7 @@ OPEN_RULES: tuple[tuple[int, str], ...] = (
 # them: rule 40 is the conformance-test rule this harness and its control cases
 # are; 41's and 46's clauses ride the covered rules named; 49's gate is the
 # closed-world inventory test and orgs' W006 check.  The partition test keeps
-# covered, open, and delegated a partition of the rule headings decisions.md
+# covered, open, and delegated a partition of the rule headings module_conventions.md
 # declares, so no rule can be silently omitted.
 DELEGATED_RULES: tuple[tuple[int, str], ...] = (
     (40, "this harness"),
@@ -160,19 +160,19 @@ DELEGATED_RULES: tuple[tuple[int, str], ...] = (
     (49, "the inventory test and orgs' W006 check"),
 )
 
-MODULE_CONVENTIONS_HEADING = "### Module Conventions"
+MODULE_CONVENTIONS_HEADING = "# Module Conventions"
 _RULE_HEADING = re.compile(r"^\*\*(\d+)\.\s")
 
 
-def rule_numbers_in_decisions(text: str) -> tuple[int, ...]:
-    """Return the rule numbers decisions.md declares under Module Conventions."""
+def rule_numbers_in_conventions(text: str) -> tuple[int, ...]:
+    """Return the rule numbers module_conventions.md declares under Module Conventions."""
     lines = text.splitlines()
     start = next(
         (index for index, line in enumerate(lines) if line.startswith(MODULE_CONVENTIONS_HEADING)),
         None,
     )
     if start is None:
-        raise ValueError(f"decisions.md has no {MODULE_CONVENTIONS_HEADING!r} section")
+        raise ValueError(f"module_conventions.md has no {MODULE_CONVENTIONS_HEADING!r} section")
     numbers: list[int] = []
     for line in lines[start + 1 :]:
         if line.startswith("#"):
@@ -181,14 +181,14 @@ def rule_numbers_in_decisions(text: str) -> tuple[int, ...]:
         if match:
             numbers.append(int(match.group(1)))
     if not numbers:
-        raise ValueError("decisions.md § Module Conventions declares no numbered rules")
+        raise ValueError("module_conventions.md § Module Conventions declares no numbered rules")
     return tuple(numbers)
 
 
-def decisions_rule_numbers(repo_root: Path) -> tuple[int, ...]:
-    """Return the rule numbers decisions.md declares, read under repo_root."""
-    text = (repo_root / DECISIONS_DOC_RELATIVE_PATH).read_text(encoding="utf-8")
-    return rule_numbers_in_decisions(text)
+def conventions_rule_numbers(repo_root: Path) -> tuple[int, ...]:
+    """Return the rule numbers module_conventions.md declares, read under repo_root."""
+    text = (repo_root / CONVENTIONS_DOC_RELATIVE_PATH).read_text(encoding="utf-8")
+    return rule_numbers_in_conventions(text)
 
 
 def partition_violations(recorded: Iterable[int]) -> list[str]:
@@ -203,7 +203,7 @@ def partition_violations(recorded: Iterable[int]) -> list[str]:
         if number not in known
     ]
     violations.extend(
-        f"rule {number} is registered but decisions.md declares no such rule heading"
+        f"rule {number} is registered but module_conventions.md declares no such rule heading"
         for number in sorted(known - set(recorded_numbers))
     )
     return violations
@@ -213,7 +213,7 @@ def check_conventions(repo_root: Path) -> list[str]:
     """Return sorted violations for every covered rule."""
     corpus = load_corpus(repo_root)
     # Rule 5's layer table is a repository-wide clause, not a per-module
-    # source scan: every shipped module has a layer and decisions.md declares
+    # source scan: every shipped module has a layer and module_conventions.md declares
     # the same table (SA296 (c)).
     violations = layer_table_findings(corpus)
     for rule in RULES:

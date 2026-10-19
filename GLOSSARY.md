@@ -47,7 +47,7 @@
 - Use versioned release history, the roadmap, and the implementation surface matrix for the current authoritative picture
 - Do not use those labels to redefine current behavior or active documentation scope
 
-**See**: [CHANGELOG.md](./CHANGELOG.md), [roadmap.md](./docs/technical/roadmap.md), [decisions.md - Implementation Surface Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative)
+**See**: [CHANGELOG.md](./CHANGELOG.md), [roadmap.md](./docs/technical/roadmap.md), [decisions.md - Implementation Surface Matrix](./docs/technical/implementation_contract.md#mvp-feature-matrix-authoritative)
 
 ---
 
@@ -194,7 +194,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 3. Release tooling seals `splits/auth-module/<version>` as the immutable consumer identity
 4. Users embed or update through QuickScale, which resolves the matching immutable tag and uses git subtree
 
-**See**: [publish_procedure.md](./docs/technical/publish_procedure.md) for the ordered publication and sealing phases, and [decisions.md - Module Version Lockstep](./docs/technical/decisions.md#module-version-lockstep) for the rules they execute.
+**See**: [publish_procedure.md](./docs/technical/publish_procedure.md) for the ordered publication and sealing phases, and [decisions.md - Module Version Lockstep](docs/technical/release_gates_policy.md#module-version-lockstep) for the rules they execute.
 
 ---
 

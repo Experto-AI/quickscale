@@ -16,7 +16,7 @@ Define a standard, Django-native way for QuickScale modules to be extended in ge
 
 This contract covers how a **project** extends a module. How one module uses another — public
 surfaces, signals, `AppConfig` capabilities, and dependency layers — is governed by
-[decisions.md § Module Conventions](decisions.md#module-conventions).
+[module_conventions.md](module_conventions.md#module-conventions).
 
 QuickScale standardizes on a **layered Django-native extension contract**:
 
@@ -73,7 +73,7 @@ model is enrolled when it inherits the tenant contract (`TenantModel` directly
 or through a module's abstract base), while an explicit reason string on
 `tenant_excluded` wins over any inherited signal. A `TenantManager` on a model
 that does not inherit `TenantModel` fails startup through orgs' system check
-([decisions.md § Module Conventions](decisions.md#module-conventions) rule 13).
+([module_conventions.md](module_conventions.md#module-conventions) rule 13).
 
 For example, a project-owned model extending the listings abstract base needs
 no manager declarations — the base owns the contract:
@@ -244,7 +244,7 @@ boundary guard covers — so `manage.py check` and `migrate` refuse them.
 A project app (or a module) also declares the personal-data treatment of each of
 its own user-linked fields, beside its anonymization handler where it has one,
 through the `personal_data_declarations` capability
-([decisions.md § Module Conventions](decisions.md#module-conventions) rule 49).
+([module_conventions.md](module_conventions.md#module-conventions) rule 49).
 Each entry is a `PersonalDataField` or `PersonalDataExclusion` record from
 `quickscale_core.runtime`. `orgs` collects the declarations and its
 `quickscale_orgs.W006` system check warns about a project-owned model whose
@@ -352,7 +352,7 @@ foundational model lives in updateable module code.
 
 ## Standard Documentation Contract for Every Module
 
-[Module Conventions rule 11](decisions.md#module-conventions) owns the README outline:
+[Module Conventions rule 11](module_conventions.md#module-conventions) owns the README outline:
 Overview, Configuration (every manifest option), Public surface, URLs, Management commands,
 Operations, Extending — in that order, with no versions in headings. Rule 38 adds that the
 Configuration heading names every manifest option key and the Management commands heading
@@ -426,7 +426,7 @@ Suggested material for that section:
 ## Building a Module (Authoring Checklist) {#building-a-module-authoring-checklist}
 
 > **Conventions.** Names, file set, URLs, templates, APIs, checks, and tests follow
-> [decisions.md § Module Conventions](decisions.md#module-conventions), enforced by its conformance
+> [module_conventions.md](module_conventions.md#module-conventions), enforced by its conformance
 > test. SA215 renamed the app label from `quickscale_modules_<name>` to `quickscale_<name>`
 > (templates and static files already used it); the Python package path stays
 > `quickscale_modules_<name>`.
@@ -436,10 +436,10 @@ checklist serves are authoritative elsewhere and this document does not restate 
 
 - **What a module must be** — concrete models, initial migrations, PostgreSQL-only test
   settings, coverage minimums, and the service-style exception:
-  [decisions.md §Module Implementation Requirements](./decisions.md#module-implementation-checklist).
+  [module_architecture.md §Module Implementation Requirements](module_architecture.md#module-implementation-checklist).
 - **What a module may own, and what core and the CLI may not** — the app/wiring split,
   single app-declaration authority, and the no-fallback rule:
-  [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority).
+  [module_architecture.md §Module Wiring Authority](module_architecture.md#module-wiring-authority).
 
 **The short version:** a module is a standard Django app that additionally declares its
 own wiring in its own `module.yml` and executes it through its own `adapter.py`. Adding a
@@ -659,12 +659,12 @@ Conventions rule 37):
 
 Every other per-module constant or module-name branch in core or the CLI is rejected by the
 conformance harness; the recorded exceptions are each listed with their reason in
-[decisions.md § Module Conventions](decisions.md#module-conventions) (rule 37). The CLI needs
+[module_conventions.md](module_conventions.md#module-conventions) (rule 37). The CLI needs
 no edit for a new module: `AVAILABLE_MODULES` is discovery-derived and every wiring decision
 comes from the module's own `module.yml` and `adapter.py`.
 
 The module's rule 5 layer is recorded in two places: the layer table in
-[decisions.md § Module Conventions](decisions.md#module-conventions) and the `MODULE_LAYERS`
+[module_conventions.md](module_conventions.md#module-conventions) and the `MODULE_LAYERS`
 mapping in `scripts/module_conventions/core.py`. The conformance check fails when the two
 disagree, and when a shipped module carries no entry in one of them.
 

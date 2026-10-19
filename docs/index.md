@@ -12,11 +12,14 @@ rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflic
 ## Technical
 - [decisions.md](technical/decisions.md) **A**: repo-wide rules, prohibitions, document ownership
 - [implementation_contract.md](technical/implementation_contract.md) **A**: shipped contract and CLI surface
+- [module_architecture.md](technical/module_architecture.md) **A**: plan/apply state, module manifest, derivation, wiring, inventory
+- [module_conventions.md](technical/module_conventions.md) **A**: numbered module conventions (rules 1–50)
+- [release_gates_policy.md](technical/release_gates_policy.md) **A**: version lockstep, gate coverage and budget, quality thresholds
 - [validation_policy.md](technical/validation_policy.md) **A**: validation entrypoints, testing and coverage
 - [generated_project_structure.md](technical/generated_project_structure.md) **A**: generated-project layout
 - [repository_layout.md](technical/repository_layout.md) **A**: maintainer-repo layout, naming and imports
 - [module-extension.md](technical/module-extension.md) **A**: module extension contract and authoring checklist
-- [generated_file_ownership.md](technical/generated_file_ownership.md) **A**: beta-migration unmanaged-file inventory
+- [generated_file_ownership.md](technical/generated_file_ownership.md) **A**: beta-migration generated-file ownership rules and inventory
 - [publish_procedure.md](technical/publish_procedure.md) **A**: pre-publish gate, release phases, release-note format
 - [plan-apply-system.md](technical/plan-apply-system.md): plan/apply schemas and execution order
 - [frontend.md](technical/frontend.md): Django/React seam, URL ownership, static pipeline

@@ -49,13 +49,13 @@ def test_layer_table_mirrors_the_shipped_modules() -> None:
     assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
 
 
-def _decisions_document() -> str:
-    path = REPO_ROOT / checker.DECISIONS_DOC_RELATIVE_PATH
+def _conventions_document() -> str:
+    path = REPO_ROOT / checker.CONVENTIONS_DOC_RELATIVE_PATH
     return path.read_text(encoding="utf-8")
 
 
-def test_decisions_rule_headings_partition_into_covered_open_or_delegated() -> None:
-    recorded = checker.decisions_rule_numbers(REPO_ROOT)
+def test_conventions_rule_headings_partition_into_covered_open_or_delegated() -> None:
+    recorded = checker.conventions_rule_numbers(REPO_ROOT)
     covered = {rule.number for rule in checker.RULES}
     open_rules = {number for number, _ in checker.OPEN_RULES}
     delegated = {number for number, _ in checker.DELEGATED_RULES}
@@ -65,12 +65,12 @@ def test_decisions_rule_headings_partition_into_covered_open_or_delegated() -> N
 
 
 def test_partition_control_rejects_an_unlisted_rule_heading() -> None:
-    document = _decisions_document().replace(
+    document = _conventions_document().replace(
         "**1. Settings names.**",
         "**999. Unlisted rule.**\n\n**1. Settings names.**",
         1,
     )
-    recorded = checker.rule_numbers_in_decisions(document)
+    recorded = checker.rule_numbers_in_conventions(document)
     assert 999 in recorded
     assert checker.partition_violations(recorded) == [
         "rule 999 is neither covered, open, nor delegated"

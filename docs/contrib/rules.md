@@ -13,7 +13,7 @@ a rule here. Repo-wide technical policy lives in
 - 1.4 Handoff names every validation gap, documentation gap and unresolved dependency.
 
 ## 2. Design
-- 2.1 Each class, module and function has one reason to change. Business rules, persistence, transport, formatting and orchestration stay separate unless an existing project pattern combines them.
+- 2.1 Each class, module and function has one reason to change. Business rules, persistence, transport, formatting and orchestration stay separate.
 - 2.2 An abstraction exists only for real volatility, a repeated pattern or an explicit boundary. No speculative extension points or indirection.
 - 2.3 Duplicated knowledge and decision logic are removed. One-off similarities are not abstracted.
 - 2.4 Implementations honour the contracts they satisfy: no narrowed inputs, weakened guarantees or surprising behavior.
@@ -56,6 +56,7 @@ a rule here. Repo-wide technical policy lives in
 - 8.1 Docstrings state purpose and behavior: one line for small units, multi-line only when one line cannot carry the needed context. Comments explain why, invariants and boundaries, never line-by-line mechanics.
 - 8.2 A change to behavior, configuration, commands or operator expectations updates the owning document in the same change. The owner is the one named in [decisions.md § Document Responsibilities](../technical/decisions.md#document-responsibilities).
 - 8.3 Each fact has exactly one owning document. Other documents link to it and never restate it. The one exception is the declared derived AI baseline, `docs/technical/ai_context.md`, which yields to the owner on any conflict.
-- 8.4 Authoritative documents (marked **A** in [docs/index.md](../index.md)) state rules as MUST / MUST NOT or present-tense facts. Soft wording ("should", "prefer"/"preferred", "consider", "ideally", "typically", "usually", "generally", "recommended", "where possible", "if possible", "try to", "may want") is prohibited in them, outside code and quoted terms. `quickscale_core/tests/test_doc_phrasing.py` enforces this.
+- 8.4 Authoritative documents (marked **A** in [decisions.md § Document Responsibilities](../technical/decisions.md#document-responsibilities)) state rules as MUST / MUST NOT or present-tense facts. Soft wording ("should", "prefer"/"preferred", "consider", "ideally", "typically", "usually", "generally", "recommended", "where possible", "if possible", "try to", "may want") is prohibited in them, outside code and quoted terms. `quickscale_core/tests/test_doc_phrasing.py` enforces this.
+- 8.7 An authoritative document stays under 1000 lines; a larger one is split by topic and each part is registered in the ownership map. `test_doc_phrasing.py` enforces the cap and that docs/index.md marks exactly the same documents **A**.
 - 8.5 Documents describe the current state only. Changelogs of past decisions, dated audit passes, re-run notes and "previously X, now Y" narrative are prohibited outside CHANGELOG.md, docs/releases/ and git history.
 - 8.6 Package READMEs and inline comments never contradict an authoritative document.

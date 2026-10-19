@@ -84,7 +84,7 @@ It is written by `templates/index.html.j2` and carries:
 | `moduleApiPaths` | Server-resolved module API bases for `orgs`, `billing`, `crm`, `forms`; the theme's API clients read these instead of writing `/<mount>/api` (rule 41) |
 | `moduleDocumentPaths` | Server-resolved module document paths for `blogIndex`, `blogFeed`, `listingsIndex`, and `crmDashboard`; the theme's launcher pages read these instead of writing the module's document paths (rule 31) |
 
-[decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) fixes how the
+[module_conventions.md](module_conventions.md#module-conventions) rule 31 (SA219) fixes how the
 producer fills `modules` and `modulePaths`: the `quickscale_seam` runtime template tag that ships
 in `quickscale_core.runtime` renders them from the shipped module inventory and the live settings,
 so `modules` carries a key for every shipped module — `true` only
@@ -255,7 +255,7 @@ Two constraints make this work:
 
 A module stylesheet therefore contains **content styling only** and reads the project tokens instead of declaring colors or radii. If a rule would style the page shell, it belongs in `base.html`, not in the module. This is the split [user_manual.md](user_manual.md#what-quickscale-update-changes-and-what-stays-yours) already promises project owners: *change the look — colors, fonts, header — through the project token source and `base.html`, and leave each page's own styling to the module so updates keep delivering it.*
 
-The authoritative statement of both rules is [decisions.md § Module Implementation Requirements](decisions.md#module-implementation-checklist).
+The authoritative statement of both rules is [module_architecture.md §Module Implementation Requirements](module_architecture.md#module-implementation-checklist).
 
 ---
 

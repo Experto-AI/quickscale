@@ -89,7 +89,7 @@ If package README text differs from repo docs, [README.md](./README.md) and [dec
 - `project.slug`: filesystem/service slug (for directory names)
 - `project.package`: Python package/import name (for Django module paths)
 
-ℹ️ The [implementation surface matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what QuickScale currently owns.
+ℹ️ The [implementation surface matrix](./docs/technical/implementation_contract.md#mvp-feature-matrix-authoritative) is the single source of truth for what QuickScale currently owns.
 
 ### What You Get
 

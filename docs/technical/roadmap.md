@@ -5,7 +5,7 @@
 ## Goal and finish line
 
 The immediate goal is one convention across all modules, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions). `bap-web` is then ported
+[module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
 once, onto the standardized names (SA191), and carries the first property portal in a
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.

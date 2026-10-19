@@ -1,6 +1,6 @@
 # Versioning (single-source)
 
-> **Related docs**: [Publish procedure](publish_procedure.md) | [Decisions](decisions.md#module-version-lockstep)
+> **Related docs**: [Publish procedure](publish_procedure.md) | [Decisions](release_gates_policy.md#module-version-lockstep)
 
 This document owns one thing: how a version number is declared and propagated. **Releasing and
 publishing are owned by [publish_procedure.md](publish_procedure.md)** — follow that document for
@@ -12,7 +12,7 @@ this page.
 The repository root `VERSION` file is authoritative. Every package version, module manifest version,
 inter-package constraint, and embedded `_version.py` is derived from it. Modules are versioned in
 lockstep with the repository; see
-[decisions.md §Module Version Lockstep](decisions.md#module-version-lockstep).
+[release_gates_policy.md § Module Version Lockstep](release_gates_policy.md#module-version-lockstep).
 
 ## Propagating a version
 

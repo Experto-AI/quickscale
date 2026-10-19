@@ -340,7 +340,7 @@ quickscale push --module blog
 
 **Note**: Initial module embedding is handled by running `quickscale plan`, entering the generated directory, and then running `quickscale apply`. Manual `git subtree` commands remain useful for advanced debugging and recovery.
 
-See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for the authoritative command list.
+See [decisions.md: CLI Command Matrix](./implementation_contract.md#cli-command-matrix) for the authoritative command list.
 
 #### What `quickscale update` changes, and what stays yours
 

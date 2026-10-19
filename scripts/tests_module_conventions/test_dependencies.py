@@ -438,7 +438,7 @@ def test_typecheck_config_option_controls() -> None:
 
 
 def _layer_document(layers: Mapping[str, int]) -> str:
-    """Render a decisions.md-shaped layer table for a module -> layer map."""
+    """Render a module_conventions.md-shaped layer table for a module -> layer map."""
     lines = [
         "**5. Dependency direction.** A module may import only from its own layer or lower ones.",
         "",
@@ -457,17 +457,17 @@ def _layer_corpus(layers: Mapping[str, int]) -> checker.Corpus:
     """Build the corpus and document that ship exactly ``layers``' modules."""
     return replace(
         _corpus(*(_golden_module(name) for name in layers)),
-        decisions_text=_layer_document(layers),
+        conventions_text=_layer_document(layers),
     )
 
 
 def _unreadable(corpus: checker.Corpus, document: str) -> list[str]:
-    """Return the findings for a corpus whose decisions text is replaced."""
-    return checker.layer_table_findings(replace(corpus, decisions_text=document))
+    """Return the findings for a corpus whose conventions-doc text is replaced."""
+    return checker.layer_table_findings(replace(corpus, conventions_text=document))
 
 
 def test_layer_table_controls() -> None:
-    """Shipped modules, the layer table, and decisions.md agree (SA296 (c))."""
+    """Shipped modules, the layer table, and module_conventions.md agree (SA296 (c))."""
     corpus = _layer_corpus(checker.MODULE_LAYERS)
     assert checker.layer_table_findings(corpus) == []
 
@@ -489,20 +489,22 @@ def test_layer_table_controls() -> None:
 
     moved = next(name for name, layer in checker.MODULE_LAYERS.items() if layer == 3)
     drifted = _unreadable(corpus, _layer_document({**checker.MODULE_LAYERS, moved: 2}))
-    assert drifted == [f"rule 5: {moved} is layer 2 in decisions.md and layer 3 in MODULE_LAYERS"]
+    assert drifted == [
+        f"rule 5: {moved} is layer 2 in module_conventions.md and layer 3 in MODULE_LAYERS"
+    ]
 
     dropped_entry = {name: layer for name, layer in checker.MODULE_LAYERS.items() if name != moved}
     assert _unreadable(corpus, _layer_document(dropped_entry)) == [
-        f"rule 5: MODULE_LAYERS names {moved}, which decisions.md layer table does not"
+        f"rule 5: MODULE_LAYERS names {moved}, which conventions layer table does not"
     ]
 
     extra_entry = {**checker.MODULE_LAYERS, "demo": 3}
     assert _unreadable(corpus, _layer_document(extra_entry)) == [
-        "rule 5: decisions.md layer table names demo, which MODULE_LAYERS does not"
+        "rule 5: conventions layer table names demo, which MODULE_LAYERS does not"
     ]
 
     assert _unreadable(corpus, "No layer table here.\n") == [
-        "rule 5: decisions.md layer table unreadable: no '| Layer | Modules |' table"
+        "rule 5: module_conventions.md layer table unreadable: no '| Layer | Modules |' table"
     ]
     renamed = _layer_document(checker.MODULE_LAYERS).replace("| 1 \u2014", "| one \u2014", 1)
     assert any(
@@ -524,5 +526,5 @@ def test_layer_table_mirrors_the_real_tree() -> None:
     """The live inventory, the layer table, and the shipped document agree."""
     corpus = checker.load_corpus(REPO_ROOT)
     assert checker.layer_table_findings(corpus) == []
-    document = (REPO_ROOT / checker.DECISIONS_DOC_RELATIVE_PATH).read_text(encoding="utf-8")
-    assert checker.decisions_layer_table(document) == checker.MODULE_LAYERS
+    document = (REPO_ROOT / checker.CONVENTIONS_DOC_RELATIVE_PATH).read_text(encoding="utf-8")
+    assert checker.conventions_layer_table(document) == checker.MODULE_LAYERS

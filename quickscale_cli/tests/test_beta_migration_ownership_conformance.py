@@ -304,7 +304,7 @@ def test_intentionally_unmanaged_entries_have_documented_rationale() -> None:
     # user-owned generated files there.
     assert len(INTENTIONALLY_UNMANAGED) > 0, (
         "INTENTIONALLY_UNMANAGED must contain entries for user-owned "
-        "generated files.  See decisions.md § Generated-File Ownership."
+        "generated files.  See generated_file_ownership.md § Rules."
     )
 
 

@@ -1,6 +1,6 @@
 """Conformance checks for token-styled module page templates.
 
-The module and page sets derive from discovery (decisions.md rules 8 and 37):
+The module and page sets derive from discovery (module_conventions.md rules 8 and 37):
 every module discovered under ``quickscale_modules/*/module.yml`` that ships
 page templates must provide one flat
 ``templates/quickscale_<module>/base.html`` owning

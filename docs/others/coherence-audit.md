@@ -1,6 +1,6 @@
 # Coherence Audit — Open Items
 
-Cross-module conformance drift against [decisions.md § Module Conventions](../technical/decisions.md#module-conventions).
+Cross-module conformance drift against [module_conventions.md](../technical/module_conventions.md#module-conventions).
 Last verified at `30b0b6b1` (2026-10-16), full census. Open items only: resolved items (41 of 41),
 census tables and pass history are in git history. Cite an item by its slug ID, a proposed rule as "coherence proposal N", and a gap as "coherence
 gap N". These numbers come from the 2026-10-16 census and stay fixed until the entry closes.

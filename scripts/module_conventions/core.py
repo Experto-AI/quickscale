@@ -128,13 +128,13 @@ from scripts.module_conventions._core_corpus import (
     CLI_PACKAGE as CLI_PACKAGE,
 )
 from scripts.module_conventions._core_corpus import (
+    CONVENTIONS_DOC_RELATIVE_PATH as CONVENTIONS_DOC_RELATIVE_PATH,
+)
+from scripts.module_conventions._core_corpus import (
     CORE_CONVENTIONS_RELATIVE_PATH as CORE_CONVENTIONS_RELATIVE_PATH,
 )
 from scripts.module_conventions._core_corpus import (
     CORE_PACKAGE as CORE_PACKAGE,
-)
-from scripts.module_conventions._core_corpus import (
-    DECISIONS_DOC_RELATIVE_PATH as DECISIONS_DOC_RELATIVE_PATH,
 )
 from scripts.module_conventions._core_corpus import (
     MANIFEST_NAME as MANIFEST_NAME,

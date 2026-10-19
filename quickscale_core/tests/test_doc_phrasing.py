@@ -15,6 +15,8 @@ SOFT_WORDS = re.compile(
     re.IGNORECASE,
 )
 DATED_LOG = re.compile(r"^(Audited:|>\s*\*\*Re-run pass)", re.MULTILINE)
+INDEX = ROOT / "docs/index.md"
+MAX_AUTHORITATIVE_LINES = 1000
 
 
 def _authoritative_docs() -> list[Path]:
@@ -68,3 +70,21 @@ def test_authoritative_doc_uses_binding_wording(path: Path) -> None:
 @pytest.mark.parametrize("path", _authoritative_docs(), ids=lambda p: p.name)
 def test_authoritative_doc_carries_no_audit_log(path: Path) -> None:
     assert not DATED_LOG.search(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("path", _authoritative_docs(), ids=lambda p: p.name)
+def test_authoritative_doc_fits_line_cap(path: Path) -> None:
+    lines = len(path.read_text(encoding="utf-8").splitlines())
+    assert lines < MAX_AUTHORITATIVE_LINES, (
+        f"{path.name} has {lines} lines; split it by topic"
+    )
+
+
+def test_index_marks_the_same_authoritative_docs() -> None:
+    marked = {
+        (INDEX.parent / link).resolve()
+        for link in re.findall(
+            r"\]\(([^)#]+\.md)\) \*\*A\*\*", INDEX.read_text(encoding="utf-8")
+        )
+    }
+    assert marked == {path.resolve() for path in _authoritative_docs()}
