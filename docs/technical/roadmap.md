@@ -12,8 +12,9 @@ their value.
 
 **Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0, which has no open
 release requirement. A live 0.88.0 install moves to 0.89.0 on a fresh database. Part 1 is green on
-the SA292 tip and the local `0.89.0` tag is re-pointed there. The Phase 4b live check on a pre-linked
-directory is still pending and must pass before the operator's Phases 5–6 sealing and publication in
+the SA292 tip; the local `0.89.0` tag is re-pointed at the roadmap-only close commit whose product
+bytes match that tip. The Phase 4b live check on a pre-linked directory is still pending and must
+pass before the operator's Phases 5–6 sealing and publication in
 [publish_procedure.md](publish_procedure.md).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
