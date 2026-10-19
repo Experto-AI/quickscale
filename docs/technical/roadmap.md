@@ -12,10 +12,11 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)). 0.89.0 has no open release requirement. A live
+([publish_procedure.md](publish_procedure.md)). 0.89.0's one open release requirement is SA292. A live
 0.88.0 install moves to 0.89.0 on a fresh database, and the 0.89.0 release notes say so.
-Publication is assistant-driven up to the two operator commands. Done on `v89`: Part 1 is green on
-the release bytes — `7821db42` readies the CHANGELOG and release note, `f4c8c79f` brings three
+Publication is assistant-driven up to the two operator commands. Done on `v89` (pre-SA292 bytes):
+Part 1 is green on those release bytes — `7821db42` readies the CHANGELOG and release note,
+`f4c8c79f` brings three
 quality-gate functions under the CC threshold, and `make ci-e2e` and `make release-gate` pass with
 the E2E lanes serial (`QS_E2E_PARALLEL=0`; concurrent-lane Poetry installs exceed the per-test
 timeout on this machine) — and Phases 2–3 re-pointed the local `0.89.0` tag at the tip and
@@ -26,9 +27,11 @@ role, migrations, and Gunicorn on the deployed URL. The run recorded what the ph
 procedure did not name — the test-only vendor credentials a billing/notifications/analytics
 selection needs before `apply` and before the deployment serves, and the non-interactive Railway
 initialization behavior — in [publish_procedure.md](publish_procedure.md) Phases 4a–4b and
-[railway.md](../deployment/railway.md). SA292 has landed: the deploy reads the live link state, Part
-1 is re-run green on the SA292 bytes, and the local `0.89.0` tag is re-pointed there. Remaining:
-the operator runs `make seal-modules VERSION=0.89.0` and `make seal-status VERSION=0.89.0`
+[railway.md](../deployment/railway.md). Remaining: SA292's fix is committed on the track branch
+(`75f36923`) and its task-tier gates pass, but the Part 1 re-run is blocked on this machine's E2E
+preconditions — the core lane needs a locally staged wheelhouse for the unpublished `0.89.0`, and
+the CLI lane needs host port 5173 free — so the local `0.89.0` tag is not yet re-pointed at the
+tip; the operator then runs `make seal-modules VERSION=0.89.0` and `make seal-status VERSION=0.89.0`
 (Phase 5), then `git push origin 0.89.0` (Phase 6); the assistant then verifies PyPI and the GitHub
 Release and opens the release PR.
 
@@ -54,7 +57,8 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
+| SA292 | Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs | 1 | — | Required |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA292 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
@@ -62,16 +66,17 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA292 ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2)
 Track 3: — (SA204 (j) landed)
-     release path:  seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
+     release path:  SA292 ──► seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
 waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
-never ships; SA153 (e4) has landed, so Track 1's queue head is the cutover. SA153 (f) waits on
+never ships; SA153 (e4) has landed. SA292 heads Track 1 because it changes release-gated bytes
+and must land before the split tags are sealed. SA153 (f) waits on
 the cutover, with the migration freeze it also waited on landed. SA277 (a1) has landed; only
 SA277 (a2) waits on the cutover, whose evidence confirms the line between what `beta_migration`
 automates and what the prompt handles.
@@ -92,7 +97,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 (cutover) | no | no | yes | no | yes |
+| 1 | SA292 | yes | yes | yes | no | yes |
 | 2 | SA277 (a2) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -161,7 +166,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
-- [x] **SA292 — Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs.**
+- [ ] **SA292 — Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs.**
+
+  Found in 0.89.0's Phase 4b: `is_railway_project_initialized()` checked for a `.railway/`
+  directory, but Railway CLI 5.x keeps directory links in `~/.railway/config.json` and writes no
+  marker, so `quickscale deploy railway` re-ran `railway init` in a pre-linked directory and
+  created a second project. The check now reads the live link state with `railway status --json`
+  (aborting when it cannot be read), the manual-deploy docs follow CLI 5.70, and the Phase 4b
+  caution matches.
+
+  **Acceptance (remaining):** Part 1 is re-run on the tip and the local `0.89.0` tag is re-pointed
+  there; sealing (Phase 5) follows as the operator's step (Tier 2-fast). The fix is implemented,
+  reviewed, and committed on `wt-track1` (`75f36923`) with `make test-unit -- --cli` and
+  `make check QUIET=1` green; the Part 1 re-run is blocked on this machine's E2E preconditions (a
+  locally staged wheelhouse for the unpublished `0.89.0`, and host port 5173 free).
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
