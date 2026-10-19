@@ -6,7 +6,8 @@
 
 The immediate goal is one convention across all modules, as recorded in
 [module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
-once, onto the standardized names (SA191), and carries the first property portal in a
+once, onto the standardized names: regenerated as `bap-web-new` (SA299), brought to visual and
+functional parity (SA300, SA301), and cut over (SA191). It then carries the first property portal in a
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.
 
@@ -66,8 +67,8 @@ head is SA299: salvage what `bap-web-new` holds, inventory the modules of the de
 SA301 then run in parallel on the regenerated project, and SA191 validates and cuts over only
 after both. PyPI publication follows successful validation and cutover. SA153 (e3–e4)
 have landed, so the reverted contract step never ships. SA153 (f) waits on SA191's cutover, with
-the migration freeze it also waited on landed. SA277 (a1) has landed; SA277 (a3) can start now, and (a2) waits on the
-cutover, whose evidence confirms the line between what `beta_migration` automates and what the
+the migration freeze it also waited on landed. SA277 (a1) has landed; SA277 (a3) can
+start now, and (a2) waits on the cutover, whose evidence confirms the line between what `beta_migration` automates and what the
 prompt handles.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
@@ -97,8 +98,8 @@ A track is **truly green** only when all three states are yes.
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, the `bap-web-new` regeneration and its salvage, the design-system
   extraction and the visual-parity harness, the managed CI-environment and operations-guide
-  includes, and, for the conventions, module identities, models and their `0001_initial`, module READMEs, and module
-  templates, static files, and template tags, with the module page templates and the generated
+  includes, and, for the conventions, module identities, models and their `0001_initial`,
+  module READMEs, and module templates, static files, and template tags, with the module page templates and the generated
   `base.html`, cross-module imports and settings reads, and the `services.py` public surface.
 - Track 2 owns the gate registry and everything generated from it (`scripts/gate_registry.json`,
   `check_quality.sh`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`, `check_ci_locally.sh`'s
@@ -126,8 +127,8 @@ A track is **truly green** only when all three states are yes.
   generated `pyproject.toml.j2` `[build-system]` block, orgs' `quickscale_orgs_create_site_org`
   command, the notifications webhook (`_webhooks.py`), the CRM list API and the theme's CRM
   page, the port of `bap-web`'s custom forms and features into `bap-web-new`, the generated
-  theme seam types and the theme hooks that read them, and the frontend decisions in `frontend.md`, and, for the conventions, the `quickscale_core.runtime` helpers,
-  module `checks.py` and `exceptions.py`, core's `CAPABILITIES`, the adapter hook signature,
+  theme seam types and the theme hooks that read them, and the frontend decisions in
+  `frontend.md`, and, for the conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`, core's `CAPABILITIES`, the adapter hook signature,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, the conformance harness with its registry row, parity families and
@@ -135,8 +136,8 @@ A track is **truly green** only when all three states are yes.
   core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
   `decisions.md` § Clean-Break Migration History.
 - **Cross-track edits.** SA301 edits public templates Track 1 owns only after SA300 (a)'s
-  design system lands, with Track 1 review. SA153 (e3) reverts Track 3's `publicPage` seam type, with Track 3
-  review, and lands through the serialized merge queue.
+  design system lands, with Track 1 review. SA153 (e3) reverts Track 3's `publicPage` seam
+  type, with Track 3 review, and lands through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
   `project_contract.yml`, and [decisions.md](decisions.md). Each track resolves the shared set at
@@ -169,8 +170,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [ ] (a) Salvage before deletion: `bap-web-new` has no git remote, so deletion is final. Copy
     `scripts/cutover.sh`, `CUTOVER.md`, `MIGRATION_PROMPT.md`, the gap handoff, the run report
-    SA277's draft cites, and SA153 (a)–(e4) as a patch or bundle to `~/code/bap-web-new-salvage/`, outside the
-    repository, and verify the copy opens. Do not salvage `.quickscale/wheels/`: it holds a
+    SA277's draft cites, and SA153 (a)–(e4) as a git bundle plus plain copies to `~/code/bap-web-new-salvage/`,
+    outside every repository, and verify the bundle with `git bundle verify`. Do not salvage `.quickscale/wheels/`: it holds a
     `quickscale_core` wheel built on 2026-10-09, before the final 0.89.0 tag, so (d) rebuilds
     wheels from the recorded tag commit (Tier 1).
   - [x] (b) Module inventory of the **deployed `bap-web`** (the donor), which fixes the module
@@ -180,13 +181,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `bap-web-new` is generated with `auth`, `listings`, `forms`, `orgs`, `storage`, `analytics`,
     `notifications`; their package dependencies come from each `module.yml`.
   - [ ] (c) Delete `bap-web-new`: the operator authorized the deletion on 2026-10-19,
-    conditional on (a)'s verified copy; once it is verified, remove `/home/victor/code/bap-web-new` entirely, including its git history,
-    `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
+    conditional on (a)'s verified copy; once it is verified, remove
+    `/home/victor/code/bap-web-new` entirely, including its git history, `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
   - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s seven
-    modules, carrying the donor through the `beta_migration` loop in
+    modules, carrying the donor through `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
-    SA277's evidence; record the QuickScale commit, install method, and module refs
-    (Tier 2-fast).
+    SA277's evidence. The donor's `quickscale.yml` names only the three deployed modules and is
+    never edited; if the regeneration does not resolve the four required ones, that is a
+    QuickScale gap fixed in QuickScale, not a hand edit to the recipient. Record the QuickScale
+    commit, install method, and module refs, and leave `MIGRATION_PROMPT.md`'s remaining work
+    for SA300 and SA301 (Tier 2-fast).
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 
@@ -253,7 +257,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Target `buenosairesproperties.com` with one React public property surface over a project-owned
   JSON read API under the [extension contract](module-extension.md), building on the React pages
-  and `/api/properties/` SA191 carried over. No public API in `listings`, no generic property
+  and `/api/properties/` the port carried over. No public API in `listings`, no generic property
   behavior in generated projects. Module-coupled data on new pages comes through seam-declared
   hooks in managed files (arch `generated-file-ownership-unmodeled`, Next (b)).
 
@@ -265,7 +269,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `robots.txt` are Django views over the same data, and the build-time prerender path is gone.
 
   Because SA299 regenerates `bap-web-new`, the (a)–(e4) work is re-applied from SA299 (a)'s
-  salvage onto the regenerated project before (f), and its acceptance is re-proved there.
+  salvage (`~/code/bap-web-new-salvage/`) onto the regenerated project before (f), and its acceptance is re-proved there.
 
   **Acceptance (remaining):** the deployed site (f). The served documents, the sitemap and robots
   views, and the search → detail → inquiry journey with organization isolation pass in the
@@ -323,8 +327,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     remaining-work form — the pre-port surfaces and the donor's module divergences (older copies
     the current module content supersedes, and local edits to upstream or re-express), each with
     paths and a governing rule — and the smoke gate's gap-handoff case proves the handoff file
-    carries them. The working prompt and `CUTOVER.md` live in `bap-web-new` only. This slice's handoff note carries the
-    decision-record and boundary-rule draft:
+    carries them. The working prompt and `CUTOVER.md` lived in `bap-web-new` only; SA299 (a)
+    preserves them in `~/code/bap-web-new-salvage/`. This slice's handoff note carries the decision-record and boundary-rule draft:
     `docs/planning/migration-upgrade-path-draft.md`. Next: (a2), after the cutover.
   - [ ] (a2) After SA191's cutover: the decision record and boundary rule in decisions, the
     (a1) draft confirmed or amended against the cutover evidence, and the operator docs pruned of
@@ -345,7 +349,8 @@ browser against a real backend. The repo's Playwright E2E asserts only status 20
 the first stylesheet. SA300 (b) fixes the stale `e2e/home.spec.ts.j2` stub and adds the
 screenshot harness. Remaining order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
-(4) full journey E2E against the Docker stack, only if it fits the E2E time budget in validation_policy.md.
+(4) full journey E2E against the Docker stack, only if it fits the E2E time budget in
+validation_policy.md.
 
 Changes to this schedule must pass
 `poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov`.

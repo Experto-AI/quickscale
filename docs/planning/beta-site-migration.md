@@ -37,6 +37,8 @@ Rules for the current maintainer tool:
 The port's `MIGRATION_PROMPT.md` and `CUTOVER.md` live in the recipient repository
 (`bap-web-new`), which the tool writes them into; this repository keeps no copies. The two-stage
 upgrade path is drafted in [`migration-upgrade-path-draft.md`](migration-upgrade-path-draft.md).
+SA299 deletes and regenerates `bap-web-new`; the earlier port's prompt, `CUTOVER.md`, run report,
+and history are preserved in `~/code/bap-web-new-salvage/` outside every repository.
 
 ---
 
