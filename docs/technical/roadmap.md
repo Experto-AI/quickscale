@@ -10,10 +10,11 @@ once, onto the standardized names (SA191), and carries the first property portal
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.
 
-**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0, whose one open
-release requirement is SA292. A live 0.88.0 install moves to 0.89.0 on a fresh database. Remaining
-publication steps follow [publish_procedure.md](publish_procedure.md) from the Part 1 re-run on the
-SA292 tip (Phases 5–6 are operator commands).
+**Release status.** 0.88.0 ships S1 billing defects; the fixes ship in 0.89.0, which has no open
+release requirement. A live 0.88.0 install moves to 0.89.0 on a fresh database. Part 1 is green on
+the SA292 tip and the local `0.89.0` tag is re-pointed there. The Phase 4b live check on a pre-linked
+directory is still pending and must pass before the operator's Phases 5–6 sealing and publication in
+[publish_procedure.md](publish_procedure.md).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -37,8 +38,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA292 | Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs | 1 | — | Required |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA292 | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
@@ -46,17 +46,16 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA292 ──► SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA191 (cutover) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2)
 Track 3: — (SA204 (j) landed)
-     release path:  SA292 ──► seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
+     release path:  seal + publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 (cutover) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. SA191's cutover
 waits on the 0.89.0 publication, now that SA153 (e3) has landed so the reverted contract step
-never ships; SA153 (e4) has landed. SA292 heads Track 1 because it changes release-gated bytes
-and must land before the split tags are sealed. SA153 (f) waits on
+never ships; SA153 (e4) has landed, so Track 1's queue head is the cutover. SA153 (f) waits on
 the cutover, with the migration freeze it also waited on landed. SA277 (a1) has landed; only
 SA277 (a2) waits on the cutover, whose evidence confirms the line between what `beta_migration`
 automates and what the prompt handles.
@@ -77,7 +76,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA292 | yes | yes | yes | no | yes |
+| 1 | SA191 (cutover) | no | no | yes | no | yes |
 | 2 | SA277 (a2) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -146,31 +145,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
-- [ ] **SA292 — Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs.**
-
-  Found in 0.89.0's Phase 4b: `is_railway_project_initialized()` checked for a `.railway/`
-  directory, but Railway CLI 5.x keeps directory links in `~/.railway/config.json` and writes no
-  marker, so `quickscale deploy railway` re-ran `railway init` in a pre-linked directory and
-  created a second project. The check now reads the live link state with `railway status --json`
-  (aborting when it cannot be read), the manual-deploy docs follow CLI 5.70, and the Phase 4b
-  caution matches.
-
-  **Acceptance (remaining):** Part 1 is re-run on the tip and the local `0.89.0` tag is re-pointed
-  there; sealing (Phase 5) follows as the operator's step (Tier 2-fast). The fix is implemented,
-  reviewed, and committed on `wt-track1` (`75f36923`) with `make test-unit -- --cli` and
-  `make check QUIET=1` green; the Part 1 re-run is blocked on this machine's E2E preconditions (a
-  locally staged wheelhouse for the unpublished `0.89.0`, and host port 5173 free).
-
-  **Re-run:** confirm host port 5173 is free (the stopped Phase 4a `myapp` project stays stopped).
-  Build fresh `0.89.0` wheels from the tip into a scratch directory, check they match the tip, and
-  hand them to the core E2E lane through `QUICKSCALE_LOCAL_WHEELHOUSE`. Never stage them into
-  `.venv/quickscale_wheels`, because `TestRepinExistingMode` requires that directory to be absent.
-  If `make ci-e2e` does not pass the variable through to the core lane, stop and report rather than
-  work around it. Then run `make version-check`, `make check-core-compat`,
-  `QS_E2E_INTEGRATION_REF=v89 QS_E2E_PARALLEL=0 make ci-e2e`, and `make release-gate`. If all are
-  green, re-point the local `0.89.0` tag at the tip and close SA292 here (mark it `[x]`, delete
-  this body, and restore "no open release requirement" in the release status). Record in the
-  handoff that the Phase 4b live check on a linked directory is still pending.
+- [x] **SA292 — Fix `quickscale deploy railway` re-initializing a linked directory, and correct the manual-deploy docs.**
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
