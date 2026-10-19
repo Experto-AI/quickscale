@@ -161,6 +161,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `make check QUIET=1` green; the Part 1 re-run is blocked on this machine's E2E preconditions (a
   locally staged wheelhouse for the unpublished `0.89.0`, and host port 5173 free).
 
+  **Re-run:** confirm host port 5173 is free (the stopped Phase 4a `myapp` project stays stopped).
+  Build fresh `0.89.0` wheels from the tip into a scratch directory, check they match the tip, and
+  hand them to the core E2E lane through `QUICKSCALE_LOCAL_WHEELHOUSE`. Never stage them into
+  `.venv/quickscale_wheels`, because `TestRepinExistingMode` requires that directory to be absent.
+  If `make ci-e2e` does not pass the variable through to the core lane, stop and report rather than
+  work around it. Then run `make version-check`, `make check-core-compat`,
+  `QS_E2E_INTEGRATION_REF=v89 QS_E2E_PARALLEL=0 make ci-e2e`, and `make release-gate`. If all are
+  green, re-point the local `0.89.0` tag at the tip and close SA292 here (mark it `[x]`, delete
+  this body, and restore "no open release requirement" in the release status). Record in the
+  handoff that the Phase 4b live check on a linked directory is still pending.
+
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
   `bap-web-new` (`/home/victor/code/bap-web-new`) is the ported recipient, path-pinned to the

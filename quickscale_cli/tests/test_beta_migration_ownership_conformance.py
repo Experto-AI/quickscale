@@ -17,7 +17,7 @@ missing classification.
 
 The ``INTENTIONALLY_UNMANAGED`` tuple provides the explicit escape hatch for
 replacement/merge ownership: files listed there are not structurally replaced
-or merged and must have a documented exemption rationale in ``decisions.md``.
+or merged and must have a documented exemption rationale in ``generated_file_ownership.md``.
 They may participate in field-aware identity reconciliation or copy-if-missing
 adoption, neither of which overwrites an existing user-owned file.
 """
@@ -292,11 +292,10 @@ def test_intentionally_unmanaged_entries_have_documented_rationale() -> None:
 
     Files listed in ``INTENTIONALLY_UNMANAGED`` are deliberately outside
     structural replacement/merge ownership. Each such entry requires a documented
-    exemption rationale in ``decisions.md`` § Generated-File Ownership
-    (Beta-Migration Taxonomy). Identity-only and copy-if-missing overlaps are
+    exemption rationale in ``generated_file_ownership.md``. Identity-only and copy-if-missing overlaps are
     allowed because neither overwrites an existing user-owned file.
 
-    If a new entry is added without updating ``decisions.md``, this test
+    If a new entry is added without updating ``generated_file_ownership.md``, this test
     must be updated or the conformance gate expanded to cross-check the
     decision record.
     """

@@ -636,5 +636,5 @@ The `Dockerfile` uses multi-stage builds (builder + runtime) for production effi
 - Technical decisions and authoritative feature scope: [decisions.md](./decisions.md)
 - Scaffolding and generated project structure: [generated_project_structure.md](./generated_project_structure.md)
 - Roadmap and release milestones: [roadmap.md](./roadmap.md)
-- Generator templates (look under `quickscale_core/src/quickscale_core/scaffold/templates/`)
+- Generator templates (look under `quickscale_core/src/quickscale_core/generator/templates/`)
 - Top-level README for newcomer guidance: [README.md](../../README.md)

@@ -8,9 +8,10 @@ the owning document wins immediately and this file is corrected.
 1. [decisions.md](./decisions.md): repo-wide policy, tie-breakers, prohibitions; its
    [§ Document Responsibilities](./decisions.md#document-responsibilities) names the owner of every
    topic and marks the authoritative (**A**) documents.
-2. The **A** companions: [implementation_contract.md](./implementation_contract.md) (shipped
+2. The core **A** companions (the map lists the rest): [implementation_contract.md](./implementation_contract.md) (shipped
    contract, CLI), [module_architecture.md](./module_architecture.md),
    [module_conventions.md](./module_conventions.md),
+   [release_gates_policy.md](./release_gates_policy.md),
    [validation_policy.md](./validation_policy.md),
    [generated_project_structure.md](./generated_project_structure.md),
    [repository_layout.md](./repository_layout.md).

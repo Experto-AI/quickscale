@@ -85,7 +85,7 @@ on any difference.
 | `quickscale_cli` | the `quickscale` command |
 | `quickscale_core` | generator, templates, shared runtime (`dr_engine`, settings facade) |
 | `quickscale_devtools` | maintainer tooling; never shipped into generated projects |
-| `quickscale_modules/<name>` | one first-party module; Python package and Django app label `quickscale_modules_<name>` |
+| `quickscale_modules/<name>` | one first-party module; Python package `quickscale_modules_<name>`, Django app label `quickscale_<name>` |
 
 ## License
 
