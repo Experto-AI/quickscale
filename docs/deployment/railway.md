@@ -65,7 +65,7 @@ The `quickscale deploy railway` command automatically:
 - ✅ Authenticates via browserless login if not logged in (shows pairing code)
 
 **Deployment Setup:**
-- ✅ Initializes Railway project (if needed) - interactive prompts let you create/select project
+- ✅ Initializes Railway project (if needed) - creates one when the directory has no ``.railway`` marker
 - ✅ Adds PostgreSQL 18 database service
 - ✅ Creates application service
 - ✅ Retries `DATABASE_URL` reference linking while PostgreSQL finishes provisioning
@@ -167,6 +167,28 @@ railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate 
 | `DEBUG` | Debug mode (always False in production) | `False` |
 | `DJANGO_SETTINGS_MODULE` | Django settings module | `myapp.settings.production` |
 
+### Module Vendor Credentials
+
+The CLI deploy's environment batch covers only the core variables above. A project whose selected
+modules gate startup on a vendor credential fails its module startup checks (and its migrations
+step) until the credential is present on the service:
+
+| Module | Variables |
+|--------|-----------|
+| `billing` | `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET` |
+| `notifications` | `RESEND_API_KEY`, `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET` |
+| `analytics` | `POSTHOG_API_KEY` |
+
+Set each value through stdin so it never appears in process arguments, for example:
+
+```bash
+printf '%s' "$STRIPE_SECRET_KEY" | railway variable set STRIPE_SECRET_KEY --stdin --service myapp --skip-deploys
+```
+
+`--skip-deploys` leaves the running deployment alone; the value is live for the next boot, so set
+credentials before the first deploy, or redeploy after setting them. The names above are the module
+defaults; a project that configured its own ``*_env_var`` names reads the configured names instead.
+
 ### Optional Configuration
 
 - `RAILWAY_ENVIRONMENT` - Detected automatically by Railway
@@ -190,12 +212,12 @@ Railway projects support multiple services within a single project. When you dep
 
 The `quickscale deploy railway` command follows this config-first workflow:
 
-1. **Initialize Project** (interactive): Select or create Railway project
+1. **Initialize Project**: Creates the Railway project when the directory has no ``.railway`` marker (see **Project Initialization** under Important Notes)
 2. **Add PostgreSQL**: Provisions PostgreSQL 18 database service
 3. **Create App Service**: Creates empty service container via `railway add --service <app-name>`
 4. **Link DATABASE_URL Reference**: Links app `DATABASE_URL` to PostgreSQL with retry/backoff
 5. **Generate Public Domain**: Auto-generates Railway domain (e.g., myapp-production-abc123.up.railway.app)
-6. **Configure Environment (Single Batch)**: Sets all variables in one command to trigger only ONE deployment
+6. **Configure Environment (per-variable stdin)**: Writes each variable with `railway variable set KEY --stdin --skip-deploys` — values never reach process arguments, and earlier writes remain when a later one fails — so no deployment starts until step 7
    - SECRET_KEY (generated once, reused on re-deploy)
    - DEBUG=False
    - DJANGO_SETTINGS_MODULE
@@ -217,7 +239,9 @@ The `quickscale deploy railway` command follows this config-first workflow:
 
 **Important Notes**:
 - Environment variables are service-specific. The CLI automatically targets the correct service for each operation.
-- **Optimized Variable Setting**: QuickScale sets all environment variables in a single batch command to trigger only ONE deployment instead of multiple deployments.
+- **Optimized Variable Setting**: QuickScale writes each variable with `railway variable set KEY --stdin --skip-deploys` (values stay out of process arguments) and triggers one deployment after the writes succeed, so environment setup never causes multiple deployments.
+- **Module Vendor Credentials**: the CLI's environment configuration writes the core variables only. Set any credentials the selected modules require (see [Module Vendor Credentials](#module-vendor-credentials)) on the service before the first boot, or the deployment fails its module startup checks.
+- **Project Initialization**: the command runs `railway init` itself when the directory has no ``.railway`` marker, and that invocation creates a project rather than selecting an existing one. Do not pre-create or pre-link the project with `railway init`/`railway link`: Railway CLI 5.x keeps directory links in ``~/.railway/config.json``, writes no ``.railway`` marker, and the command therefore initializes again, creating a second project (the application service still takes the directory slug as its name).
 - Railway CLI v4+ requires explicit service creation with `railway add --service` before deployment.
 - **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
 - **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available. Migrations use the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix so the superuser `DATABASE_URL` is used (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
@@ -638,18 +662,14 @@ railway add --service myapp       # Create app service
 railway domain --service myapp    # Generate public domain
 ```
 
-**Phase 3: Environment Setup (Batch) - Automated**
+**Phase 3: Environment Setup (per-variable stdin) - Automated**
 ```bash
-# All variables set in ONE command to trigger only ONE deployment
-railway variable set \
-  SECRET_KEY=<existing or generated on first deploy> \
-  DEBUG=False \
-  DJANGO_SETTINGS_MODULE=myapp.settings.production \
-  ALLOWED_HOSTS=<detected-url> \
-  RUNTIME_DB_ROLE=quickscale_runtime \
-  RUNTIME_DB_PASSWORD=<generated> \
-  RUNTIME_DATABASE_URL=<role @ selected PostgreSQL service reference variables> \
-  --service myapp
+# One write per variable: the value travels through stdin, never argv, and
+# --skip-deploys triggers no deployment on its own.
+printf '%s' '<value>' | railway variable set SECRET_KEY --stdin --service myapp --skip-deploys
+printf '%s' '<value>' | railway variable set DEBUG --stdin --service myapp --skip-deploys
+# ... SECRET_KEY, DEBUG, DJANGO_SETTINGS_MODULE, ALLOWED_HOSTS,
+#     RUNTIME_DB_ROLE, RUNTIME_DB_PASSWORD, RUNTIME_DATABASE_URL
 ```
 
 **Phase 4: Deploy with Config - Automated**
@@ -840,11 +860,11 @@ Replace ``primary-db`` with the exact PostgreSQL service name shown by
 Problem processing request
 ```
 **Solution**:
-- The CLI runs `railway init` interactively - follow the prompts to create/select a project
+- The CLI runs `railway init` and creates the project; follow its prompts for the workspace and project name
 - Check your Railway account has available projects (free tier limit: 2 projects)
 - Verify network connectivity
 - Ensure you're authenticated: `railway whoami`
-- Try manual initialization: `railway init`
+- Prefer re-running `quickscale deploy railway`; a manually pre-linked directory is initialized again and creates a second project (see **Project Initialization**)
 
 **Deployment Timeout**:
 - Large projects may take longer than expected (first deploy: 5-10 minutes)
@@ -1076,7 +1096,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - [ ] Initialize git repository (optional but recommended)
 - [ ] Login to Railway: `railway login` or `railway login --browserless`
 - [ ] Deploy with automation: `quickscale deploy railway`
-  - ✅ Interactive project creation/selection
+  - ✅ Project creation (non-interactive when no TTY)
   - ✅ PostgreSQL database added
   - ✅ App service created
   - ✅ Environment variables configured (SECRET_KEY, DEBUG, DJANGO_SETTINGS_MODULE)

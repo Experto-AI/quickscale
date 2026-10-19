@@ -19,10 +19,16 @@ the release bytes — `7821db42` readies the CHANGELOG and release note, `f4c8c7
 quality-gate functions under the CC threshold, and `make ci-e2e` and `make release-gate` pass with
 the E2E lanes serial (`QS_E2E_PARALLEL=0`; concurrent-lane Poetry installs exceed the per-test
 timeout on this machine) — and Phases 2–3 re-pointed the local `0.89.0` tag at the tip and
-published the four outdated split branches. Remaining: Phase 4a's generated-project verification,
-Phase 4b's Railway verification and project deletion, then the operator runs
-`make seal-modules VERSION=0.89.0` and `git push origin 0.89.0`; the assistant then verifies PyPI
-and the GitHub Release and opens the release PR.
+published the four outdated split branches. Phases 4a–4b then passed on this tip: an all-module
+generated project (`quickscale plan` + `quickscale apply --split-refs-from-branches`) answered its
+twelve documented routes locally, and `quickscale deploy railway` booted the same project's runtime
+role, migrations, and Gunicorn on the deployed URL. The run recorded what the phases needed but the
+procedure did not name — the test-only vendor credentials a billing/notifications/analytics
+selection needs before `apply` and before the deployment serves, and the non-interactive Railway
+initialization behavior — in [publish_procedure.md](publish_procedure.md) Phases 4a–4b and
+[railway.md](../deployment/railway.md). Remaining: the operator runs `make seal-modules
+VERSION=0.89.0` and `git push origin 0.89.0`; the assistant then verifies PyPI and the GitHub
+Release and opens the release PR.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence

@@ -273,6 +273,25 @@ quickscale apply --split-refs-from-branches
 quickscale manage createsuperuser
 ```
 
+The container refuses to start while any selected module's startup checks fail. A selection that
+includes `billing`, `notifications`, or `analytics` gates those checks on vendor credentials, so
+export the test-only values the repository's installed-wheel lifecycle E2E uses
+(`quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py`) before `quickscale apply`; Docker
+Compose forwards them into the backend container:
+
+```bash
+export STRIPE_PUBLISHABLE_KEY=pk_test_installed_wheel
+export STRIPE_SECRET_KEY=sk_test_installed_wheel
+export QUICKSCALE_BILLING_WEBHOOK_SECRET=whsec_test_installed_wheel
+export RESEND_API_KEY=re_test_installed_wheel
+export QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=whsec_YWFhYWFhYWFhYWFhYWFhYQ==
+export POSTHOG_API_KEY=ph_test_installed_wheel
+```
+
+`quickscale manage createsuperuser` needs a TTY; a non-interactive run self-skips it, and the same
+user can be created inside the container with
+`quickscale manage shell -c "from django.contrib.auth import get_user_model; get_user_model().objects.create_superuser('<username>', '<email>', '<password>')"`.
+
 `--split-refs-from-branches` embeds every module from its own `splits/<module>-module` branch. It
 derives the same mapping you would otherwise type as a dozen repeated `--split-ref MODULE=REF`
 arguments, and covers the embed set exactly by construction, so it can neither miss a module nor
@@ -309,6 +328,14 @@ deploy also provisions the restricted runtime database role: it sets `RUNTIME_DB
 before migrating ([railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup)).
 There is no manual database step.
 
+The deploy's variable batch covers the core variables only. For a selection with vendor-backed
+modules, expect the first boot to fail its module startup checks until the Phase 4a test-only
+credentials are set on the application service; `railway redeploy --service myapp` then picks them
+up ([railway.md § Module Vendor Credentials](../deployment/railway.md#module-vendor-credentials)).
+Run without a TTY, the deploy's initialization creates the Railway project non-interactively and
+names it automatically; record the created project for cleanup, and do not pre-link the project
+([railway.md § Deployment Workflow](../deployment/railway.md#deployment-workflow)).
+
 **Step 2 — Watch it boot.**
 
 ```bash
@@ -333,8 +360,9 @@ creates the user on the next deploy.
 **Step 4 — Exercise the site.** Open the URL from the deploy summary and walk the same routes as
 Phase 4a, including `/admin/`.
 
-**Cleanup.** When the loop is finished, delete the Railway project in the dashboard. Each re-run of
-this phase creates a new one, and the free tier allows two.
+**Cleanup.** When the loop is finished, delete the Railway project in the dashboard or with
+`railway delete --project <name-or-id> --yes` (the deletion is scheduled, not immediate). Each
+re-run of this phase creates a new one, and the free tier allows two.
 
 A failure in any step is routed by its cause: a wrong Railway setting is an environment defect
 (re-entry step 4); anything the CLI or the generated project gets wrong is a repository defect
