@@ -251,8 +251,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Successful `bap-web-new` validation and cutover are the operator's proof before publishing
   0.89.0 to PyPI. Any QuickScale defect found follows the release re-entry loop; revalidate the
   final candidate before publication. Switching the recipient to published packages can follow
-  publication. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data
-  and stays out of every repository.
+  publication. The production dump is absent from the documented path
+  (`/home/victor/code/bap-web-prod.dump`); the operator confirmed the production data is
+  backed up elsewhere and stays out of every repository.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
