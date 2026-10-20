@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from quickscale_cli.cli_help import QuickScaleCommand
 from quickscale_cli.commands._module_shared import _LazyModuleChoice
 
 import quickscale_core.utils.git_errors as _git_errors
@@ -17,7 +18,7 @@ import quickscale_core.utils.git_subtree as _git_subtree
 import quickscale_core.utils.git_repo as _git_repo
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.option(
     "--module",
     required=True,
@@ -36,11 +37,6 @@ import quickscale_core.utils.git_repo as _git_repo
 def push(module: str, branch: str, remote: str) -> None:
     r"""
     Push your local module changes to a feature branch for contribution.
-
-    \b
-    Examples:
-      quickscale push --module auth
-      quickscale push --module auth --branch feature/fix-email-validation
 
     \b
     Workflow:

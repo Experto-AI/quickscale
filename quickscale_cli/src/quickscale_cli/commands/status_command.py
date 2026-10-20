@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import click as click
 
+from quickscale_cli.cli_help import QuickScaleCommand
 from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules as find_not_ready_modules,
     get_module_readiness_reason as get_module_readiness_reason,
@@ -59,7 +60,7 @@ import quickscale_cli.commands._status_diagnostics as _status_diagnostics
 import quickscale_cli.commands._status_display as _status_display
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.option(
     "--json",
     "json_output",
@@ -72,11 +73,6 @@ def status(json_output: bool) -> None:
 
     Displays project information, applied modules, pending changes,
     and Docker status for the current QuickScale project.
-
-    \b
-    Examples:
-      quickscale status          # Show status in current directory
-      quickscale status --json   # Output as JSON
 
     \b
     Information displayed:

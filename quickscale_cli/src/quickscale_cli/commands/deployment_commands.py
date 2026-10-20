@@ -12,6 +12,7 @@ from pathlib import Path as Path
 
 import click as click
 
+from quickscale_cli.cli_help import QuickScaleGroup
 from quickscale_cli.commands.contract_vintage import (
     enforce_shipped_contract_vintage as enforce_shipped_contract_vintage,
     record_confirmed_adoption as record_confirmed_adoption,
@@ -58,7 +59,7 @@ import quickscale_cli.commands._deploy_steps as _deploy_steps
 import quickscale_cli.commands._deploy_service_config as _deploy_service_config
 
 
-@click.group()
+@click.group(cls=QuickScaleGroup)
 def deploy() -> None:
     """Deployment commands for production platforms."""
     pass

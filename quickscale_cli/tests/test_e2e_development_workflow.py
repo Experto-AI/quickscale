@@ -1086,8 +1086,10 @@ class TestDevelopmentCommandsE2E:
         finally:
             os.chdir(original_cwd)
 
-    def test_manage_command_no_args(self, test_project, ensure_docker_running):
-        """Test manage command fails with helpful error when no args provided."""
+    def test_manage_command_no_args_reports_stopped_stack(
+        self, test_project, ensure_docker_running, docker_env
+    ):
+        """Test manage command reports a clear message while the stack is down."""
         runner = CliRunner()
         project_path = test_project
 
@@ -1097,9 +1099,10 @@ class TestDevelopmentCommandsE2E:
         os.chdir(project_path)
 
         try:
-            result = runner.invoke(cli, ["manage"])
+            result = runner.invoke(cli, ["manage"], env=docker_env)
             assert result.exit_code == 1
-            assert "No Django management command specified" in result.output
+            assert "Backend container is not running" in result.output
+            assert "quickscale up" in result.output
 
         finally:
             os.chdir(original_cwd)
@@ -1125,6 +1128,12 @@ class TestDevelopmentCommandsE2E:
             ):
                 self._emit_container_diagnostics(str(test_project))
                 assert False, "Backend container did not become running within 40s"
+
+            # Listing needs no command argument once the stack is up.
+            result = runner.invoke(cli, ["manage"], env=docker_env)
+            assert result.exit_code == 0, result.output
+            assert "Django management commands, grouped by app:" in result.output
+            assert "migrate" in result.output
 
             # Run migrations first (up already ran initial migrate, but
             # this verifies the manage command can apply pending migrations)

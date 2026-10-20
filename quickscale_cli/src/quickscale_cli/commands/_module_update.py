@@ -13,6 +13,7 @@ from typing import Any
 
 import click
 
+from quickscale_cli.cli_help import QuickScaleCommand
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 from quickscale_cli.commands._module_update_identity import (
     _collect_update_migration_identity,
@@ -686,7 +687,7 @@ def _report_update_outcome(
     click.secho("\n🎉 Module update complete!", fg="green", bold=True)
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.option(
     "--no-preview",
     is_flag=True,
@@ -714,17 +715,12 @@ def update(
     Update all installed QuickScale modules to their latest versions.
 
     \b
-    Examples:
-      quickscale update           # Update with diff preview
-      quickscale update --no-preview  # Update without preview
-
-    \b
     This command:
       - Reads installed modules from .quickscale/config.yml
       - Updates ONLY modules you've explicitly installed
       - Shows a diff preview before updating (unless --no-preview)
       - Updates the installed version in config after successful update
-            - Commits each successful module update before continuing
+      - Commits each successful module update before continuing
     """
     try:
         _module_shared._validate_update_environment()

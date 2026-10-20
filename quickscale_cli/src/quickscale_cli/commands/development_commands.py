@@ -8,6 +8,13 @@ from pathlib import Path
 
 import click
 
+from quickscale_cli.cli_help import (
+    PassThroughCommand,
+    QuickScaleCommand,
+    TAIL_LINES,
+    list_django_commands,
+    validate_compose_service,
+)
 from quickscale_core.schema.config_schema import QuickScaleConfig
 from quickscale_core.utils.theme_validation import (
     ThemeValidationError,
@@ -518,7 +525,7 @@ def _run_up_services(
         sys.exit(130)
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.option("--build", is_flag=True, help="Rebuild containers before starting")
 @click.option("--no-cache", is_flag=True, help="Build without using cache")
 def up(build: bool, no_cache: bool) -> None:
@@ -547,7 +554,7 @@ def up(build: bool, no_cache: bool) -> None:
     _run_up_services(config, should_build, no_cache, compose_environment)
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.option("--volumes", is_flag=True, help="Remove volumes as well")
 def down(volumes: bool) -> None:
     """Stop Docker services."""
@@ -636,7 +643,7 @@ def _run_docker_exec_command(
             click.echo(result.stderr, nl=False, err=True)
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.option(
     "-c", "--command", "cmd", help="Run a single command instead of interactive shell"
 )
@@ -679,20 +686,22 @@ def shell(cmd: str | None) -> None:
         sys.exit(0)
 
 
-@click.command(context_settings=dict(ignore_unknown_options=True))
+@click.command(
+    cls=PassThroughCommand,
+    context_settings={"ignore_unknown_options": True},
+)
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def manage(args: tuple) -> None:
-    """Run Django management commands in the backend container."""
+    """Run Django management commands in the backend container.
+
+    With no command or --help, list the project's Django management commands,
+    grouped by app, through manage.py help.
+    """
     _validate_project_and_docker()
 
-    if not args:
-        click.secho(
-            "❌ Error: No Django management command specified", fg="red", err=True
-        )
-        click.echo(
-            "💡 Tip: Run 'quickscale manage help' to see available commands", err=True
-        )
-        sys.exit(1)
+    if not args or args in {("--help",), ("-h",)}:
+        list_django_commands(_run_docker_exec_command, get_backend_container_name())
+        return
 
     try:
         container_name = get_backend_container_name()
@@ -718,16 +727,20 @@ def manage(args: tuple) -> None:
         sys.exit(130)
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.argument("service", required=False)
 @click.option("-f", "--follow", is_flag=True, help="Follow log output")
 @click.option(
-    "--tail", default=None, help="Number of lines to show from the end of the logs"
+    "--tail",
+    default=None,
+    type=TAIL_LINES,
+    help="Number of lines to show from the end of the logs, or 'all'",
 )
 @click.option("--timestamps", is_flag=True, help="Show timestamps")
 def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) -> None:
     """View Docker service logs."""
     _validate_project_and_docker()
+    validate_compose_service(service)
 
     try:
         compose_cmd = _require_docker_compose_command()
@@ -759,7 +772,7 @@ def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) 
         sys.exit(0)
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 def ps() -> None:
     """Show service status."""
     _validate_project_and_docker()

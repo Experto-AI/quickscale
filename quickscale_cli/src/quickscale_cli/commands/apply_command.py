@@ -153,6 +153,7 @@ from quickscale_core.apply.steps.types import (
     StepContext as StepContext,
     StepOutcome as StepOutcome,
 )
+from quickscale_cli.cli_help import QuickScaleCommand
 from quickscale_cli.commands._types import ApplyContext as ApplyContext
 from quickscale_cli.commands._types import EmbedModulesResult as EmbedModulesResult
 import quickscale_cli.commands.apply_support as _apply_support
@@ -163,7 +164,7 @@ import quickscale_cli.commands._context as _context
 import quickscale_cli.commands._steps as _steps
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.argument(
     "config",
     required=False,
@@ -237,18 +238,10 @@ def apply(
     embeds selected modules, and optionally starts Docker services.
 
     Apply is resumable from the first unsatisfied step when a
-    recovery checkpoint exists (``.quickscale/apply-recovery.yml``).
+    recovery checkpoint exists (.quickscale/apply-recovery.yml).
     Steps 11-16 are gated behind a destructive/remote confirmation
     prompt: the operator must explicitly confirm before Docker startup,
     database migrations, Railway deploy, or state finalization proceed.
-
-    \b
-    Examples:
-      quickscale apply                    # Use quickscale.yml in current dir
-      quickscale apply myapp/quickscale.yml  # Use specific config file
-      quickscale apply --force            # Overwrite existing project
-      quickscale apply --no-docker        # Skip Docker operations
-      quickscale apply --verbose-docker   # Show Docker build output
 
     \b
     Execution Order:

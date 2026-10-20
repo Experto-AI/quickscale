@@ -42,7 +42,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA303 | Make `quickscale` help show every command, subcommand, and option it reaches | 3 | — | Optional |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -50,7 +49,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA300 (b, c) ──► SA191 (a, b) ──► SA153 (r, f) ──► SA154 (inventory)
 Track 2: SA277 (a3) ──► SA277 (a2, after SA191)
-Track 3: SA303 (CLI help)
+Track 3: SA303 (done)
      release path:  SA300 ──► SA191 ──► operator publish 0.89.0
      critical path: SA300 ──► SA191 ──► SA153 (f)
 ```
@@ -73,7 +72,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA300 (b, browser harness) | yes | yes | yes | yes | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
-| 3 | SA303 | yes | yes | yes | yes | no |
+| 3 | — | no | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -91,8 +90,7 @@ A track is **truly green** only when all three states are yes.
   `scripts/publish_module.py`, the `[build-system]` blocks of every package, the core build
   target, the bundled-manifest build step and the publish-artifact check, `ruff.toml`, the
   test-settings base, stubs and conftest plugin, `scripts/security_suppressions.json`, the
-  gate-script parity families, the CLI apply/deploy/update commands (SA303 edits their help text
-  only, from Track 3), `utils/_dependency_write.py`,
+  gate-script parity families, the CLI apply/deploy/update commands, `utils/_dependency_write.py`,
   and `contract_vintage.py`, the module manifests' `contract_vintage` blocks, `throttle_scopes`
   and `project_contract.yml`, `contracts/module_options.py` and the `.env.example` template,
   `quickscale_core/dr_engine/`, and the billing module (`billing/services.py`,
@@ -111,7 +109,7 @@ A track is **truly green** only when all three states are yes.
   defaults, the generator's Jinja environment, `auth/views.py`, the blog rate limiter, the
   generated `pyproject.toml.j2` `[build-system]` block, orgs' `quickscale_orgs_create_site_org`
   command, the notifications webhook (`_webhooks.py`), the CRM list API and the theme's CRM
-  page, the CLI help (SA303), the generated
+  page, the CLI help, the generated
   theme seam types and the theme hooks that read them, and the frontend decisions in
   `frontend.md`, and, for the conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`, core's `CAPABILITIES`, the adapter hook signature,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
@@ -120,8 +118,6 @@ A track is **truly green** only when all three states are yes.
   `module-extension.md`'s authoring checklist, the five `_anonymization.py` handlers with
   core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
   `decisions.md` § Clean-Break Migration History.
-- **Cross-track edits.** SA303 touches help text in Track 2's CLI command modules; it merges
-  through the serialized queue after any open Track 2 change to those files.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
   `project_contract.yml`, and [decisions.md](decisions.md). Each track resolves the shared set at
@@ -254,35 +250,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 3 — CLI help
 
-- [ ] **SA303 — Make `quickscale` help show every command, subcommand, and option it reaches.**
-
-  `quickscale` and `quickscale --help` list only the 15 top-level command names with a one-line
-  summary, so nothing below them can be found from the top: `deploy railway`; `dr capture`,
-  `execute`, `plan`, `report`; and the options of `apply`, `plan`, `up`, `down`, `logs`, `push`,
-  `remove`, `shell`, `status`, `update`. The pass-through command `manage` shows a bare usage line
-  and never lists the Django commands it forwards (`check`, `migrate`, the modules' own commands).
-
-  A walk of the Click tree (2026-10-20: 15 commands, 5 subcommands, 69 parameters, none hidden)
-  also found help that exists but says nothing:
-  - all 24 `dr` options (`capture`, `plan`, `execute`, `report`) have no help text, and the four
-    `dr` subcommands have no examples; `deploy` and `dr` show no examples either;
-  - positional arguments are named but never described: `apply [CONFIG]`, `remove MODULE_NAME`
-    (valid module names not listed), `logs [SERVICE]`, `manage [ARGS]`;
-  - `plan`'s usage shows `PROJECT_SLUG` as required although it is optional (`plan --add`,
-    `plan --reconfigure` run without it);
-  - `logs --tail` takes `TEXT` instead of an integer (or `all`);
-  - `apply`'s help prints reST double backquotes literally, and `remove`'s numbered list is misindented.
-
-  **Acceptance:** `quickscale` and `quickscale --help` show the full command tree, every group's
-  subcommands and every command's options (or a documented `--all`/`help <command>` that does);
-  each group with no subcommand given shows its subcommands; `quickscale manage` (with or without
-  `--help`) lists the project's Django management commands, grouped by app, through `manage.py
-  help` in the backend container, with a clear message when the stack is down; `quickscale logs
-  --help` names the valid `SERVICE` values (`backend`, `frontend`, `db`, read from the project's compose file); every option and
-  argument has help text, every command and subcommand an example, usage marks optional
-  arguments as optional, and `--tail` validates its value; a test walks the Click command
-  tree so a new command, option, or argument cannot be missing from the help or lack help text
-  (Tier 2-fast).
+- [x] **SA303 — Make `quickscale` help show every command, subcommand, and option it reaches.**
 
 ## Deferred constraints and references
 
