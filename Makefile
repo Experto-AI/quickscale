@@ -46,6 +46,7 @@
 #   make install              - Install QuickScale globally
 #   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
 #   make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first
+#                             BASELINE=1 migrates an existing plan + apply recipient in place instead of regenerating it
 #   make build                - Build all distribution packages
 #   make build-core           - Build the quickscale_core wheel through the one shared core-build step
 #   make publish-build        - Build packages only (no publish)
@@ -260,6 +261,7 @@ help:
 	@echo "                             Optional: REPORT=/abs/path/report.json"
 	@echo "  make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first"
 	@echo "                             Accepts the same DRY_RUN/REPORT options as beta-migrate-fresh"
+	@echo "                             BASELINE=1 migrates an existing plan + apply recipient in place (keeps .git)"
 	@echo ""
 	@echo "Inner loop (fast, while coding):"
 	@echo "  make fix                  - Auto-format + auto-fix lint (write mode)"
@@ -432,25 +434,29 @@ beta-migrate-iterate:
 	recipient=$(call shell_quote,$(call transport_value,RECIPIENT)); \
 	report=$(call shell_quote,$(call transport_value,REPORT)); \
 	dry_run=$(call shell_quote,$(call transport_value,DRY_RUN)); \
+	baseline=$(call shell_quote,$(call transport_value,BASELINE)); \
 	if [ -z "$$donor" ] || [ -z "$$recipient" ]; then \
-		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 REPORT=/abs/path/report.json)."; \
+		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 BASELINE=1 REPORT=/abs/path/report.json)."; \
 		exit 1; \
 	fi; \
-	dry_run_args=""; \
+	iterate_args=""; \
 	if [ "$$dry_run" = "1" ] || [ "$$dry_run" = "true" ] || [ "$$dry_run" = "yes" ]; then \
-		dry_run_args="--dry-run"; \
+		iterate_args="--dry-run"; \
+	fi; \
+	if [ "$$baseline" = "1" ] || [ "$$baseline" = "true" ] || [ "$$baseline" = "yes" ]; then \
+		iterate_args="$$iterate_args --existing-recipient"; \
 	fi; \
 	if [ -n "$$report" ]; then \
 		poetry run python scripts/beta_migrate.py iterate \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
-			$$dry_run_args \
+			$$iterate_args \
 			--report-path "$$report"; \
 	else \
 		poetry run python scripts/beta_migrate.py iterate \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
-			$$dry_run_args; \
+			$$iterate_args; \
 	fi
 
 # --- Testing ---

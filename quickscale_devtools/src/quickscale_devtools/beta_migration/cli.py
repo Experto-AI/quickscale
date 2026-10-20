@@ -70,6 +70,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_common_arguments(iterate)
+    iterate.add_argument(
+        "--existing-recipient",
+        action="store_true",
+        help=(
+            "Skip the regeneration: migrate an existing plan + apply baseline in place, "
+            "keeping its .git history"
+        ),
+    )
 
     return parser
 
@@ -84,6 +92,7 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> BetaMigrationInput:
         recipient=Path(parsed.recipient),
         dry_run=parsed.dry_run,
         report_path=Path(parsed.report_path) if parsed.report_path else None,
+        existing_recipient=getattr(parsed, "existing_recipient", False),
     )
 
 

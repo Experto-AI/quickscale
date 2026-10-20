@@ -167,6 +167,7 @@ class BetaMigrationInput:
     recipient: Path
     dry_run: bool = False
     report_path: Path | None = None
+    existing_recipient: bool = False
 
 
 @dataclass(frozen=True)

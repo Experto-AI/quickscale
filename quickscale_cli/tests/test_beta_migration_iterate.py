@@ -488,3 +488,166 @@ def test_iterate_cli_writes_report_json(
     assert json.loads(payload)["mode"] == "iterate"
     assert report_path.is_file()
     assert json.loads(report_path.read_text())["mode"] == "iterate"
+
+
+def test_parse_cli_args_supports_existing_recipient() -> None:
+    inputs = parse_cli_args(
+        [
+            "iterate",
+            "--donor",
+            "/tmp/donor",
+            "--recipient",
+            "/tmp/recipient",
+            "--existing-recipient",
+        ]
+    )
+    assert inputs.existing_recipient is True
+    assert (
+        parse_cli_args(
+            ["iterate", "--donor", "/tmp/donor", "--recipient", "/tmp/recipient"]
+        ).existing_recipient
+        is False
+    )
+
+
+def test_iterate_existing_recipient_migrates_the_baseline_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", "iterate-donor")
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+    git_marker = recipient / ".git" / "HEAD"
+    git_marker.parent.mkdir()
+    git_marker.write_text("ref: refs/heads/main\n")
+    calls = _install_subprocess_stub(monkeypatch, template=None)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "ready"
+    assert report.phase == "fresh-first-executed"
+    assert not [call for call in calls if call["argv"][:2] == ("quickscale", "apply")]
+    assert "regenerate-recipient" not in [step.step for step in report.completed_steps]
+    skipped = {step.step: step.detail for step in report.skipped_steps}
+    assert "Existing recipient requested" in skipped["regenerate-recipient"]
+    assert any(
+        check.name == "existing-recipient-baseline" and check.status == "passed"
+        for check in report.preflight_checks
+    )
+    assert git_marker.read_text() == "ref: refs/heads/main\n"
+    assert (recipient / "MIGRATION_PROMPT.md").is_file()
+    assert not _iterate_stage_dir(recipient).exists()
+
+
+def test_iterate_existing_recipient_dry_run_plans_no_regeneration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", "iterate-donor")
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("a dry run must not launch subprocesses"),
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "ready"
+    assert [action.step for action in report.planned_actions] == [
+        "read-donor-config",
+        "use-existing-recipient",
+        "run-fresh-first-migration",
+    ]
+    assert not any(action.destructive for action in report.planned_actions)
+
+
+def test_iterate_existing_recipient_blocks_without_an_applied_project(
+    tmp_path: Path,
+) -> None:
+    donor = _write_donor(tmp_path)
+    recipient = tmp_path / "recipient"
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert any("must be an applied QuickScale project" in b for b in report.blockers)
+    assert not recipient.exists()
+
+
+def test_iterate_existing_recipient_blocks_on_a_module_mismatch(
+    tmp_path: Path,
+) -> None:
+    donor = _write_donor(tmp_path, slug="iterate-donor", modules=("auth",))
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "does not match the donor-derived desired state" in b and "modules" in b
+        for b in report.blockers
+    )
+
+
+def test_iterate_existing_recipient_accepts_plan_resolved_required_modules(
+    tmp_path: Path,
+) -> None:
+    donor = _write_donor(
+        tmp_path, slug="iterate-donor", modules=("auth", "listings", "forms")
+    )
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+    planned = ("auth", "listings", "forms", "orgs", "storage", "analytics")
+    planned += ("notifications",)
+    (recipient / "quickscale.yml").write_text(
+        'version: "1"\n'
+        "project:\n"
+        "  slug: iterate-donor\n"
+        "  package: iterate_donor\n"
+        "  theme: showcase_react\n"
+        "modules:\n" + "".join(f"  {name}: null\n" for name in planned) + "docker: {}\n"
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+            existing_recipient=True,
+        )
+    )
+
+    assert not any("does not match" in b for b in report.blockers)
+    assert any(
+        check.name == "existing-recipient-baseline" and check.status == "passed"
+        for check in report.preflight_checks
+    )

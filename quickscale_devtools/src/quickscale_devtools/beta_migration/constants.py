@@ -17,6 +17,10 @@ PHASE_BOUNDARY_REASON = (
 )
 
 
+EXISTING_RECIPIENT_REASON = (
+    "Existing recipient requested. The recipient is the operator's plan + apply baseline and is "
+    "migrated in place; nothing is removed, so its .git history is kept."
+)
 DRY_RUN_REASON = (
     "Dry run requested. Planned actions were reported without mutating donor or recipient files "
     "and without executing verification commands."

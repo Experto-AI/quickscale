@@ -201,17 +201,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
     donor's three modules, no hand modification, no donor content. It passes (d)'s checks again
     and is committed in its own git as the clean baseline, so (f)'s port is reviewable as a diff
     against it (Tier 1).
-  - [ ] (f) Migrate: after (e), carry the donor into `bap-web-new` through
-    `make beta-migrate-iterate` per
+  - [ ] (f) Migrate: after (e), carry the donor into `bap-web-new` in place through
+    `make beta-migrate-iterate BASELINE=1` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
-    SA277's evidence. The donor's `quickscale.yml` names only the three deployed modules and is
-    never edited; if the regeneration does not resolve the four required ones, that is a
-    QuickScale gap fixed in QuickScale, not a hand edit to the recipient. Record the run's
-    QuickScale commit and module refs if they differ from (d)'s, and leave
-    `MIGRATION_PROMPT.md`'s remaining work for SA300 and SA301. `iterate` regenerates by deleting
-    the recipient directory, `.git` included, so it first keeps the recipient's `.git` across the
-    regeneration (a QuickScale tool fix) and the migrated result is committed on top of (e)'s
-    baseline (Tier 2-fast).
+    SA277's evidence. `BASELINE=1` skips the regeneration, so (e)'s project and its `.git` are
+    kept, after checking that its slug, package, theme, and resolved module set match the donor's;
+    the migrated result is committed on top of (e)'s baseline. The donor's `quickscale.yml` names
+    only the three deployed modules and is never edited. Record the run's QuickScale commit and
+    module refs if they differ from (d)'s, and leave `MIGRATION_PROMPT.md`'s remaining work for
+    SA300 and SA301 (Tier 2-fast).
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 

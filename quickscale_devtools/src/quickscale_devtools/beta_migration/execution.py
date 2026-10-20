@@ -1,6 +1,7 @@
 """Deterministic fresh-first execution and verification."""
 
 from .constants import (
+    EXISTING_RECIPIENT_REASON,
     FRESH_FIRST_COMPONENT_DIR_SKIP,
     FRESH_FIRST_COPY_MISSING_DIRS,
     FRESH_FIRST_DONOR_DJANGO_FILES,
@@ -746,6 +747,19 @@ def _run_beta_migration_iterate(
     """Regenerate the throwaway recipient, then run the fresh-first workflow."""
     report = _plan_beta_migration_iterate(inputs, execution_intent="run")
     if report.blockers or inputs.dry_run:
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return report
+
+    if inputs.existing_recipient:
+        _append_skipped_step(
+            report, step="regenerate-recipient", detail=EXISTING_RECIPIENT_REASON
+        )
+        report = _prepare_beta_migration_report(
+            inputs, execution_intent="run", report=report
+        )
+        if report.blockers:
+            return report
+        report = _execute_fresh_first(report)
         report.pending_manual_actions = _build_pending_manual_actions(report)
         return report
 
