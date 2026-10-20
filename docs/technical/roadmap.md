@@ -189,8 +189,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [x] (a) Extract the coding styles of the current `bap-web` (tokens, typography, spacing,
     components) into a design system in the regenerated project's theme, and apply it (Tier 2-full).
-    Landed in `bap-web-new` at `ffa3c738`: `frontend/design/` is the single token source, the
-    shell/module contract tokens are restored, and `frontend/src/test/designSystem.test.ts` pins it.
+    Landed in `bap-web-new` (design system at `ffa3c738`, review fixes at `7891405`):
+    `frontend/design/` is the single token source, the shell/module contract tokens are restored,
+    and `frontend/src/test/designSystem.test.ts` pins it.
   - [ ] (b) Browser harness: fix the stale `e2e/home.spec.ts.j2`, crawl the live menu to fix the
     required page list, and add the page-by-page comparison above of the local `bap-web-new`
     deployment against the live site (Tier 2-full).
