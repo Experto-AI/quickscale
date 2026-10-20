@@ -179,13 +179,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `storage` (listings), `analytics` (forms), and `notifications` (orgs, forms), so
     `bap-web-new` is generated with `auth`, `listings`, `forms`, `orgs`, `storage`, `analytics`,
     `notifications`; their package dependencies come from each `module.yml`.
-  - [ ] (c) Delete `bap-web-new`: the operator authorized the deletion on 2026-10-19, and (a) is
-    verified; remove `/home/victor/code/bap-web-new` entirely, including its git history,
-    `.quickscale/` state, and the three PostgreSQL containers with their anonymous volumes:
-    `qs-bap-dev-pg` (its `.env` database, port 5432), `qs-bap-prod-scratch-pg` (SA191's
-    earlier scratch restores of the production dump; SA191 rebuilds scratch from the dump), and
-    `qs-bap-suite-pg` (port 5433, the old `bap-web`'s local database; the operator authorized
-    its removal on 2026-10-20) (Tier 1).
+  - [x] (c) Deleted on 2026-10-20: removed `/home/victor/code/bap-web-new` (1.4 GB, including
+    its git history and `.quickscale/` state) and the three PostgreSQL containers with their
+    anonymous volumes — `qs-bap-dev-pg`, `qs-bap-prod-scratch-pg`, and `qs-bap-suite-pg`. The
+    production dump was absent at the documented path; the operator confirmed the production
+    data is backed up elsewhere and authorized the scratch container's removal (Tier 1).
   - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s seven
     modules, carrying the donor through `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
