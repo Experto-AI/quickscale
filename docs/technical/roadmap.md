@@ -46,7 +46,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA302 | Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet | 3 | — | Optional |
 | SA303 | Make `quickscale` help show every command, subcommand, and option it reaches | 2 | — | Optional |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191 | Optional |
 
@@ -56,7 +55,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 Track 1: SA299 (regenerate, landed) ──► SA300 (design parity) ──► SA191 (cutover)
          ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2, a3), SA303 (CLI help)
-Track 3: SA302 (orgs checks before migrate)
+Track 3: — (SA302 landed)
      release path:  SA299 (landed) ──► SA300 ──► SA191 (validation + cutover) ──► operator publish 0.89.0
      critical path: SA299 (landed) ──► SA300 ──► SA191 ──► SA153 (f)
 ```
@@ -90,7 +89,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA300 (b, browser harness) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
-| 3 | SA302 | yes | yes | yes | yes | no |
+| 3 | — | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -203,8 +202,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA191 — Validate and cut over the regenerated `bap-web-new`.**
 
   Targets the project SA299 regenerated, with SA300's parity and SA301's features in place.
-  The `quickscale_orgs.W004`/`W007` warnings a fresh stack prints during its first `migrate` are
-  SA302's pre-migration noise, not a defect: run `manage check` after migrations and require none.
+  A fresh stack's first `migrate` prints no `quickscale_orgs.W004`/`W007` for schema its own
+  migrations are about to install, and `manage check` after migrations reports none.
   `scripts/cutover.sh` and `CUTOVER.md` are re-ported from SA299 (a)'s salvage; they rebuild a
   fresh database, reseed the catalog under the restricted runtime role (billing disabled),
   verify, and roll back, and are rehearsed on scratch again. The modules the donor did not run
@@ -346,19 +345,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA301 — Inventory and port `bap-web`'s custom forms and features.**
 
-- [ ] **SA302 — Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet.**
-
-  Found on SA299 (e)'s fresh `bap-web-new`: `migrate` runs the system checks before it applies
-  anything, so every tenant model of forms and listings reported `quickscale_orgs.W004` (FORCE
-  RLS policy) and `W007` (composite FK) although their `0001_initial` installs both; after
-  migrating, `manage check` reports none. The noise teaches operators to ignore warnings that
-  matter when real. The same output carries Django's "Accessing the database during app
-  initialization" warning from a `ready()` query.
-
-  **Acceptance:** a model whose table or migration is not applied yet is skipped (or reported
-  once as pending migrations) instead of W004/W007; a migrated non-compliant table still warns;
-  a fresh `quickscale up` prints no W004/W007; the `ready()` database access is found and moved
-  out of app initialization or justified (Tier 2-fast).
+- [x] **SA302 — Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet.**
 
 ## Deferred constraints and references
 

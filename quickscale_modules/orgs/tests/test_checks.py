@@ -468,9 +468,15 @@ class TestCheckTenantReferenceEqualityW007:
     """A tenant-to-tenant FK without composite equality is reported."""
 
     @patch("quickscale_modules_orgs._tenancy_references.tenant_reference_equality_gaps")
-    def test_returns_w007_on_discovery_exception(self, mock_gaps: MagicMock) -> None:
+    def test_returns_w007_on_discovery_exception(
+        self, mock_gaps: MagicMock, monkeypatch: MonkeyPatch
+    ) -> None:
         from quickscale_modules_orgs.checks import check_tenant_reference_equality
 
+        monkeypatch.setattr(
+            "quickscale_modules_orgs.checks._models_awaiting_schema",
+            lambda models: frozenset(),
+        )
         mock_gaps.side_effect = ValueError("Simulated reference failure")
 
         messages = check_tenant_reference_equality(app_configs=None)
@@ -480,9 +486,15 @@ class TestCheckTenantReferenceEqualityW007:
         assert "Failed to read the tenant-reference equality state" in messages[0].msg
 
     @patch("quickscale_modules_orgs._tenancy_references.tenant_reference_equality_gaps")
-    def test_returns_w007_for_each_gap(self, mock_gaps: MagicMock) -> None:
+    def test_returns_w007_for_each_gap(
+        self, mock_gaps: MagicMock, monkeypatch: MonkeyPatch
+    ) -> None:
         from quickscale_modules_orgs.checks import check_tenant_reference_equality
 
+        monkeypatch.setattr(
+            "quickscale_modules_orgs.checks._models_awaiting_schema",
+            lambda models: frozenset(),
+        )
         mock_gaps.return_value = (
             "acme_app.propertylisting.agent references acme_app.agent without a "
             "composite (fk, organization_id) constraint",
@@ -497,9 +509,15 @@ class TestCheckTenantReferenceEqualityW007:
         assert "tenant_reference_exemptions" in messages[0].hint
 
     @patch("quickscale_modules_orgs._tenancy_references.tenant_reference_equality_gaps")
-    def test_no_gaps_returns_no_messages(self, mock_gaps: MagicMock) -> None:
+    def test_no_gaps_returns_no_messages(
+        self, mock_gaps: MagicMock, monkeypatch: MonkeyPatch
+    ) -> None:
         from quickscale_modules_orgs.checks import check_tenant_reference_equality
 
+        monkeypatch.setattr(
+            "quickscale_modules_orgs.checks._models_awaiting_schema",
+            lambda models: frozenset(),
+        )
         mock_gaps.return_value = ()
 
         assert check_tenant_reference_equality(app_configs=None) == []
