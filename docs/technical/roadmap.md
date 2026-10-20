@@ -87,7 +87,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA299 (regenerate) | yes | no | yes | no | yes |
+| 1 | SA299 (d, baseline) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | SA301 (after SA299) | no | no | yes | no | yes |
 
@@ -184,14 +184,21 @@ suite, and merge only the reviewed delivery through the serialized queue.
     anonymous volumes — `qs-bap-dev-pg`, `qs-bap-prod-scratch-pg`, and `qs-bap-suite-pg`. The
     production dump was absent at the documented path; the operator confirmed the production
     data is backed up elsewhere and authorized the scratch container's removal (Tier 1).
-  - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s seven
-    modules, carrying the donor through `make beta-migrate-iterate` per
+  - [ ] (d) Baseline: generate a throwaway project with the local 0.89.0 through `quickscale plan`
+    and `quickscale apply --split-refs-from-branches`, with only the donor's three modules and no
+    donor content. It must resolve exactly (b)'s seven modules and pass `quickscale up` (image
+    build), `migrate`, and `pytest`, so a failure in (e) is attributable to the port rather than
+    to 0.89.0 (`make beta-migrate-iterate DRY_RUN=1` only plans and generates nothing). A failure
+    here is a QuickScale gap fixed in QuickScale. Record the QuickScale commit, install method, and
+    module refs (Tier 2-fast).
+  - [ ] (e) Migrate: after (d) passes, generate `bap-web-new` and carry the donor through
+    `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
     SA277's evidence. The donor's `quickscale.yml` names only the three deployed modules and is
     never edited; if the regeneration does not resolve the four required ones, that is a
-    QuickScale gap fixed in QuickScale, not a hand edit to the recipient. Record the QuickScale
-    commit, install method, and module refs, and leave `MIGRATION_PROMPT.md`'s remaining work
-    for SA300 and SA301 (Tier 2-fast).
+    QuickScale gap fixed in QuickScale, not a hand edit to the recipient. Record the run's
+    QuickScale commit and module refs if they differ from (d)'s, and leave
+    `MIGRATION_PROMPT.md`'s remaining work for SA300 and SA301 (Tier 2-fast).
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 

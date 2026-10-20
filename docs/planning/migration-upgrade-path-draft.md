@@ -3,7 +3,7 @@
 > **Draft for SA277 (a2).** This is SA277 (a1)'s handoff note: not policy until it lands in
 > [decisions.md](../technical/decisions.md). It is drafted from SA191's landed `bap-web` port
 > and rehearsal, whose recipient SA299 replaces (preserved in `~/code/bap-web-new-salvage/`);
-> (a2) confirms or amends it against SA299 (d)'s fresh run report and the cutover evidence, moves it into
+> (a2) confirms or amends it against SA299 (e)'s fresh run report and the cutover evidence, moves it into
 > decisions, and prunes the operator docs of steps either stage covers.
 
 **Decision:** One upgrade path in two stages. `beta_migration` does the deterministic work it
