@@ -14,6 +14,7 @@ from quickscale_core.generator.ci_environment import (
     CI_ENVIRONMENT_RELATIVE_PATH,
     ci_environment_entries,
     render_ci_environment,
+    seed_local_environment,
 )
 
 
@@ -89,3 +90,18 @@ def test_render_sorts_and_terminates_every_line() -> None:
 def test_render_empty_is_empty() -> None:
     """No declared entry renders an empty file the load step appends safely."""
     assert render_ci_environment({}) == ""
+
+
+def test_seed_local_environment_appends_missing_and_fills_empty() -> None:
+    entries = {"A_SECRET": "a_ci", "B_SECRET": "b_ci", "C_SECRET": "c_ci"}
+    content = "PORT=8000\nB_SECRET=\nC_SECRET=real\n# A_SECRET=commented\n"
+    seeded = seed_local_environment(content, entries)
+    assert "B_SECRET=b_ci\n" in seeded
+    assert "C_SECRET=real\n" in seeded
+    assert seeded.endswith("A_SECRET=a_ci\n")
+    assert seed_local_environment(seeded, entries) == seeded
+
+
+def test_seed_local_environment_keeps_complete_content() -> None:
+    content = "A_SECRET=x\n"
+    assert seed_local_environment(content, {"A_SECRET": "a_ci"}) == content

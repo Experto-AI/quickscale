@@ -200,10 +200,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `quickscale apply --split-refs-from-branches`, at (d)'s module refs on the installed 0.89.0
     (`cca2eac9`, generator identical to (d)'s): slug `bap-web`, package `bap_web`, theme
     `showcase_react`, the donor's three modules resolving to (b)'s seven; no hand modification,
-    no donor content. It passed `quickscale up --build`, `quickscale manage migrate`, and the
-    generated `make test-backend` (10 passed), and is committed clean as `eba03af` in its own
-    git; a `make beta-migrate-iterate BASELINE=1 DRY_RUN=1` dry run accepts it as matching the
-    donor-derived state (Tier 1).
+    no donor content. It is committed clean as `eba03af` in its own git, and a `make
+    beta-migrate-iterate BASELINE=1 DRY_RUN=1` dry run accepts it as matching the donor-derived
+    state. Its generated `.env` lacked the notifications webhook secret, so `quickscale up`
+    failed E003 until `apply` learned to seed the `ci_env` placeholders into a missing or empty
+    `.env` entry; with them `quickscale up` and its migrations pass (Tier 1).
   - [ ] (f) Migrate: after (e), carry the donor into `bap-web-new` in place through
     `make beta-migrate-iterate BASELINE=1` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes

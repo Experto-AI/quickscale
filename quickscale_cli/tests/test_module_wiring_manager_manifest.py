@@ -1691,3 +1691,19 @@ class TestRegenerateManagedWiringEmptySelection:
             )
         finally:
             _md._modules_base_path = original_override
+
+
+def test_seed_local_environment_fills_dotenv_only_when_present(tmp_path) -> None:
+    from quickscale_cli.utils.module_wiring_manager import _seed_local_environment
+
+    entries = {"QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": "whsec_x"}
+    _seed_local_environment(tmp_path, entries)
+    assert not (tmp_path / ".env").exists()
+
+    (tmp_path / ".env").write_text("PORT=8000\n")
+    _seed_local_environment(tmp_path, entries)
+    assert (
+        (tmp_path / ".env")
+        .read_text()
+        .endswith("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=whsec_x\n")
+    )

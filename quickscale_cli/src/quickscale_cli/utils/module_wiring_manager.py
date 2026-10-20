@@ -20,6 +20,7 @@ from quickscale_core.generator.ci_environment import (
     CI_ENVIRONMENT_RELATIVE_PATH,
     ci_environment_entries,
     render_ci_environment,
+    seed_local_environment,
 )
 from quickscale_core.generator.operations_page import (
     OPERATIONS_PAGE_RELATIVE_PATH,
@@ -315,6 +316,22 @@ def _write_ci_environment(project_path: Path, entries: Mapping[str, str]) -> Non
     target_path.write_text(render_ci_environment(entries))
 
 
+def _seed_local_environment(project_path: Path, entries: Mapping[str, str]) -> None:
+    """Fill the local ``.env`` with the CI placeholders it lacks.
+
+    Without them an enabled module's startup check (for example the
+    notifications webhook secret) stops ``quickscale up`` on a fresh project.
+    A project without ``.env`` is left alone, and set values are kept.
+    """
+    env_path = project_path / ".env"
+    if not env_path.is_file():
+        return
+    content = env_path.read_text()
+    seeded = seed_local_environment(content, entries)
+    if seeded != content:
+        env_path.write_text(seeded)
+
+
 def _write_operations_page(project_path: Path, content: str) -> None:
     """Write the managed operations page (SA286).
 
@@ -345,6 +362,7 @@ def _write_wiring_files(
         write_managed_wiring(package_dir, specs)
         _write_seam_files(project_path)
         _write_ci_environment(project_path, ci_entries)
+        _seed_local_environment(project_path, ci_entries)
         _write_operations_page(project_path, operations_page)
     except Exception as error:
         return False, f"Failed to write managed wiring files: {error}"

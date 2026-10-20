@@ -36,6 +36,7 @@ __all__ = [
     "CI_ENVIRONMENT_RELATIVE_PATH",
     "ci_environment_entries",
     "render_ci_environment",
+    "seed_local_environment",
 ]
 
 #: Project-relative path of the managed CI environment file.  Generation
@@ -118,3 +119,41 @@ def render_ci_environment(entries: Mapping[str, str]) -> str:
     why comments and blank lines are excluded).
     """
     return "".join(f"{name}={entries[name]}\n" for name in sorted(entries))
+
+
+def seed_local_environment(content: str, entries: Mapping[str, str]) -> str:
+    """Return the local ``.env`` *content* with missing *entries* filled in.
+
+    An enabled module's startup check refuses an empty credential, so a
+    freshly applied project whose ``.env`` lacks one cannot start its local
+    stack.  The same non-live placeholders the CI file carries are written for
+    every variable that is absent or assigned an empty value; a variable the
+    developer set to anything else is never touched.  ``.env`` is excluded
+    from the Docker build context, so the placeholders never reach a deployed
+    image.
+    """
+    lines = content.splitlines()
+    assigned: dict[str, int] = {}
+    for index, line in enumerate(lines):
+        name, sep, _value = line.partition("=")
+        if sep and not line.lstrip().startswith("#"):
+            assigned[name.strip()] = index
+
+    missing: list[str] = []
+    for name in sorted(entries):
+        index = assigned.get(name)
+        if index is None:
+            missing.append(f"{name}={entries[name]}")
+        elif not lines[index].partition("=")[2].strip():
+            lines[index] = f"{name}={entries[name]}"
+
+    if missing:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(
+            "# Non-live local placeholders for enabled modules (quickscale apply)"
+        )
+        lines.extend(missing)
+    if not lines:
+        return content
+    return "\n".join(lines) + "\n"
