@@ -48,6 +48,8 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300, SA301 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
+| SA302 | Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet | 3 | — | Optional |
+| SA303 | Make `quickscale --help` and `quickscale manage --help` show the commands they reach | 2 | — | Optional |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -55,8 +57,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA299 (regenerate) ──► SA300 (design parity) ──► SA191 (cutover)
          ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA277 (a2, a3)
-Track 3: SA301 (custom forms and features, after SA299)
+Track 2: SA277 (a2, a3), SA303 (CLI help)
+Track 3: SA301 (custom forms and features, after SA299), SA302 (orgs checks before migrate)
      release path:  SA299 ──► SA300 + SA301 ──► SA191 (validation + cutover) ──► operator publish 0.89.0
      critical path: SA299 ──► SA300 / SA301 ──► SA191 ──► SA153 (f)
 ```
@@ -254,6 +256,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA191 — Validate and cut over the regenerated `bap-web-new`.**
 
   Targets the project SA299 regenerated, with SA300's parity and SA301's features in place.
+  The `quickscale_orgs.W004`/`W007` warnings a fresh stack prints during its first `migrate` are
+  SA302's pre-migration noise, not a defect: run `manage check` after migrations and require none.
   `scripts/cutover.sh` and `CUTOVER.md` are re-ported from SA299 (a)'s salvage; they rebuild a
   fresh database, reseed the catalog under the restricted runtime role (billing disabled),
   verify, and roll back, and are rehearsed on scratch again. The modules the donor did not run
@@ -360,6 +364,33 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (a3) The supported source-version range, test projects generated at each version in it
     with `beta_migration` smoke runs against them, and the prompt moved into the QuickScale
     repository as a versioned artifact (Tier 2-full).
+
+- [ ] **SA303 — Make `quickscale --help` and `quickscale manage --help` show the commands they reach.**
+
+  `quickscale --help` lists only top-level commands, and `quickscale manage --help` shows a bare
+  usage line with no Django commands, so `manage check`, `manage migrate`, and the modules' own
+  commands cannot be found from the CLI.
+
+  **Acceptance:** top-level help shows the subcommands of each group (or how to list them);
+  `quickscale manage --help` (and `manage` with no arguments) lists the project's Django
+  management commands, grouped by app, or forwards to `manage.py help` in the backend container,
+  with a clear message when the stack is down; tests pin both outputs (Tier 2-fast).
+
+### Track 3 — custom features and tenancy
+
+- [ ] **SA302 — Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet.**
+
+  Found on SA299 (e)'s fresh `bap-web-new`: `migrate` runs the system checks before it applies
+  anything, so every tenant model of forms and listings reported `quickscale_orgs.W004` (FORCE
+  RLS policy) and `W007` (composite FK) although their `0001_initial` installs both; after
+  migrating, `manage check` reports none. The noise teaches operators to ignore warnings that
+  matter when real. The same output carries Django's "Accessing the database during app
+  initialization" warning from a `ready()` query.
+
+  **Acceptance:** a model whose table or migration is not applied yet is skipped (or reported
+  once as pending migrations) instead of W004/W007; a migrated non-compliant table still warns;
+  a fresh `quickscale up` prints no W004/W007; the `ready()` database access is found and moved
+  out of app initialization or justified (Tier 2-fast).
 
 ## Deferred constraints and references
 
