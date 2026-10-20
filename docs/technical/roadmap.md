@@ -173,7 +173,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Page list.** Required: the home page and every page reachable from a menu item. Any other
   page is listed in (b)'s handoff and the operator decides whether it joins the required set.
 
-  **Parity bar.** A required page has no differences when, at desktop (1440×900) and mobile
+  **Parity bar.** A required page has no differences when, at desktop (1280×720) and mobile
   (390×844) viewports, against the live page:
   - the screenshot pixel diff is at most 1% of the page area, with an anti-aliasing tolerance
     (`pixelmatch` threshold 0.1) and with data-driven regions masked (listing photos, prices,
@@ -193,7 +193,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     and `frontend/src/test/designSystem.test.ts` pins it.
   - [ ] (b) Browser harness: fix the stale `e2e/home.spec.ts.j2`, crawl the live menu to fix the
     required page list, and add the page-by-page comparison above of the local `bap-web-new`
-    deployment against the live site (Tier 2-full).
+    deployment against the live site. The local side runs `quickscale up` in `bap-web-new`
+    (its `start.sh` migrates and seeds the forms presets), then
+    `quickscale manage properties_seed_catalog` to load the catalog; the harness documents both
+    steps and runs against that stack (Tier 2-full).
   - [ ] (c) Iterate until every required page meets the parity bar. Spotted improvements are
     recorded as a separate list and do not block parity (Tier 2-fast).
 
