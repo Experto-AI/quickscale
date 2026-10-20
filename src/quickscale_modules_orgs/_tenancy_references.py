@@ -121,6 +121,8 @@ def _tenant_reference_exemptions(model: type[models.Model]) -> dict[str, str]:
 
 def get_tenant_references(
     tenant_models: Iterable[type[models.Model]] | None = None,
+    *,
+    skip_exemption_validation: frozenset[str] = frozenset(),
 ) -> tuple[TenantReference, ...]:
     """Derive every tenant-to-tenant foreign key from model metadata.
 
@@ -131,6 +133,12 @@ def get_tenant_references(
     parent's primary key unless the relation declares ``to_field``).  The
     reference's composite constraint exemption (if any) is resolved from the
     child model's declaration.
+
+    ``skip_exemption_validation`` names models whose declaration must not be
+    read yet.  They stay in the model universe — so a non-pending child's
+    foreign key to a pending parent is still classified as a tenant
+    reference — but their own exemption declaration is not validated and
+    resolves to no exemption.
 
     Multi-table-inheritance parent links are not references: a child table
     stores no local ``organization_id`` column for them.
@@ -145,7 +153,10 @@ def get_tenant_references(
     tenant_set = set(candidates)
     references: list[TenantReference] = []
     for model in candidates:
-        exemptions = _tenant_reference_exemptions(model)
+        if model._meta.label_lower in skip_exemption_validation:
+            exemptions: dict[str, str] = {}
+        else:
+            exemptions = _tenant_reference_exemptions(model)
         for field in model._meta.get_fields():
             if not isinstance(field, models.ForeignKey):
                 continue
@@ -216,6 +227,8 @@ def find_composite_reference_constraint(
 
 def tenant_reference_equality_gaps(
     tenant_models: Iterable[type[models.Model]] | None = None,
+    *,
+    pending_labels: frozenset[str] = frozenset(),
 ) -> tuple[str, ...]:
     """Return one message per tenant reference without storage equality.
 
@@ -223,12 +236,23 @@ def tenant_reference_equality_gaps(
     ``tenant_reference_exemptions`` entry covers, an unreadable declaration,
     and an exemption that names no tenant-to-tenant foreign key.  The
     catalog is read only on PostgreSQL databases.
+
+    ``pending_labels`` names the models whose table or app migrations are not
+    applied yet.  Their exemption declarations are not validated and their
+    references are not catalog-checked, because the catalog describes a schema
+    the migration has not installed and W007 would report a false gap while
+    ``migrate`` runs its pre-apply checks.  They stay in the model universe, so
+    a non-pending child's exemption for a pending parent still classifies as a
+    tenant reference instead of looking stale.
     """
     if tenant_models is None:
         tenant_models = get_tenant_models()
     candidates = list(tenant_models)
     try:
-        references = get_tenant_references(candidates)
+        references = get_tenant_references(
+            candidates,
+            skip_exemption_validation=pending_labels,
+        )
     except ValueError as exc:
         return (str(exc),)
 
@@ -239,10 +263,12 @@ def tenant_reference_equality_gaps(
             reference.field_name
         )
     for model in candidates:
+        model_label = model._meta.label_lower
+        if model_label in pending_labels:
+            continue
         declaration = getattr(model, TENANT_REFERENCE_EXEMPTIONS_ATTRIBUTE, None)
         if declaration is None:
             continue
-        model_label = model._meta.label_lower
         declared_fields = reference_fields.get(model_label, set())
         for field_name in declaration:
             if field_name not in declared_fields:
@@ -258,6 +284,11 @@ def tenant_reference_equality_gaps(
 
     for reference in references:
         if reference.exempt_reason is not None:
+            continue
+        if (
+            reference.model_label in pending_labels
+            or reference.parent_label in pending_labels
+        ):
             continue
         if find_composite_reference_constraint(reference) is None:
             gaps.append(

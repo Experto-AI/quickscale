@@ -38,6 +38,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import warnings
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -574,3 +575,39 @@ def test_rls_guard_noop_when_query_returns_none(settings: Any) -> None:
 
     with patch("quickscale_modules_orgs.checks.connection", mock_conn):
         assert check_rls_role() == []
+
+
+def test_rls_guard_silences_djangos_app_initialization_warning(
+    settings: Any,
+) -> None:
+    """The deliberate eager catalog read does not print Django's generic warning.
+
+    The boot guard must query ``pg_roles`` from ``ready()`` so a WSGI process
+    refuses to start under a privileged role.  Django warns about *any* query
+    made during app initialization; the guard suppresses that one expected
+    warning so operators see the guard's own refusal, not generic noise.
+    """
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    settings.DEBUG = False
+    mock_conn = _mock_postgres_connection(rolbypassrls=False)
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+
+    def _emit_app_initialization_warning(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        warnings.warn(
+            "Accessing the database during app initialization is discouraged. "
+            "To fix this warning, avoid executing queries in AppConfig.ready() "
+            "or when your app modules are imported.",
+            RuntimeWarning,
+        )
+
+    mock_cursor.execute.side_effect = _emit_app_initialization_warning
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with patch("quickscale_modules_orgs.checks.connection", mock_conn):
+            assert check_rls_role() == []
+
+    assert not [
+        warning for warning in caught if "app initialization" in str(warning.message)
+    ]
