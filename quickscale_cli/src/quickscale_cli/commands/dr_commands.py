@@ -17,6 +17,7 @@ from typing import Any
 
 import click as click
 
+from quickscale_cli.cli_help import QuickScaleGroup
 from quickscale_core.contracts.module_options import (
     get_env_var_portability as get_env_var_portability,
 )
@@ -51,17 +52,32 @@ import quickscale_cli.commands._dr_report as _dr_report
 _ENV_MANIFEST_FILENAME = _primitives._ENV_VAR_MANIFEST_FILENAME
 
 
-@click.group()
+@click.group(cls=QuickScaleGroup)
 def dr() -> None:
     """Disaster-recovery and environment-migration workflows."""
 
 
 @dr.command()
-@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
-@click.option("--source-service")
-@click.option("--source-railway-environment")
-@click.option("--resume", "resume_snapshot_id")
-@click.option("--json", "as_json", is_flag=True)
+@click.option(
+    "--route",
+    type=_dr_context._ROUTE_CHOICE,
+    required=True,
+    help="DR route label for the source and target environments.",
+)
+@click.option(
+    "--source-service",
+    help="Railway service to capture from (required for Railway-source routes).",
+)
+@click.option(
+    "--source-railway-environment",
+    help="Railway environment to capture from; defaults to the linked Railway environment.",
+)
+@click.option(
+    "--resume",
+    "resume_snapshot_id",
+    help="Stored snapshot ID to resume instead of capturing a new one.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Print the JSON payload.")
 def capture(
     route: str,
     source_service: str | None,
@@ -91,13 +107,30 @@ def capture(
 
 
 @dr.command()
-@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
-@click.option("--snapshot-id", required=True)
-@click.option("--source-service")
-@click.option("--target-service")
-@click.option("--source-railway-environment")
-@click.option("--target-railway-environment")
-@click.option("--json", "as_json", is_flag=True)
+@click.option(
+    "--route",
+    type=_dr_context._ROUTE_CHOICE,
+    required=True,
+    help="DR route label for the source and target environments.",
+)
+@click.option("--snapshot-id", required=True, help="Stored snapshot ID to plan.")
+@click.option(
+    "--source-service",
+    help="Railway source service (required for Railway-source routes).",
+)
+@click.option(
+    "--target-service",
+    help="Railway target service (required for Railway-target routes).",
+)
+@click.option(
+    "--source-railway-environment",
+    help="Railway source environment; defaults to the linked Railway environment.",
+)
+@click.option(
+    "--target-railway-environment",
+    help="Railway target environment; defaults to the linked Railway environment.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Print the JSON payload.")
 def plan(
     route: str,
     snapshot_id: str,
@@ -287,19 +320,46 @@ def _mark_partial_execute_payload(execute_payload: dict[str, Any]) -> None:
 
 
 @dr.command()
-@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
-@click.option("--snapshot-id", required=True)
-@click.option("--source-service")
-@click.option("--target-service")
-@click.option("--source-railway-environment")
-@click.option("--target-railway-environment")
-@click.option("--database", is_flag=True)
-@click.option("--media", is_flag=True)
-@click.option("--env-vars", is_flag=True)
-@click.option("--rollback-pin-hours", type=int)
-@click.option("--rollback-pin-reason")
-@click.option("--resume", is_flag=True)
-@click.option("--json", "as_json", is_flag=True)
+@click.option(
+    "--route",
+    type=_dr_context._ROUTE_CHOICE,
+    required=True,
+    help="DR route label for the source and target environments.",
+)
+@click.option("--snapshot-id", required=True, help="Stored snapshot ID to execute.")
+@click.option(
+    "--source-service",
+    help="Railway source service (required for Railway-source routes).",
+)
+@click.option(
+    "--target-service",
+    help="Railway target service (required for Railway-target routes).",
+)
+@click.option(
+    "--source-railway-environment",
+    help="Railway source environment; defaults to the linked Railway environment.",
+)
+@click.option(
+    "--target-railway-environment",
+    help="Railway target environment; defaults to the linked Railway environment.",
+)
+@click.option("--database", is_flag=True, help="Restore the database surface.")
+@click.option("--media", is_flag=True, help="Synchronize the media surface.")
+@click.option(
+    "--env-vars", is_flag=True, help="Synchronize portable environment variables."
+)
+@click.option(
+    "--rollback-pin-hours",
+    type=int,
+    help="Hours the rollback pin stays active for production routes.",
+)
+@click.option("--rollback-pin-reason", help="Reason recorded with the rollback pin.")
+@click.option(
+    "--resume",
+    is_flag=True,
+    help="Resume the latest execute record and skip completed surfaces.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Print the JSON payload.")
 def execute(
     route: str,
     snapshot_id: str,
@@ -438,11 +498,22 @@ def execute(
 
 
 @dr.command()
-@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
-@click.option("--snapshot-id", required=True)
-@click.option("--source-service")
-@click.option("--source-railway-environment")
-@click.option("--json", "as_json", is_flag=True)
+@click.option(
+    "--route",
+    type=_dr_context._ROUTE_CHOICE,
+    required=True,
+    help="DR route label for the source and target environments.",
+)
+@click.option("--snapshot-id", required=True, help="Stored snapshot ID to report on.")
+@click.option(
+    "--source-service",
+    help="Railway source service (required for Railway-source routes).",
+)
+@click.option(
+    "--source-railway-environment",
+    help="Railway source environment; defaults to the linked Railway environment.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Print the JSON payload.")
 def report(
     route: str,
     snapshot_id: str,

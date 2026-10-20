@@ -567,13 +567,28 @@ class TestManageCommand:
             with patch(
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
-                mock_in_project.return_value = True
-                mock_docker.return_value = True
+                with patch(
+                    "quickscale_cli.commands.development_commands.get_backend_container_name"
+                ) as mock_container:
+                    with patch(
+                        "quickscale_cli.commands.development_commands._run_docker_exec_command"
+                    ) as mock_exec:
+                        mock_in_project.return_value = True
+                        mock_docker.return_value = True
+                        mock_container.return_value = "myproject_backend"
 
-                result = runner.invoke(manage)
+                        result = runner.invoke(manage)
 
-                assert result.exit_code == 1
-                assert "No Django management command specified" in result.output
+                        assert result.exit_code == 0, result.output
+                        assert (
+                            "Django management commands, grouped by app:"
+                            in result.output
+                        )
+                        mock_exec.assert_called_once_with(
+                            "myproject_backend",
+                            ["python", "manage.py", "help"],
+                            capture=True,
+                        )
 
 
 class TestLogsCommand:

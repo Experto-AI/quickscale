@@ -138,6 +138,14 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 <a id="cli-command-matrix"></a>
 ## CLI Commands
 
+**Help and discovery:**
+- `quickscale --help` prints the full command tree: every group's subcommands, every command's
+  options and arguments, and an example for each command.
+- `quickscale manage` with no command, or with `--help`, lists the project's Django management
+  commands grouped by app through `manage.py help` in the backend container.
+- `quickscale logs [service]` accepts the services declared in the project's `docker-compose.yml`
+  (`backend`, `frontend`, and `db` in generated projects); `--tail` accepts a line count or `all`.
+
 **Primary Workflow:**
 - `quickscale plan <project>` - Create configuration interactively.
 - `quickscale apply [config.yml]` - Execute configuration to generate or update the project.

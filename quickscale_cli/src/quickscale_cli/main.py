@@ -4,6 +4,7 @@ import click
 
 import quickscale_cli
 import quickscale_core
+from quickscale_cli.cli_help import QuickScaleGroup
 from quickscale_cli.commands.apply_command import apply
 from quickscale_cli.commands.dr_commands import dr
 from quickscale_cli.commands.deployment_commands import deploy
@@ -21,7 +22,7 @@ from quickscale_cli.commands.remove_command import remove
 from quickscale_cli.commands.status_command import status
 
 
-@click.group()
+@click.group(cls=QuickScaleGroup)
 @click.version_option(version=quickscale_cli.__version__, prog_name="quickscale")
 def cli() -> None:
     """QuickScale - Compose your Django SaaS."""
