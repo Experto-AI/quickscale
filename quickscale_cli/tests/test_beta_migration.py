@@ -43,7 +43,11 @@ from quickscale_devtools.beta_migration.verification_environment import (
 EXPECTED_VERIFICATION_SEQUENCE = [
     (("poetry", "lock"), "poetry lock", "."),
     (("poetry", "install"), "poetry install", "."),
-    (("pnpm", "install"), "pnpm install", "frontend"),
+    (
+        ("pnpm", "install", "--config.confirmModulesPurge=false"),
+        "pnpm install",
+        "frontend",
+    ),
     (("pnpm", "build"), "pnpm build", "frontend"),
     (
         ("poetry", "run", "python", "manage.py", "migrate"),
@@ -2796,6 +2800,9 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         assert ambient_venv_bin not in isolated_env["PATH"]
         assert isolated_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
 
+    pytest_env = poetry_envs[("poetry", "run", "pytest")]
+    assert pytest_env["QUICKSCALE_ALLOW_BYPASSRLS"] == "1"
+
     ambient_commands = {
         command
         for command, env in env_calls
@@ -2808,7 +2815,7 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         and env is None
     }
     assert ambient_commands == {
-        ("pnpm", "install"),
+        ("pnpm", "install", "--config.confirmModulesPurge=false"),
         ("pnpm", "build"),
         ("pnpm", "test"),
     }

@@ -481,9 +481,15 @@ def _build_verification_subprocess_context(
         and spec.argv[0] == "poetry"
         and spec.argv[1] in {"lock", "install", "run"}
     ):
-        subprocess_kwargs["env"] = merge_project_verification_environment(
+        environment = merge_project_verification_environment(
             build_isolated_poetry_env(), report.recipient.path
         )
+        if spec.argv == ("poetry", "run", "pytest"):
+            # The generated project's `make test-backend` grants this allowance
+            # for the suite's privileged test connection; the tool's host-run
+            # suite matches that entrypoint.
+            environment["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"
+        subprocess_kwargs["env"] = environment
     return working_dir, subprocess_kwargs
 
 

@@ -100,8 +100,8 @@ items:
 - **ID:** `generated-file-ownership-unmodeled`
 - **Rank rationale:** High × High, steep — blocks upgrade of every generated project; SA299/SA153
   are on the roadmap now; adoption steps grew 46 → 53 in five days.
-- **Horizon & trigger:** now — SA299 (f) migrating the donor into the regenerated `bap-web-new`,
-  then the first post-0.89.0 module release.
+- **Horizon & trigger:** SA299 (f) has migrated the donor into the regenerated `bap-web-new`;
+  the next trigger is the first post-0.89.0 module release.
 - **Confidence:** High — mechanism read, census counted, gate scope read.
 - **Context dependence:** wrong-for-now (dimension: count of live generated projects; with one it
   is operator time, with several it multiplies). Lives in reality (B).

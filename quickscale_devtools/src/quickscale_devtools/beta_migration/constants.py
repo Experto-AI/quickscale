@@ -502,7 +502,15 @@ VERIFICATION_MIGRATE_ARGV = ("poetry", "run", "python", "manage.py", "migrate")
 VERIFICATION_COMMAND_SPECS = (
     VerificationCommandSpec("poetry lock", ("poetry", "lock")),
     VerificationCommandSpec("poetry install", ("poetry", "install")),
-    VerificationCommandSpec("pnpm install", ("pnpm", "install"), cwd_suffix="frontend"),
+    # A baseline recipient can carry a node_modules tree created inside the
+    # Compose frontend container, whose store path differs from the host's.
+    # The verification stack runs without a TTY, so authorize the purge up
+    # front instead of letting pnpm abort the install interactively.
+    VerificationCommandSpec(
+        "pnpm install",
+        ("pnpm", "install", "--config.confirmModulesPurge=false"),
+        cwd_suffix="frontend",
+    ),
     # The recipient's build and test surfaces depend on donor application
     # sources and tests the migration prompt assigns to the manual port. A
     # non-zero exit there is recorded as a remaining manual action; setup,

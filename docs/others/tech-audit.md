@@ -188,8 +188,9 @@ No S1–S3 findings.
 ## Fix order and batching
 
 The three findings are independent and each is a one-file change. If they are batched, land the two
-module fixes (notifications, forms) together, each with a regression test. Land the devtool guard
-before running SA299 (f) against the real baseline.
+module fixes (notifications, forms) together, each with a regression test. The devtool guard
+`beta-migrate-existing-recipient-no-dirty-guard` remains open; SA299 (f) ran against a clean
+baseline.
 
 ## Per-subsystem verdicts
 

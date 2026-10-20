@@ -42,9 +42,8 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA299 | Regenerate `bap-web-new` from local 0.89.0 with the deployed `bap-web` module set | 1 | — | Required |
-| SA300 | Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com | 1 | SA299 | Required |
-| SA301 | Inventory and port `bap-web`'s custom forms and features | 3 | SA299 | Required |
+| SA300 | Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com | 1 | — | Required |
+| SA301 | Inventory and port `bap-web`'s custom forms and features | 3 | — | Required |
 | SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300, SA301 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
@@ -55,20 +54,20 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA299 (regenerate) ──► SA300 (design parity) ──► SA191 (cutover)
+Track 1: SA299 (regenerate, landed) ──► SA300 (design parity) ──► SA191 (cutover)
          ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2, a3), SA303 (CLI help)
-Track 3: SA301 (custom forms and features, after SA299), SA302 (orgs checks before migrate)
-     release path:  SA299 ──► SA300 + SA301 ──► SA191 (validation + cutover) ──► operator publish 0.89.0
-     critical path: SA299 ──► SA300 / SA301 ──► SA191 ──► SA153 (f)
+Track 3: SA301 (custom forms and features, unblocked), SA302 (orgs checks before migrate)
+     release path:  SA299 (landed) ──► SA300 + SA301 ──► SA191 (validation + cutover) ──► operator publish 0.89.0
+     critical path: SA299 (landed) ──► SA300 / SA301 ──► SA191 ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
-head is SA299 (f): (a)–(e) have salvaged, inventoried, deleted, and regenerated `bap-web-new`
-as a clean baseline, and (f) migrates the donor into it in place. SA300 and
-SA301 then run in parallel on the regenerated project, and SA191 validates and cuts over only
-after both. PyPI publication follows successful validation and cutover. SA153 (e3–e4)
-have landed, so the reverted contract step never ships. SA153 (f) waits on SA191's cutover, with
+head is SA300 (a): SA299 (a)–(f) have salvaged, inventoried, deleted, regenerated `bap-web-new`
+as a clean baseline, and migrated the donor into it in place. SA300 and SA301 now run in
+parallel on the regenerated project, and SA191 validates and cuts over only after both. PyPI
+publication follows successful validation and cutover. SA153 (e3–e4) have landed, so the reverted
+contract step never ships. SA153 (f) waits on SA191's cutover, with
 the migration freeze it also waited on landed. SA277 (a1) has landed; SA277 (a3) can
 start now, and (a2) waits on the cutover, whose evidence confirms the line between what `beta_migration` automates and what the
 prompt handles.
@@ -89,9 +88,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA299 (f, migrate) | yes | no | yes | no | yes |
+| 1 | SA300 (a, design system) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
-| 3 | SA301 (after SA299) | no | no | yes | no | yes |
+| 3 | SA301 | yes | no | yes | no | yes |
 
 ### Ownership and merge coordination
 
@@ -164,59 +163,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA298 — Complete 0.89.0 final release validation and live deployment proof.**
 
-- [ ] **SA299 — Regenerate `bap-web-new` from local 0.89.0 with the deployed `bap-web` module set.**
-
-  The existing `bap-web-new` was a previous attempt; it is deleted and generated again from the
-  locally installed QuickScale 0.89.0.
-
-  **Slices:**
-  - [x] (a) Salvaged before deletion: `bap-web-new` has no git remote, so the preserved copy is
-    `~/code/bap-web-new-salvage/`, outside every repository. It holds `scripts/cutover.sh`,
-    `CUTOVER.md`, `MIGRATION_PROMPT.md`, the gap handoff and run report, and the complete history
-    as a verified git bundle; its `MANIFEST.md` records the hashes and evidence. `.quickscale/wheels/`
-    is excluded because it predates the 0.89.0 tag, so (d) rebuilds wheels from the recorded tag commit (Tier 1).
-  - [x] (b) Module inventory of the **deployed `bap-web`** (the donor), which fixes the module
-    set `bap-web-new` is generated with. The operator confirmed the deployed modules: `auth`,
-    `listings`, `forms`. Their 0.89.0 `required_modules` add `orgs` (auth, listings, forms),
-    `storage` (listings), `analytics` (forms), and `notifications` (orgs, forms), so
-    `bap-web-new` is generated with `auth`, `listings`, `forms`, `orgs`, `storage`, `analytics`,
-    `notifications`; their package dependencies come from each `module.yml`.
-  - [x] (c) Deleted on 2026-10-20: removed `/home/victor/code/bap-web-new` (1.4 GB, including
-    its git history and `.quickscale/` state) and the three PostgreSQL containers with their
-    anonymous volumes — `qs-bap-dev-pg`, `qs-bap-prod-scratch-pg`, and `qs-bap-suite-pg`. The
-    production dump was absent at the documented path; the operator confirmed the production
-    data is backed up elsewhere and authorized the scratch container's removal (Tier 1).
-  - [x] (d) Baseline: a throwaway project generated with `quickscale plan` and `quickscale apply
-    --split-refs-from-branches` from the donor's three modules resolved exactly (b)'s seven and
-    passed `quickscale up --build`, `quickscale manage migrate`, and the generated `make
-    test-backend`/`pytest` on the locally installed 0.89.0 (`make install` from the track
-    worktree; wheelhouse under `~/.local/share/quickscale/current`). Module refs: auth `ed64f7e`,
-    listings `ca1af4e`, forms `8081c11`, orgs `6b970dc`, storage `0085b16`, analytics `de29d30`,
-    notifications `b4321be` (the `splits/*-module` branches at 0.89.0). The baseline exposed and
-    this slice fixed a generated-project test-harness gap (plain pytest collected the embedded
-    modules' tests, and the generated test entrypoints had no test-only BYPASSRLS allowance) in
-    QuickScale commit `3320082b6e26a31f2e1e8755b07fad181343c3d5`; the contract declares
-    `sa299d-generated-test-harness`. The beta-migration tool's own host-run `poetry run pytest`
-    still needs that allowance when (f) runs it.
-  - [x] (e) Generated `/home/victor/code/bap-web-new` on 2026-10-20 with `quickscale plan` and
-    `quickscale apply --split-refs-from-branches`, at (d)'s module refs on the installed 0.89.0
-    (`cca2eac9`, generator identical to (d)'s): slug `bap-web`, package `bap_web`, theme
-    `showcase_react`, the donor's three modules resolving to (b)'s seven; no hand modification,
-    no donor content. It is committed clean as `eba03af` in its own git, and a `make
-    beta-migrate-iterate BASELINE=1 DRY_RUN=1` dry run accepts it as matching the donor-derived
-    state. Its generated `.env` lacked the notifications webhook secret, so `quickscale up`
-    failed E003 until `apply` learned to seed the `ci_env` placeholders into a missing or empty
-    `.env` entry; with them `quickscale up` and its migrations pass (Tier 1).
-  - [ ] (f) Migrate: after (e), carry the donor into `bap-web-new` in place through
-    `make beta-migrate-iterate BASELINE=1` per
-    [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
-    SA277's evidence. `BASELINE=1` skips the regeneration, so (e)'s project and its `.git` are
-    kept, after checking that its slug, package, theme, and resolved module set match the donor's;
-    the migrated result is committed on top of (e)'s baseline. The donor's `quickscale.yml` names
-    only the three deployed modules and is never edited. Record the run's QuickScale commit and
-    module refs if they differ from (d)'s; the first `migrate`'s W004/W007 are SA302's noise, so
-    require a clean `manage check` after migrating. Leave `MIGRATION_PROMPT.md`'s remaining work for
-    SA300 and SA301 (Tier 2-fast).
+- [x] **SA299 — Regenerate `bap-web-new` from local 0.89.0 with the deployed `bap-web` module set.**
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 
