@@ -17,8 +17,8 @@ the SA298 tip and the Phase 4b pre-linked live check passed there; the local `0.
 re-pointed at the roadmap-only close commit whose product bytes match that tip. The operator's
 Phases 5–6 sealing and publication remain, in [publish_procedure.md](publish_procedure.md).
 For this release, the operator's chosen order is: regenerate `bap-web-new` from the local 0.89.0
-candidate (SA299), reach design parity and port custom features (SA300, SA301), validate and cut
-over (SA191), then publish to PyPI; publication does not block SA191.
+candidate (SA299), reach design parity and port custom features (SA300; SA301 landed), validate
+and cut over (SA191), then publish to PyPI; publication does not block SA191.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -43,8 +43,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA300 | Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com | 1 | — | Required |
-| SA301 | Inventory and port `bap-web`'s custom forms and features | 3 | — | Required |
-| SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300, SA301 | Required |
+| SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA302 | Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet | 3 | — | Optional |
@@ -57,16 +56,16 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 Track 1: SA299 (regenerate, landed) ──► SA300 (design parity) ──► SA191 (cutover)
          ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA277 (a2, a3), SA303 (CLI help)
-Track 3: SA301 (custom forms and features, unblocked), SA302 (orgs checks before migrate)
-     release path:  SA299 (landed) ──► SA300 + SA301 ──► SA191 (validation + cutover) ──► operator publish 0.89.0
-     critical path: SA299 (landed) ──► SA300 / SA301 ──► SA191 ──► SA153 (f)
+Track 3: SA302 (orgs checks before migrate)
+     release path:  SA299 (landed) ──► SA300 ──► SA191 (validation + cutover) ──► operator publish 0.89.0
+     critical path: SA299 (landed) ──► SA300 ──► SA191 ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
 head is SA300 (b): SA299 (a)–(f) salvaged, inventoried, deleted, regenerated `bap-web-new`
 as a clean baseline, and migrated the donor into it in place; SA300 (a) has extracted and
-applied its design system. SA300 and SA301 now run in
-parallel on the regenerated project, and SA191 validates and cuts over only after both. PyPI
+applied its design system, and SA301 has landed the donor's custom forms and features. SA300
+(b)–(c) continues on the regenerated project, and SA191 validates and cuts over after it. PyPI
 publication follows successful validation and cutover. SA153 (e3–e4) have landed, so the reverted
 contract step never ships. SA153 (f) waits on SA191's cutover, with
 the migration freeze it also waited on landed. SA277 (a1) has landed; SA277 (a3) can
@@ -91,7 +90,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA300 (b, browser harness) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
-| 3 | SA301 | yes | no | yes | no | yes |
+| 3 | SA302 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -197,13 +196,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
     deployment against the live site (Tier 2-full).
   - [ ] (c) Iterate until every required page meets the parity bar. Spotted improvements are
     recorded as a separate list and do not block parity (Tier 2-fast).
-
-- [ ] **SA301 — Inventory and port `bap-web`'s custom forms and features.**
-
-  Inventory the current `bap-web`'s custom forms, views, admin, emails, templates, and business
-  logic; map each to a QuickScale module (for example `forms`) or to a project-owned extension
-  under the [extension contract](module-extension.md); port each one and test it on the
-  regenerated project (Tier 2-full).
 
 - [ ] **SA191 — Validate and cut over the regenerated `bap-web-new`.**
 
@@ -348,6 +340,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   (Tier 2-fast).
 
 ### Track 3 — custom features and tenancy
+
+- [x] **SA301 — Inventory and port `bap-web`'s custom forms and features.**
 
 - [ ] **SA302 — Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet.**
 
