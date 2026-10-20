@@ -377,7 +377,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   subcommands and every command's options (or a documented `--all`/`help <command>` that does);
   each group with no subcommand given shows its subcommands; `quickscale manage` (with or without
   `--help`) lists the project's Django management commands, grouped by app, through `manage.py
-  help` in the backend container, with a clear message when the stack is down; a test walks the
+  help` in the backend container, with a clear message when the stack is down; `quickscale logs --help` names the valid `SERVICE`
+  values (`backend`, `frontend`, `db`, read from the project's compose file); a test walks the
   Click command tree so a new command or option cannot be missing from the help (Tier 2-fast).
 
 ### Track 3 — custom features and tenancy
