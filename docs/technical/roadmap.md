@@ -87,7 +87,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA299 (e, migrate) | yes | no | yes | no | yes |
+| 1 | SA299 (e, clean project) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | SA301 (after SA299) | no | no | yes | no | yes |
 
@@ -195,15 +195,23 @@ suite, and merge only the reviewed delivery through the serialized queue.
     modules' tests, and the generated test entrypoints had no test-only BYPASSRLS allowance) in
     QuickScale commit `3320082b6e26a31f2e1e8755b07fad181343c3d5`; the contract declares
     `sa299d-generated-test-harness`. The beta-migration tool's own host-run `poetry run pytest`
-    still needs that allowance when (e) runs it.
-  - [ ] (e) Migrate: after (d) passes, generate `bap-web-new` and carry the donor through
+    still needs that allowance when (f) runs it.
+  - [ ] (e) Generate the real `/home/victor/code/bap-web-new` with `quickscale plan` and
+    `quickscale apply --split-refs-from-branches` only, at (d)'s commit and module refs: the
+    donor's three modules, no hand modification, no donor content. It passes (d)'s checks again
+    and is committed in its own git as the clean baseline, so (f)'s port is reviewable as a diff
+    against it (Tier 1).
+  - [ ] (f) Migrate: after (e), carry the donor into `bap-web-new` through
     `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
     SA277's evidence. The donor's `quickscale.yml` names only the three deployed modules and is
     never edited; if the regeneration does not resolve the four required ones, that is a
     QuickScale gap fixed in QuickScale, not a hand edit to the recipient. Record the run's
     QuickScale commit and module refs if they differ from (d)'s, and leave
-    `MIGRATION_PROMPT.md`'s remaining work for SA300 and SA301 (Tier 2-fast).
+    `MIGRATION_PROMPT.md`'s remaining work for SA300 and SA301. `iterate` regenerates by deleting
+    the recipient directory, `.git` included, so it first keeps the recipient's `.git` across the
+    regeneration (a QuickScale tool fix) and the migrated result is committed on top of (e)'s
+    baseline (Tier 2-fast).
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 
