@@ -3381,7 +3381,10 @@ class TestDevOpsTemplateRendering:
         assert "--postgres-only" in output
         assert "--json" in output
         assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output
-        assert "RUNTIME_DATABASE_URL='' poetry run python manage.py migrate" in output
+        assert (
+            "RUNTIME_DATABASE_URL='' QUICKSCALE_PRIVILEGED_COMMAND=migrate "
+            "poetry run python manage.py migrate" in output
+        )
 
         # With orgs explicitly selected — target present
         output_with_orgs = template.render(
@@ -3390,8 +3393,8 @@ class TestDevOpsTemplateRendering:
         assert "check-tenant-isolation:" in output_with_orgs
         assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output_with_orgs
         assert (
-            "RUNTIME_DATABASE_URL='' poetry run python manage.py migrate"
-            in output_with_orgs
+            "RUNTIME_DATABASE_URL='' QUICKSCALE_PRIVILEGED_COMMAND=migrate "
+            "poetry run python manage.py migrate" in output_with_orgs
         )
 
         # Without orgs selected — target absent

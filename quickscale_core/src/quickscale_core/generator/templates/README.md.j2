@@ -127,14 +127,15 @@ make test
 # Run backend tests only
 make test-backend
 
+# Direct pytest runs use the test-only BYPASSRLS allowance the Makefile sets.
 # Run backend tests with coverage
-poetry run pytest --cov={{ package_name }} --cov-report=html
+QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run pytest --cov={{ package_name }} --cov-report=html
 
 # Run specific test file
-poetry run pytest tests/test_example.py
+QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run pytest tests/test_example.py
 
 # Run tests in verbose mode
-poetry run pytest -v
+QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run pytest -v
 ```
 
 View coverage report: `open htmlcov/index.html`

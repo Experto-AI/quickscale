@@ -102,7 +102,8 @@ jobs:
     - name: Run tests with coverage
       run: poetry run pytest --cov={{ package_name }} --cov-report=xml --cov-report=term-missing
       env:
-        DATABASE_URL: postgres://postgres@localhost/postgres
+        DATABASE_URL: postgres://postgres@localhost/postgres{% if selected_modules is none or "orgs" in selected_modules %}
+        QUICKSCALE_ALLOW_BYPASSRLS: "1"{% endif %}
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
@@ -117,6 +118,7 @@ jobs:
       env:
         DATABASE_URL: postgres://postgres@localhost/postgres
         DJANGO_SETTINGS_MODULE: "{{ package_name }}.settings.local"
+        QUICKSCALE_ALLOW_BYPASSRLS: "1"
 
     - name: Run tenant isolation conformance check
       run: poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --json
