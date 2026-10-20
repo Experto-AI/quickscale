@@ -87,7 +87,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA299 (d, baseline) | yes | no | yes | no | yes |
+| 1 | SA299 (e, migrate) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | SA301 (after SA299) | no | no | yes | no | yes |
 
@@ -184,13 +184,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
     anonymous volumes — `qs-bap-dev-pg`, `qs-bap-prod-scratch-pg`, and `qs-bap-suite-pg`. The
     production dump was absent at the documented path; the operator confirmed the production
     data is backed up elsewhere and authorized the scratch container's removal (Tier 1).
-  - [ ] (d) Baseline: generate a throwaway project with the local 0.89.0 through `quickscale plan`
-    and `quickscale apply --split-refs-from-branches`, with only the donor's three modules and no
-    donor content. It must resolve exactly (b)'s seven modules and pass `quickscale up` (image
-    build), `migrate`, and `pytest`, so a failure in (e) is attributable to the port rather than
-    to 0.89.0 (`make beta-migrate-iterate DRY_RUN=1` only plans and generates nothing). A failure
-    here is a QuickScale gap fixed in QuickScale. Record the QuickScale commit, install method, and
-    module refs (Tier 2-fast).
+  - [x] (d) Baseline: a throwaway project generated with `quickscale plan` and `quickscale apply
+    --split-refs-from-branches` from the donor's three modules resolved exactly (b)'s seven and
+    passed `quickscale up --build`, `quickscale manage migrate`, and the generated `make
+    test-backend`/`pytest` on the locally installed 0.89.0 (`make install` from the track
+    worktree; wheelhouse under `~/.local/share/quickscale/current`). Module refs: auth `ed64f7e`,
+    listings `ca1af4e`, forms `8081c11`, orgs `6b970dc`, storage `0085b16`, analytics `de29d30`,
+    notifications `b4321be` (the `splits/*-module` branches at 0.89.0). The baseline exposed and
+    this slice fixed a generated-project test-harness gap (plain pytest collected the embedded
+    modules' tests, and the generated test entrypoints had no test-only BYPASSRLS allowance) in
+    QuickScale commit `3320082b6e26a31f2e1e8755b07fad181343c3d5`; the contract declares
+    `sa299d-generated-test-harness`. The beta-migration tool's own host-run `poetry run pytest`
+    still needs that allowance when (e) runs it.
   - [ ] (e) Migrate: after (d) passes, generate `bap-web-new` and carry the donor through
     `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
