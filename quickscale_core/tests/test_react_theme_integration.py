@@ -690,6 +690,27 @@ class TestReactThemeTestingSetup:
         scripts = package.get("scripts", {})
         assert "test:e2e" in scripts
 
+    def test_generated_home_e2e_spec_matches_the_dashboard(self, tmp_path):
+        """The generated home spec asserts the current dashboard and Django origin.
+
+        The starter's E2E target is the Django-served document (the runtime
+        seam), not the Vite dev server, and the heading assertion must follow
+        Dashboard.tsx instead of the retired copy.
+        """
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_home_e2e_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        spec = (output_path / "frontend" / "e2e" / "home.spec.ts").read_text()
+        assert f"Welcome to {project_name}" in spec
+        assert "Welcome to your" not in spec
+
+        config = (output_path / "frontend" / "playwright.config.ts").read_text()
+        assert "http://127.0.0.1:8000" in config
+        assert "webServer" not in config
+
 
 @pytest.mark.integration
 class TestReactThemeBaseTemplate:

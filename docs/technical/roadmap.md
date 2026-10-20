@@ -62,10 +62,11 @@ Track 3: SA302 (orgs checks before migrate)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
-head is SA300 (b): SA299 (a)–(f) salvaged, inventoried, deleted, regenerated `bap-web-new`
+head is SA300 (c): SA299 (a)–(f) salvaged, inventoried, deleted, regenerated `bap-web-new`
 as a clean baseline, and migrated the donor into it in place; SA300 (a) has extracted and
-applied its design system, and SA301 has landed the donor's custom forms and features. SA300
-(b)–(c) continues on the regenerated project, and SA191 validates and cuts over after it. PyPI
+applied its design system, SA300 (b) has landed the browser parity harness, and SA301 has
+landed the donor's custom forms and features. SA300 (c) continues on the regenerated project,
+and SA191 validates and cuts over after it. PyPI
 publication follows successful validation and cutover. SA153 (e3–e4) have landed, so the reverted
 contract step never ships. SA153 (f) waits on SA191's cutover, with
 the migration freeze it also waited on landed. SA277 (a1) has landed; SA277 (a3) can
@@ -88,7 +89,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA300 (b, browser harness) | yes | no | yes | no | yes |
+| 1 | SA300 (c, parity pass) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | SA302 | yes | yes | yes | yes | no |
 
@@ -170,8 +171,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   The live buenosairesproperties.com is the reference, read through a browser, so parity does
   not depend on the local `bap-web` checkout matching the deployed commit.
 
-  **Page list.** Required: the home page and every page reachable from a menu item. Any other
-  page is listed in (b)'s handoff and the operator decides whether it joins the required set.
+  **Page list.** Required (live menu crawled 2026-10-20): `/` (Inicio), `/about` (Nosotros), and
+  `/contact` (Contacto). `/privacidad` is footer-linked; (b)'s handoff lists it for the
+  operator's decision. Any other page joins only by that decision.
 
   **Parity bar.** A required page has no differences when, at desktop (1280×720) and mobile
   (390×844) viewports, against the live page:
@@ -191,12 +193,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
     Landed in `bap-web-new` (design system at `ffa3c738`, review fixes at `7891405`):
     `frontend/design/` is the single token source, the shell/module contract tokens are restored,
     and `frontend/src/test/designSystem.test.ts` pins it.
-  - [ ] (b) Browser harness: fix the stale `e2e/home.spec.ts.j2`, crawl the live menu to fix the
-    required page list, and add the page-by-page comparison above of the local `bap-web-new`
+  - [x] (b) Browser harness: fixed the stale `e2e/home.spec.ts.j2` (it now asserts the current
+    dashboard heading and targets the Django origin), crawled the live menu to fix the required
+    page list, and added the page-by-page comparison above of the local `bap-web-new`
     deployment against the live site. The local side runs `quickscale up` in `bap-web-new`
     (its `start.sh` migrates and seeds the forms presets), then
     `quickscale manage properties_seed_catalog` to load the catalog; the harness documents both
-    steps and runs against that stack (Tier 2-full).
+    steps and runs against that stack (Tier 2-full). Landed in `bap-web-new` at `b73c286`
+    (`frontend/e2e/parity/`, `docs/sa300-parity-harness.md`); the run passes the parity bar on
+    `/`, `/about`, and `/contact` at both viewports.
   - [ ] (c) Iterate until every required page meets the parity bar. Spotted improvements are
     recorded as a separate list and do not block parity (Tier 2-fast).
 
@@ -367,10 +372,10 @@ deferred findings, watch notes, and their growth triggers; items stay there unti
 Standing scope rules, presence contracts, and resource safeguards live in [decisions](decisions.md)
 and [validation policy](validation_policy.md#candidate-review-and-integration).
 
-**Unscheduled — React-theme browser coverage.** No test drives `showcase_react` in a real
-browser against a real backend. The repo's Playwright E2E asserts only status 200, the title and
-the first stylesheet. SA300 (b) fixes the stale `e2e/home.spec.ts.j2` stub and adds the
-screenshot harness. Remaining order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
+**Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
+current dashboard heading against the Django-served origin, and SA300 (b) added the live-site
+screenshot harness in `bap-web-new`; the repository still has no full journey suite. Remaining
+order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
 (4) full journey E2E against the Docker stack, only if it fits the E2E time budget in
 validation_policy.md.

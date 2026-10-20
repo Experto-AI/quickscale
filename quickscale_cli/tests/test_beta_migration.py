@@ -2326,6 +2326,30 @@ def test_overlapping_identity_substitution_is_non_cascading(
     assert "beta-site_site_v2" not in start_script + dockerfile
 
 
+def test_home_e2e_heading_identity_rewrites_both_wordings() -> None:
+    """The generated E2E heading keeps the recipient identity after migration."""
+    from quickscale_core.utils.project_identity import ProjectIdentity
+    from quickscale_devtools.beta_migration.identity import (
+        _replace_identity_text_for_path,
+    )
+
+    source = ProjectIdentity(slug="beta-site", package="beta_site")
+    target = ProjectIdentity(slug="test80", package="test80")
+    for heading in ("Welcome to beta-site", "Welcome to your beta-site dashboard"):
+        text = (
+            "await expect(page.getByRole('heading', "
+            f"{{ name: '{heading}' }})).toBeVisible();\n"
+        )
+        rewritten = _replace_identity_text_for_path(
+            text,
+            relative_path="frontend/e2e/home.spec.ts",
+            source=source,
+            target=target,
+        )
+        assert "beta-site" not in rewritten
+        assert "test80" in rewritten
+
+
 def test_equal_source_slug_and_package_use_path_specific_identity_semantics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
