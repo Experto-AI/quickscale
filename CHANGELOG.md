@@ -48,6 +48,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Tenancy checks wait for migrations.** The `quickscale_orgs.W004` FORCE-RLS and `W007`
     tenant-reference checks skip a model whose table or app migrations are not applied yet, so a
     fresh `migrate` or `quickscale up` reports no warning for tables its own migrations create.
+  - **CLI help shows the whole command tree.** `quickscale --help` prints every command,
+    subcommand, option, and argument with examples; `quickscale manage --help` lists the project's
+    Django commands by app, and `quickscale logs` names the services its compose file declares.
   - **A module can be switched off** without uninstalling it, and destructive module commands
     accept `--dry-run`.
   - **Generated-project contract adoption is recorded.** Contract changes carry a step id and

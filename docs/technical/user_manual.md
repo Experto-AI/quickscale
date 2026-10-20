@@ -603,7 +603,7 @@ The `Dockerfile` uses multi-stage builds (builder + runtime) for production effi
 ## Commands quick reference
 
 **CLI Commands (Current)**:
-- CLI help: `quickscale --help`
+- CLI help: `quickscale --help` (the full command tree, with every option and argument)
 - Create config: `quickscale plan <project-slug>`
 - Apply config: `quickscale apply [config.yml]`
 
@@ -613,7 +613,8 @@ The `Dockerfile` uses multi-stage builds (builder + runtime) for production effi
 - View logs: `quickscale logs [service]`
 - Service status: `quickscale ps`
 - Container shell: `quickscale shell`
-- Django commands: `quickscale manage <cmd>`
+- Django commands: `quickscale manage <cmd>`; `quickscale manage --help` lists them by app
+- Logs: `quickscale logs [service]`, where `service` is declared in `docker-compose.yml`
 
 **CLI Commands (Modules)**:
 - Update installed modules: `quickscale update`

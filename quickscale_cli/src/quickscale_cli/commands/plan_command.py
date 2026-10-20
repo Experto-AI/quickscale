@@ -12,6 +12,7 @@ that define them (decisions.md, Split-Facade Seams).
 
 import click as click
 
+from quickscale_cli.cli_help import QuickScaleCommand
 from quickscale_core.contracts.module_options import (
     sanitize_module_options as sanitize_module_options,
 )
@@ -60,8 +61,8 @@ import quickscale_cli.commands._plan_new_project as _plan_new_project
 import quickscale_cli.commands._plan_reconfigure as _plan_reconfigure
 
 
-@click.command()
-@click.argument("slug", required=False, metavar="PROJECT_SLUG")
+@click.command(cls=QuickScaleCommand)
+@click.argument("project_slug", required=False)
 @click.option(
     "--output",
     "-o",
@@ -95,7 +96,7 @@ import quickscale_cli.commands._plan_reconfigure as _plan_reconfigure
     help="Interactively configure supported module options during planning",
 )
 def plan(
-    slug: str | None,
+    project_slug: str | None,
     output: str | None,
     package: str | None,
     add_modules: bool,
@@ -110,18 +111,10 @@ def plan(
     Run 'quickscale apply' afterwards to generate or update the project.
 
     \b
-    Examples:
-      quickscale plan my-app                # Create new project config
-      quickscale plan my-app --package my_app
-      quickscale plan my-app -o ./config.yml  # Custom output path
-      quickscale plan --add                # Add modules to existing project
-      quickscale plan --reconfigure        # Reconfigure existing project
-
-    \b
     New project wizard:
-    - Theme selection (showcase_react)
+      - Theme selection (showcase_react)
       - Module selection (auth, blog, listings, etc.)
-            - Docker configuration (start, build, create superuser)
+      - Docker configuration (start, build, create superuser)
 
     \b
     Existing project modes:
@@ -138,7 +131,7 @@ def plan(
         return
 
     # Validate and prepare for new project
-    validated_slug = _plan_new_project._validate_new_project_slug(slug)
+    validated_slug = _plan_new_project._validate_new_project_slug(project_slug)
     resolved_package = _plan_new_project._resolve_project_package(
         validated_slug, package
     )

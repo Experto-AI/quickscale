@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 
 import click
 
+from quickscale_cli.cli_help import QuickScaleCommand
 from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
     generate_yaml,
@@ -692,7 +693,7 @@ def _perform_removal_steps(
             raise _rollback_failed_removal(snapshots, error) from error
 
 
-@click.command()
+@click.command(cls=QuickScaleCommand)
 @click.argument("module_name")
 @click.option(
     "--force",
@@ -710,18 +711,12 @@ def remove(module_name: str, force: bool, keep_data: bool) -> None:
     Remove an embedded module from the project.
 
     \b
-    Examples:
-      quickscale remove auth
-      quickscale remove auth --force
-      quickscale remove billing --keep-data
-
-    \b
     This command will:
       1. Remove the module directory from modules/
       2. Update .quickscale/state.yml
       3. Update quickscale.yml (if exists)
-            4. Update or clear .quickscale/apply-recovery.yml when needed
-            5. Regenerate managed module wiring files
+      4. Update or clear .quickscale/apply-recovery.yml when needed
+      5. Regenerate managed module wiring files
 
     \b
     ⚠️  WARNING: This may cause data loss!
