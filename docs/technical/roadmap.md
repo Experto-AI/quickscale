@@ -181,7 +181,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `notifications`; their package dependencies come from each `module.yml`.
   - [ ] (c) Delete `bap-web-new`: the operator authorized the deletion on 2026-10-19, and (a) is
     verified; remove `/home/victor/code/bap-web-new` entirely, including its git history,
-    `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
+    `.quickscale/` state, and its two PostgreSQL containers with their anonymous volumes:
+    `qs-bap-dev-pg` (its `.env` database, port 5432) and `qs-bap-prod-scratch-pg` (SA191's
+    earlier scratch restores of the production dump; SA191 rebuilds scratch from the dump).
+    Keep `qs-bap-suite-pg` (port 5433): it is the old `bap-web`'s database (Tier 1).
   - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s seven
     modules, carrying the donor through `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
