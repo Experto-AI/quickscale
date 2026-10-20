@@ -63,8 +63,9 @@ Track 3: SA301 (custom forms and features, unblocked), SA302 (orgs checks before
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
-head is SA300 (a): SA299 (a)–(f) have salvaged, inventoried, deleted, regenerated `bap-web-new`
-as a clean baseline, and migrated the donor into it in place. SA300 and SA301 now run in
+head is SA300 (b): SA299 (a)–(f) salvaged, inventoried, deleted, regenerated `bap-web-new`
+as a clean baseline, and migrated the donor into it in place; SA300 (a) has extracted and
+applied its design system. SA300 and SA301 now run in
 parallel on the regenerated project, and SA191 validates and cuts over only after both. PyPI
 publication follows successful validation and cutover. SA153 (e3–e4) have landed, so the reverted
 contract step never ships. SA153 (f) waits on SA191's cutover, with
@@ -88,7 +89,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA300 (a, design system) | yes | no | yes | no | yes |
+| 1 | SA300 (b, browser harness) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | SA301 | yes | no | yes | no | yes |
 
@@ -186,8 +187,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   A difference the operator accepts as an improvement is recorded as such, not as a failure.
 
   **Slices:**
-  - [ ] (a) Extract the coding styles of the current `bap-web` (tokens, typography, spacing,
+  - [x] (a) Extract the coding styles of the current `bap-web` (tokens, typography, spacing,
     components) into a design system in the regenerated project's theme, and apply it (Tier 2-full).
+    Landed in `bap-web-new` at `ffa3c738`: `frontend/design/` is the single token source, the
+    shell/module contract tokens are restored, and `frontend/src/test/designSystem.test.ts` pins it.
   - [ ] (b) Browser harness: fix the stale `e2e/home.spec.ts.j2`, crawl the live menu to fix the
     required page list, and add the page-by-page comparison above of the local `bap-web-new`
     deployment against the live site (Tier 2-full).
