@@ -63,6 +63,9 @@ pnpm test
 # Run tests with coverage
 pnpm test:coverage
 
+# Browser E2E against the Django stack at http://127.0.0.1:8000
+pnpm test:e2e
+
 # Lint code (ESLint)
 pnpm lint
 
@@ -84,6 +87,10 @@ pnpm format:check
 # Build for production
 pnpm build
 ```
+
+`pnpm test:e2e` needs the Django stack running (`quickscale up`): the React app
+validates `window.__QUICKSCALE__`, which the Django-rendered document injects
+and Vite alone does not.
 
 ### Production Build
 

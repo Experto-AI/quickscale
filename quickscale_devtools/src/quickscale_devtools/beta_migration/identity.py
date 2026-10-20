@@ -183,7 +183,7 @@ _IDENTITY_LINE_RULES: dict[
     ),
     "frontend/package.json": ((re.compile(r'^\s*"name"\s*:'), ("package",)),),
     "frontend/e2e/home.spec.ts": (
-        (re.compile(r"toHaveTitle\(|Welcome to your\s"), ("slug",)),
+        (re.compile(r"toHaveTitle\(|Welcome to\s"), ("slug",)),
     ),
     "frontend/src/hooks/useModules.ts": (
         (re.compile(r"\bprojectName\s*:"), ("slug",)),

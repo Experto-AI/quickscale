@@ -7,9 +7,11 @@ test('has title', async ({ page }) => {
   await expect(page).toHaveTitle(/{{ project_name }}/);
 });
 
-test('dashboard welcomes user', async ({ page }) => {
+test('dashboard welcomes the project', async ({ page }) => {
   await page.goto('/');
 
-  // Expects page to have a heading with the project name
-  await expect(page.getByText('Welcome to your {{ project_name }} dashboard')).toBeVisible();
+  // The dashboard heading comes from Dashboard.tsx and the runtime seam.
+  await expect(
+    page.getByRole('heading', { name: 'Welcome to {{ project_name }}' }),
+  ).toBeVisible();
 });

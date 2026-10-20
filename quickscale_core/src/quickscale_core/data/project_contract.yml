@@ -361,3 +361,10 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current pyproject.toml [tool.pytest.ini_options]: add `testpaths = [\"tests\"]` so a plain `pytest` collects the project's own suite instead of the embedded modules' test packages, whose `tests.conftest` import collides with the project's `tests` package."
       - "Compare and manually adopt the current Makefile and .github/workflows/ci.yml test and migration steps, plus the README's direct pytest examples: `test-backend` and the CI test step set `QUICKSCALE_ALLOW_BYPASSRLS=1` while orgs is installed, the CI migration step sets it too, and the tenant-isolation target's prerequisite migration runs as `RUNTIME_DATABASE_URL='' QUICKSCALE_PRIVILEGED_COMMAND=migrate`. A project with orgs otherwise fails startup with quickscale_orgs.E004 before pytest or the conformance check runs."
+
+  - id: sa300b-generated-home-e2e
+    minimum: "0.89.0"
+    title: "Adopt the generated home E2E spec and its Django-served target"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/e2e/home.spec.ts and frontend/playwright.config.ts: the starter's home spec asserts the dashboard heading the theme actually renders, and Playwright targets the Django-served document at http://127.0.0.1:8000 (override with PLAYWRIGHT_BASE_URL) instead of the Vite dev server, because the React starter validates window.__QUICKSCALE__, which only the Django-rendered document injects. Start the stack with `quickscale up` before `pnpm test:e2e`. Test-only: no project runtime behavior changes."
+      - "Compare and optionally copy the current frontend/README.md E2E note: it names the Django origin and the `quickscale up` prerequisite."

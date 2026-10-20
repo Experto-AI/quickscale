@@ -24,8 +24,10 @@ export default defineConfig({
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5173',
+    /* The React app reads window.__QUICKSCALE__ from the Django-rendered
+       document, so Vite alone cannot serve an E2E target. Start the stack
+       with `quickscale up` before running `pnpm test:e2e`. */
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:8000',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -48,11 +50,5 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
-
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'pnpm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-  },
-});
+})
+;

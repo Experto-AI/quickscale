@@ -59,7 +59,8 @@
       "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative.",
       "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa299d": "Regenerated 2026-10-20 \u2014 the generated project's test harness passes as rendered: pyproject.toml collects tests/ only, the Makefile test-backend target and the CI test and migration steps set QUICKSCALE_ALLOW_BYPASSRLS=1 when orgs is installed, the tenant-isolation target's prerequisite migration uses QUICKSCALE_PRIVILEGED_COMMAND=migrate, and README.md's direct pytest commands carry the same allowance. Changed per variant: README.md and pyproject.toml; react_default also .github/workflows/ci.yml and Makefile. All unrelated paths, hashes, and modes remain authoritative."
+      "sa299d": "Regenerated 2026-10-20 \u2014 the generated project's test harness passes as rendered: pyproject.toml collects tests/ only, the Makefile test-backend target and the CI test and migration steps set QUICKSCALE_ALLOW_BYPASSRLS=1 when orgs is installed, the tenant-isolation target's prerequisite migration uses QUICKSCALE_PRIVILEGED_COMMAND=migrate, and README.md's direct pytest commands carry the same allowance. Changed per variant: README.md and pyproject.toml; react_default also .github/workflows/ci.yml and Makefile. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa300b": "Regenerated 2026-10-20 \u2014 the generated home E2E spec asserts the current dashboard heading and its Playwright config targets the Django-served origin, because the React starter validates window.__QUICKSCALE__ and Vite alone cannot serve an E2E target. 2 fixture hashes updated per variant: frontend/e2e/home.spec.ts and frontend/playwright.config.ts. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -175,7 +176,7 @@
     },
     "frontend/e2e/home.spec.ts": {
       "mode": "644",
-      "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
+      "sha256": "259408b87188dd29c60f41870ebe3f89ae1f401bbd4d6169f9668fc93cc1be14"
     },
     "frontend/eslint.config.js": {
       "mode": "644",
@@ -191,7 +192,7 @@
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
-      "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
+      "sha256": "bae54bdfa263688d4dd6815c2c56ab0f43bbcac4a8cbcc4da921e9dabce6ca58"
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
@@ -745,7 +746,7 @@
     },
     "frontend/e2e/home.spec.ts": {
       "mode": "644",
-      "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
+      "sha256": "259408b87188dd29c60f41870ebe3f89ae1f401bbd4d6169f9668fc93cc1be14"
     },
     "frontend/eslint.config.js": {
       "mode": "644",
@@ -761,7 +762,7 @@
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
-      "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
+      "sha256": "bae54bdfa263688d4dd6815c2c56ab0f43bbcac4a8cbcc4da921e9dabce6ca58"
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
@@ -1315,7 +1316,7 @@
     },
     "frontend/e2e/home.spec.ts": {
       "mode": "644",
-      "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
+      "sha256": "259408b87188dd29c60f41870ebe3f89ae1f401bbd4d6169f9668fc93cc1be14"
     },
     "frontend/eslint.config.js": {
       "mode": "644",
@@ -1331,7 +1332,7 @@
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
-      "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
+      "sha256": "bae54bdfa263688d4dd6815c2c56ab0f43bbcac4a8cbcc4da921e9dabce6ca58"
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
