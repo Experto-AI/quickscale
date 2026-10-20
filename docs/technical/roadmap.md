@@ -373,13 +373,26 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `remove`, `shell`, `status`, `update`. The pass-through command `manage` shows a bare usage line
   and never lists the Django commands it forwards (`check`, `migrate`, the modules' own commands).
 
+  A walk of the Click tree (2026-10-20: 15 commands, 5 subcommands, 77 parameters, none hidden)
+  also found help that exists but says nothing:
+  - all 24 `dr` options (`capture`, `plan`, `execute`, `report`) have no help text, and the four
+    `dr` subcommands have no examples; `deploy` and `dr` show no examples either;
+  - positional arguments are named but never described: `apply [CONFIG]`, `remove MODULE_NAME`
+    (valid module names not listed), `logs [SERVICE]`, `manage [ARGS]`;
+  - `plan`'s usage shows `PROJECT_SLUG` as required although it is optional (`plan --add`,
+    `plan --reconfigure` run without it);
+  - `logs --tail` takes `TEXT` instead of an integer (or `all`);
+  - `apply`'s docstring renders reST ``` `` ``` literally, and `remove`'s numbered list is misindented.
+
   **Acceptance:** `quickscale` and `quickscale --help` show the full command tree, every group's
   subcommands and every command's options (or a documented `--all`/`help <command>` that does);
   each group with no subcommand given shows its subcommands; `quickscale manage` (with or without
   `--help`) lists the project's Django management commands, grouped by app, through `manage.py
   help` in the backend container, with a clear message when the stack is down; `quickscale logs --help` names the valid `SERVICE`
-  values (`backend`, `frontend`, `db`, read from the project's compose file); a test walks the
-  Click command tree so a new command or option cannot be missing from the help (Tier 2-fast).
+  values (`backend`, `frontend`, `db`, read from the project's compose file); every option and
+  argument has help text, every command and subcommand an example, usage marks optional
+  arguments as optional, and `--tail` validates its value; a test walks the
+  Click command tree so a new command, option, or argument cannot be missing from the help or lack help text (Tier 2-fast).
 
 ### Track 3 — custom features and tenancy
 
