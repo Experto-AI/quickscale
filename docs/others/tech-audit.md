@@ -189,8 +189,8 @@ No S1–S3 findings.
 
 The three findings are independent and each is a one-file change. If they are batched, land the two
 module fixes (notifications, forms) together, each with a regression test. The devtool guard
-`beta-migrate-existing-recipient-no-dirty-guard` remains open; SA299 (f) ran against a clean
-baseline.
+`beta-migrate-existing-recipient-no-dirty-guard` remains open; the one recipient migration so far
+ran against a clean baseline.
 
 ## Per-subsystem verdicts
 

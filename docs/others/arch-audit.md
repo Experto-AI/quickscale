@@ -12,10 +12,10 @@ renders projects from templates in `quickscale_core`, vendors 12 Django modules
 (`quickscale_modules/*`) into each project, and keeps a versioned `quickscale_core.runtime`
 library. Persistence in generated projects is PostgreSQL; the generator's own state is YAML under
 `.quickscale/`. Two deployment realities: **(A) the generator repo** and **(B) generated projects**
-(the live one being `bap-web-new`, being regenerated on 0.89.0 under SA299). One maintainer,
+(the live one being `bap-web-new`, regenerated on 0.89.0). One maintainer,
 very high cadence (451 reachable commits since the prior pass, ~40% synthetic subtree splits);
-history before 2026 is thin for these paths. Growth direction (roadmap): SA299 (e)/(f) regenerate
-`bap-web-new` and migrate the donor into it; SA153 adds public pages; SA300 sets the parity bar.
+history before 2026 is thin for these paths. Growth direction (roadmap): SA300 sets the parity bar,
+SA191 cuts `bap-web-new` over, and SA153 adds public pages.
 Scope: generator ↔ generated-project boundary (largest blast radius, nearest pressure).
 
 **Declared architecture (from `docs/`, the module-conventions harness, and test docstrings):**
@@ -98,9 +98,9 @@ items:
 
 ### Finding 1: Module contracts live in user-owned generated files
 - **ID:** `generated-file-ownership-unmodeled`
-- **Rank rationale:** High × High, steep — blocks upgrade of every generated project; SA299/SA153
-  are on the roadmap now; adoption steps grew 46 → 53 in five days.
-- **Horizon & trigger:** SA299 (f) has migrated the donor into the regenerated `bap-web-new`;
+- **Rank rationale:** High × High, steep — blocks upgrade of every generated project; SA153 is
+  on the roadmap now; adoption steps grew 46 → 53 in five days.
+- **Horizon & trigger:** the donor has been migrated into the regenerated `bap-web-new`;
   the next trigger is the first post-0.89.0 module release.
 - **Confidence:** High — mechanism read, census counted, gate scope read.
 - **Context dependence:** wrong-for-now (dimension: count of live generated projects; with one it
