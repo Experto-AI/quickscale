@@ -49,7 +49,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA302 | Keep the orgs tenancy checks quiet on tables whose migrations are not applied yet | 3 | — | Optional |
-| SA303 | Make `quickscale --help` and `quickscale manage --help` show the commands they reach | 2 | — | Optional |
+| SA303 | Make `quickscale` help show every command, subcommand, and option it reaches | 2 | — | Optional |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -365,16 +365,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
     with `beta_migration` smoke runs against them, and the prompt moved into the QuickScale
     repository as a versioned artifact (Tier 2-full).
 
-- [ ] **SA303 — Make `quickscale --help` and `quickscale manage --help` show the commands they reach.**
+- [ ] **SA303 — Make `quickscale` help show every command, subcommand, and option it reaches.**
 
-  `quickscale --help` lists only top-level commands, and `quickscale manage --help` shows a bare
-  usage line with no Django commands, so `manage check`, `manage migrate`, and the modules' own
-  commands cannot be found from the CLI.
+  `quickscale` and `quickscale --help` list only the 15 top-level command names with a one-line
+  summary, so nothing below them can be found from the top: `deploy railway`; `dr capture`,
+  `execute`, `plan`, `report`; and the options of `apply`, `plan`, `up`, `down`, `logs`, `push`,
+  `remove`, `shell`, `status`, `update`. The pass-through command `manage` shows a bare usage line
+  and never lists the Django commands it forwards (`check`, `migrate`, the modules' own commands).
 
-  **Acceptance:** top-level help shows the subcommands of each group (or how to list them);
-  `quickscale manage --help` (and `manage` with no arguments) lists the project's Django
-  management commands, grouped by app, or forwards to `manage.py help` in the backend container,
-  with a clear message when the stack is down; tests pin both outputs (Tier 2-fast).
+  **Acceptance:** `quickscale` and `quickscale --help` show the full command tree, every group's
+  subcommands and every command's options (or a documented `--all`/`help <command>` that does);
+  each group with no subcommand given shows its subcommands; `quickscale manage` (with or without
+  `--help`) lists the project's Django management commands, grouped by app, through `manage.py
+  help` in the backend container, with a clear message when the stack is down; a test walks the
+  Click command tree so a new command or option cannot be missing from the help (Tier 2-fast).
 
 ### Track 3 — custom features and tenancy
 
