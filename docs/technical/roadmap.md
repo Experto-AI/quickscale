@@ -64,8 +64,8 @@ Track 3: SA301 (custom forms and features, after SA299), SA302 (orgs checks befo
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
-head is SA299: salvage what `bap-web-new` holds, inventory the modules of the deployed Railway
-`bap-web`, then delete and regenerate `bap-web-new` from the locally installed 0.89.0. SA300 and
+head is SA299 (f): (a)–(e) have salvaged, inventoried, deleted, and regenerated `bap-web-new`
+as a clean baseline, and (f) migrates the donor into it in place. SA300 and
 SA301 then run in parallel on the regenerated project, and SA191 validates and cuts over only
 after both. PyPI publication follows successful validation and cutover. SA153 (e3–e4)
 have landed, so the reverted contract step never ships. SA153 (f) waits on SA191's cutover, with
@@ -214,7 +214,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
     kept, after checking that its slug, package, theme, and resolved module set match the donor's;
     the migrated result is committed on top of (e)'s baseline. The donor's `quickscale.yml` names
     only the three deployed modules and is never edited. Record the run's QuickScale commit and
-    module refs if they differ from (d)'s, and leave `MIGRATION_PROMPT.md`'s remaining work for
+    module refs if they differ from (d)'s; the first `migrate`'s W004/W007 are SA302's noise, so
+    require a clean `manage check` after migrating. Leave `MIGRATION_PROMPT.md`'s remaining work for
     SA300 and SA301 (Tier 2-fast).
 
 - [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
@@ -373,7 +374,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `remove`, `shell`, `status`, `update`. The pass-through command `manage` shows a bare usage line
   and never lists the Django commands it forwards (`check`, `migrate`, the modules' own commands).
 
-  A walk of the Click tree (2026-10-20: 15 commands, 5 subcommands, 77 parameters, none hidden)
+  A walk of the Click tree (2026-10-20: 15 commands, 5 subcommands, 69 parameters, none hidden)
   also found help that exists but says nothing:
   - all 24 `dr` options (`capture`, `plan`, `execute`, `report`) have no help text, and the four
     `dr` subcommands have no examples; `deploy` and `dr` show no examples either;
@@ -382,17 +383,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - `plan`'s usage shows `PROJECT_SLUG` as required although it is optional (`plan --add`,
     `plan --reconfigure` run without it);
   - `logs --tail` takes `TEXT` instead of an integer (or `all`);
-  - `apply`'s docstring renders reST ``` `` ``` literally, and `remove`'s numbered list is misindented.
+  - `apply`'s help prints reST double backquotes literally, and `remove`'s numbered list is misindented.
 
   **Acceptance:** `quickscale` and `quickscale --help` show the full command tree, every group's
   subcommands and every command's options (or a documented `--all`/`help <command>` that does);
   each group with no subcommand given shows its subcommands; `quickscale manage` (with or without
   `--help`) lists the project's Django management commands, grouped by app, through `manage.py
-  help` in the backend container, with a clear message when the stack is down; `quickscale logs --help` names the valid `SERVICE`
-  values (`backend`, `frontend`, `db`, read from the project's compose file); every option and
+  help` in the backend container, with a clear message when the stack is down; `quickscale logs
+  --help` names the valid `SERVICE` values (`backend`, `frontend`, `db`, read from the project's compose file); every option and
   argument has help text, every command and subcommand an example, usage marks optional
-  arguments as optional, and `--tail` validates its value; a test walks the
-  Click command tree so a new command, option, or argument cannot be missing from the help or lack help text (Tier 2-fast).
+  arguments as optional, and `--tail` validates its value; a test walks the Click command
+  tree so a new command, option, or argument cannot be missing from the help or lack help text
+  (Tier 2-fast).
 
 ### Track 3 — custom features and tenancy
 
