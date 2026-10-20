@@ -55,6 +55,19 @@ PostgreSQL catalog state, so they cannot run from ``ready()`` in processes that
 must start without a database (and none of them may block a startup, being
 warning-only).
 
+Django runs system checks before ``migrate`` applies anything, when a newly
+generated module's tenant tables and their RLS policies or composite foreign
+keys do not exist yet.  W004 and W007 therefore skip a model whose app has an
+unapplied migration or whose table is absent (``_tenancy_schema``); a migrated
+table that violates either contract still warns.
+
+The RLS boot guard is the one deliberate exception to running no database
+query from ``ready()``: every process, including a WSGI server that never runs
+Django system checks, must refuse to start under BYPASSRLS or SUPERUSER, so
+``check_rls_role`` reads ``pg_roles`` eagerly.  Django's generic
+app-initialization warning is silenced around that single read, and the guard's
+docstring records why the access stays in app initialization.
+
 The role, stray-manager, provider-ID, and discharge checks run eagerly
 through the helper.  The provider-ID and discharge checks are ``ERROR``
 messages: they read model
@@ -71,6 +84,7 @@ import ast as ast
 import importlib as importlib
 import inspect as inspect
 import os
+import warnings
 from collections.abc import Iterator as Iterator
 
 from django.apps import apps
@@ -80,6 +94,9 @@ from django.db import connection
 import quickscale_modules_orgs._checks_structure as _checks_structure
 import quickscale_modules_orgs._personal_data as _personal_data
 import quickscale_modules_orgs._tenancy_references as _tenancy_references
+from quickscale_modules_orgs._tenancy_schema import (
+    models_awaiting_schema as _models_awaiting_schema,
+)
 
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL as ORGANIZATION_MODEL_LABEL,
@@ -164,6 +181,13 @@ def check_rls_role(
     the production-settings validator, CLI producer, and generated launcher
     carry independent fail-closed declarations of the same contract.
 
+    The ``pg_roles`` read necessarily runs from ``ready()``: the guard must
+    stop a gunicorn or other WSGI process that never executes Django's system
+    checks, and no later hook is guaranteed before it serves.  Django's generic
+    ``RuntimeWarning`` about database access during app initialization is
+    therefore expected and actionable for nobody, so it is suppressed around
+    this one query; the check itself stays eager.
+
     No-op on SQLite (non-PostgreSQL).
     """
     # ---- Escape hatch --------------------------------------------------
@@ -178,11 +202,21 @@ def check_rls_role(
     if connection.vendor != "postgresql":
         return []
 
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT rolbypassrls, rolsuper FROM pg_roles WHERE rolname = current_user"
+    with warnings.catch_warnings():
+        # Failure to boot under a privileged role is the failure this check
+        # exists to prevent, so the eager read stays; Django's generic warning
+        # about any eager read has no operator action here.
+        warnings.filterwarnings(
+            "ignore",
+            message="Accessing the database during app initialization.*",
+            category=RuntimeWarning,
         )
-        row = cursor.fetchone()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT rolbypassrls, rolsuper FROM pg_roles "
+                "WHERE rolname = current_user"
+            )
+            row = cursor.fetchone()
         if row is not None and (row[0] or row[1]):
             return [
                 Error(
@@ -203,7 +237,10 @@ def check_tenant_isolation(_app_configs: object = None, **kwargs: object) -> lis
 
     This is a startup system check that runs in all environments.  It
     reports ``WARNING`` level messages, which are visible in ``manage.py
-    check`` output and Django startup logs but do not block startup.
+    check`` output and Django startup logs but do not block startup.  W004 is
+    skipped for a model whose table or app migrations are not applied yet,
+    because ``migrate`` runs system checks before it installs them; W003 is
+    metadata-only and still reports.
 
     Returns:
         A list of ``CheckMessage`` instances.
@@ -234,6 +271,7 @@ def check_tenant_isolation(_app_configs: object = None, **kwargs: object) -> lis
         )
         return messages
 
+    awaiting_schema: frozenset[str] | None = None
     for model in models:
         result = check_tenant_model_isolation(model)
         if not result["has_organization_id"]:
@@ -249,6 +287,11 @@ def check_tenant_isolation(_app_configs: object = None, **kwargs: object) -> lis
                 )
             )
         if result["has_force_rls"] is False:
+            if awaiting_schema is None:
+                awaiting_schema = _models_awaiting_schema(models)
+            model_label = f"{result['app_label']}.{str(result['model_name']).lower()}"
+            if model_label in awaiting_schema:
+                continue
             messages.append(
                 Warning(
                     f"Tenant model {result['app_label']}.{result['model_name']} "
@@ -402,13 +445,21 @@ def check_tenant_reference_equality(
     The reference set is derived from model metadata at check time, so a
     project-owned foreign key is covered without editing vendored module
     source, and a new reference cannot escape the check by being left off a
-    hand-maintained list.
+    hand-maintained list.  References whose child or parent model awaits its
+    schema are skipped, because the catalog cannot judge a migration that has
+    not been applied yet; a migrated reference without the constraint still
+    warns.
 
     Returns:
         A list of ``Warning`` instances, one per uncovered reference.
     """
     try:
-        gaps = _tenancy_references.tenant_reference_equality_gaps()
+        tenant_models = get_tenant_models()
+        awaiting_schema = _models_awaiting_schema(tenant_models)
+        gaps = _tenancy_references.tenant_reference_equality_gaps(
+            tenant_models,
+            pending_labels=awaiting_schema,
+        )
     except Exception as exc:
         return [
             Warning(

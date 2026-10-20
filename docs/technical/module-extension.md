@@ -102,7 +102,10 @@ policy metadata is absent or ambiguous.
 
 The resulting project-owned model participates in the same W003/W004 system
 check and `check_tenant_isolation` command as shipped module models. Their
-human-readable output and JSON results include the model. The shipped
+human-readable output and JSON results include the model. While the model's
+migration or table is not applied yet, the W004 and W007 system checks skip it,
+because `migrate` runs Django's checks before it applies migrations; both warn
+again once the migrated table still misses the contract. The shipped
 module registry is a test-owned CI parity oracle for shipped modules only; it
 is not an enrollment API for project-owned extensions.
 
