@@ -168,21 +168,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
   locally installed QuickScale 0.89.0.
 
   **Slices:**
-  - [ ] (a) Salvage before deletion: `bap-web-new` has no git remote, so deletion is final. Copy
-    `scripts/cutover.sh`, `CUTOVER.md`, `MIGRATION_PROMPT.md`, the gap handoff, the run report
-    SA277's draft cites, and SA153 (a)–(e4) as a git bundle plus plain copies to `~/code/bap-web-new-salvage/`,
-    outside every repository, and verify the bundle with `git bundle verify`. Do not salvage `.quickscale/wheels/`: it holds a
-    `quickscale_core` wheel built on 2026-10-09, before the final 0.89.0 tag, so (d) rebuilds
-    wheels from the recorded tag commit (Tier 1).
+  - [x] (a) Salvaged before deletion: `bap-web-new` has no git remote, so the preserved copy is
+    `~/code/bap-web-new-salvage/`, outside every repository. It holds `scripts/cutover.sh`,
+    `CUTOVER.md`, `MIGRATION_PROMPT.md`, the gap handoff and run report, and the complete history
+    as a verified git bundle; its `MANIFEST.md` records the hashes and evidence. `.quickscale/wheels/`
+    is excluded because it predates the 0.89.0 tag, so (d) rebuilds wheels from the recorded tag commit (Tier 1).
   - [x] (b) Module inventory of the **deployed `bap-web`** (the donor), which fixes the module
     set `bap-web-new` is generated with. The operator confirmed the deployed modules: `auth`,
     `listings`, `forms`. Their 0.89.0 `required_modules` add `orgs` (auth, listings, forms),
     `storage` (listings), `analytics` (forms), and `notifications` (orgs, forms), so
     `bap-web-new` is generated with `auth`, `listings`, `forms`, `orgs`, `storage`, `analytics`,
     `notifications`; their package dependencies come from each `module.yml`.
-  - [ ] (c) Delete `bap-web-new`: the operator authorized the deletion on 2026-10-19,
-    conditional on (a)'s verified copy; once it is verified, remove
-    `/home/victor/code/bap-web-new` entirely, including its git history, `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
+  - [ ] (c) Delete `bap-web-new`: the operator authorized the deletion on 2026-10-19, and (a) is
+    verified; remove `/home/victor/code/bap-web-new` entirely, including its git history,
+    `.quickscale/` state, and any local database or volumes its Docker stack created (Tier 1).
   - [ ] (d) Regenerate: generate `bap-web-new` with the local 0.89.0 using exactly (b)'s seven
     modules, carrying the donor through `make beta-migrate-iterate` per
     [beta-site-migration.md](../planning/beta-site-migration.md) so the fresh run report becomes
