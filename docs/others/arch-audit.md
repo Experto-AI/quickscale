@@ -14,8 +14,8 @@ library. Persistence in generated projects is PostgreSQL; the generator's own st
 `.quickscale/`. Two deployment realities: **(A) the generator repo** and **(B) generated projects**
 (the live one being `bap-web-new`, regenerated on 0.89.0). One maintainer,
 very high cadence (451 reachable commits since the prior pass, ~40% synthetic subtree splits);
-history before 2026 is thin for these paths. Growth direction (roadmap): SA300 sets the parity bar,
-SA191 cuts `bap-web-new` over, and SA153 adds public pages.
+history before 2026 is thin for these paths. Growth direction (roadmap): SA191d cuts `bap-web-new` over and SA153
+adds public pages.
 Scope: generator ↔ generated-project boundary (largest blast radius, nearest pressure).
 
 **Declared architecture (from `docs/`, the module-conventions harness, and test docstrings):**

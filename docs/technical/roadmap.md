@@ -6,13 +6,13 @@
 
 The immediate goal is one convention across all modules, as recorded in
 [module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
-once, onto the standardized names: the regenerated `bap-web-new` reaches visual parity (SA300)
-and is cut over (SA191). It then carries the first property portal in a
-project-owned extension (SA153). Capabilities are generalized only after that project proves
+once, onto the standardized names: the regenerated `bap-web-new`, already at visual parity, is
+cut over (SA191a–e) and then carries the first property portal in a project-owned extension
+(SA153). Capabilities are generalized only after that project proves
 their value.
 
 **Release status.** 0.89.0 fixes 0.88.0's S1 billing defects; a live 0.88.0 install moves to
-0.89.0 on a fresh database. The local `0.89.0` tag is validated; SA191's cutover is the proof
+0.89.0 on a fresh database. The local `0.89.0` tag is validated; SA191d's cutover is the proof
 before the operator's Phases 5–6 sealing and PyPI publication
 ([publish_procedure.md](publish_procedure.md)).
 
@@ -38,25 +38,30 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | — | Required |
-| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
+| SA191a | Prove `bap-web-new` on a fresh local stack | 1 | — | Required |
+| SA191b | Import old `bap-web` form submissions into `bap-web-new` | 1 | — | Required |
+| SA191e | Bring the `bap-web-new` admin to parity with old `bap-web` | 3 | — | Required |
+| SA191c | Write the operator cutover checklist | 1 | SA191b | Required |
+| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191a, SA191b, SA191c, SA191e | Required |
+| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191 | Optional |
+| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA300 (done) ──► SA191 (a, b) ──► SA153 (r, f) ──► SA154 (inventory)
-Track 2: SA277 (a3) ──► SA277 (a2, after SA191)
-Track 3: SA303 (done)
-     release path:  SA300 (done) ──► SA191 ──► operator publish 0.89.0
-     critical path: SA300 (done) ──► SA191 ──► SA153 (f)
+Track 1: SA191a ─────────────┐
+         SA191b ──► SA191c ──┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
+Track 3: SA191e ─────────────┘
+Track 2: SA277 (a3) ──► SA277 (a2, after SA191d)
+     release path:  SA191a–e ──► operator publish 0.89.0
+     critical path: SA191b ──► SA191c ──► SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
-head is SA191 (a): SA300's design system, browser harness, and parity pass have landed, and
-SA191 rehearses and validates before the cutover. SA277 (a3) runs now; (a2) waits on SA191's
-cutover evidence.
+Arrows within a track are queue order; the table holds the dependency edges. SA191a, SA191b,
+and SA191e are independent and can start now in any order or in parallel; SA191c waits on
+SA191b's command name; SA191d is the operator's own production cutover after all four.
+SA277 (a3) runs now; (a2) waits on SA191d's cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -71,16 +76,16 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 (a, rehearsal) | yes | no | yes | no | yes |
+| 1 | SA191a, SA191b | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
-| 3 | — | no | yes | yes | yes | no |
+| 3 | SA191e | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
 - Track 1 owns the generated `urls.py.j2` and the theme's social seam pages, the parity oracles,
   the hosted workflow triggers (including `e2e.yml`'s tag pattern), the `bap-web-new` cutover,
   the property extension, public templates, and the portal's
-  extension documentation, the `bap-web-new` salvage, the design-system
+  extension documentation, the `bap-web-new` forms import, the design-system
   extraction and the visual-parity harness, the managed CI-environment and operations-guide
   includes, and, for the conventions, module identities, models and their `0001_initial`,
   module READMEs, and module templates, static files, and template tags, with the module page templates and the generated
@@ -102,8 +107,8 @@ A track is **truly green** only when all three states are yes.
   settings names, `is_enabled()`, and the per-module personal-data declarations with the orgs
   personal-data check, and the maintainer migration tools (`beta_migration/`) with their smoke
   gate, playbook, gap ledger, and the `showcase_react` design layer.
-- Track 3 owns the orgs tenancy, purge, removal-obligation, invite-throttle, and boot path
-  (`orgs/apps.py`, `orgs/removal.py`, `orgs/views.py`), the privileged-command and runtime-role
+- Track 3 owns the `bap-web-new` admin parity (SA191e), the orgs tenancy, purge,
+  removal-obligation, invite-throttle, and boot path (`orgs/apps.py`, `orgs/removal.py`, `orgs/views.py`), the privileged-command and runtime-role
   stations, `is_platform_operator` and `operator_access`, the `quickscale_core.runtime`
   settings facade and its scheduled-off refusal helper, the generated settings templates
   (`base.py.j2`, `production.py.j2`, `local.py.j2`) with the generated `REST_FRAMEWORK`
@@ -135,32 +140,72 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Track 1 — parity, cutover, and the property portal
+### Tracks 1 and 3 — cutover and the property portal
 
-- [x] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
+**SA191 family — validate and cut over the regenerated `bap-web-new`.** Context shared by
+SA191a–e: old `bap-web` (`~/code/bap-web`) serves production on Railway with no users, only form
+submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
+module (`auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, `storage`), carries
+the `properties` app with `/api/properties/` and `properties_seed_catalog`, and recreates the six
+BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
+`alquiler-inquilino`, `reubicacion`, `consulta-general`) in
+`client_extensions/.../forms_seed_presets.py`.
+SA191e runs on track 3; the rest on track 1.
+SA191a, b, c, and e are coding-assistant tasks that touch no production system; SA191d is the
+operator's own cutover. A QuickScale defect found follows the release re-entry loop; a project
+defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
 
-- [ ] **SA191 — Validate and cut over the regenerated `bap-web-new`.**
+- [ ] **SA191a — Prove `bap-web-new` on a fresh local stack.**
 
-  Targets the regenerated project with SA300's parity in place. A fresh stack's first `migrate` prints no `quickscale_orgs.W004`/`W007` for schema its own
-  migrations are about to install, and `manage check` after migrations reports none.
-  `scripts/cutover.sh` and `CUTOVER.md` are re-ported from the salvage; they rebuild a
-  fresh database, reseed the catalog under the restricted runtime role (billing disabled),
-  verify, and roll back, and are rehearsed on scratch again. The modules the donor did not run
-  (`orgs`, `storage`, `analytics`, `notifications`) are added, and their
-  production settings (analytics key, email provider and sender, storage backend, the site
-  organization) are configured and verified here.
+  Tier 2-full. Acceptance: on an empty database the first `migrate` prints no
+  `quickscale_orgs.W004`/`W007` and `manage check` afterwards reports none; the site
+  organization is created; `properties_seed_catalog` and the forms preset seed run under the
+  restricted runtime role with billing disabled; the project test suite passes; the Docker build
+  installs the local 0.89.0 candidate without the developer's filesystem or unpublished PyPI
+  packages, with source commit, install method, and module refs recorded in the handoff note.
 
-  The deployed build installs the local 0.89.0 candidate (source commit, install method, and
-  module refs recorded) without the developer's filesystem or unpublished PyPI packages. A
-  QuickScale defect found follows the release re-entry loop. Production data is backed up outside
-  every repository; the pre-cutover database is retained until the reseeded site is verified.
+- [ ] **SA191b — Import old `bap-web` form submissions into `bap-web-new`.**
 
-  **Slices:**
-  - [ ] (a) Rehearse and verify in `bap-web-new` on scratch, then stage the production run:
-    exact commands, media manifest, invite list, rollback (Tier 2-full).
-  - [ ] (b) Production cutover on Railway, media carry, user re-invites, old repository archived;
-    each step explicitly operator-authorized. Tier 3: plan review required — one irreversible
-    production data replacement.
+  Tier 2-full. A project management command in `client_extensions` reads a JSON export of the
+  old `Form`, `FormSubmission`, and `FormFieldValue` rows (from
+  `manage dumpdata quickscale_modules_forms` against old `bap-web`), matches forms by `slug`,
+  assigns the site organization, and recreates submissions and field values, keeping
+  `submitted_at`, `status`, and `is_spam`. Old-only fields with no target (such as the GDPR
+  consent columns) are reported, not silently dropped. It is idempotent (re-running creates no
+  duplicates), supports `--dry-run`, and reports unmatched forms or fields.
+
+  **Acceptance:** tests with a fixture export in the old schema; a dry run against a sample
+  export prints counts.
+
+- [ ] **SA191e — Bring the `bap-web-new` admin to parity with old `bap-web`.**
+
+  Tier 2-fast. A `manage.py shell` script, run in both projects, dumps the live admin registry:
+  every registered model with its `list_display`, `list_filter`, `search_fields`,
+  `readonly_fields`, `fieldsets`, inlines, actions, and app labels. Known differences to resolve:
+  old `bap-web`'s `CustomUserAdmin` (no `auth` admin in `bap-web-new`; confirm the user admin is
+  present), and the forms admin's columns, filters, and actions (mark spam/read/replied/archived,
+  mark active/inactive). The `published_date` → `published_at` rename and the added orgs,
+  notifications, and backups admins are intended and stay.
+
+  **Acceptance:** every registry difference is restored or listed as intended in the handoff
+  note; tests cover each restored admin option.
+
+- [ ] **SA191c — Write the operator cutover checklist.**
+
+  Tier 1. `bap-web-new/CUTOVER.md`, one page: export the old database and forms (`pg_dump` plus
+  the SA191b `dumpdata` command); the Railway variables for the new service (secret key, allowed
+  hosts, database URL, analytics key, email provider and sender, storage backend, site
+  organization); deploy as a new Railway service beside the old one; the post-deploy commands
+  (migrate, site organization, catalog and forms seed, SA191b's import); the checks
+  (healthcheck, home, property search and detail, a form submission with its notification email
+  received, imported submissions visible in admin); the domain switch; and rollback (point the
+  domain back; the old service stays untouched until the operator retires it).
+
+- [ ] **SA191d — Cut over production to `bap-web-new` (operator).**
+
+  Operator action, not handed off. Run `CUTOVER.md` on Railway, switch the domain, then retire
+  the old service and archive the `bap-web` repository. Each production step is
+  operator-authorized; the old database export is kept outside every repository.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -175,9 +220,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   deployed site, and the SA208 and SA246 declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Re-apply the landed (a)–(e4) work from `~/code/bap-web-new-salvage/` onto the
-    regenerated project and re-prove its tests there (Tier 2-full).
-  - [ ] (f) Go-live on `buenosairesproperties.com` after SA191's cutover; re-prove the journey on
+  - [ ] (r) Audit the portal work already in `bap-web-new` (the `properties` app, its API, and
+    the React pages) against this acceptance, list what is missing, and close the gaps with
+    tests in the project (Tier 2-full).
+  - [ ] (f) Go-live on `buenosairesproperties.com` after SA191d's cutover; re-prove the journey on
     the deployed site (Tier 2-full; production deploy, maintainer action).
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
@@ -213,16 +259,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [x] (a1) The handoff names every recorded gap; draft decision record in
     `docs/planning/migration-upgrade-path-draft.md`.
-  - [ ] (a2) After SA191's cutover: the decision record and boundary rule in decisions, the
+  - [ ] (a2) After SA191d's cutover: the decision record and boundary rule in decisions, the
     (a1) draft confirmed or amended against the cutover evidence, and the operator docs pruned of
     steps either stage covers (Tier 2-fast).
   - [ ] (a3) The supported source-version range, test projects generated at each version in it
     with `beta_migration` smoke runs against them, and the prompt moved into the QuickScale
     repository as a versioned artifact (Tier 2-full).
-
-### Track 3 — CLI help
-
-- [x] **SA303 — Make `quickscale` help show every command, subcommand, and option it reaches.**
 
 ## Deferred constraints and references
 
@@ -232,8 +274,8 @@ Standing scope rules, presence contracts, and resource safeguards live in [decis
 and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 **Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
-current dashboard heading against the Django-served origin, and SA300 (b) added the live-site
-screenshot harness in `bap-web-new`; the repository still has no full journey suite. Remaining
+current dashboard heading against the Django-served origin, and `bap-web-new` has a live-site
+screenshot harness; the repository still has no full journey suite. Remaining
 order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
 (4) full journey E2E against the Docker stack, only if it fits the E2E time budget in
