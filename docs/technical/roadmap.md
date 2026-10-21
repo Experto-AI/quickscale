@@ -45,13 +45,15 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
+| SA304 | Fail the release check when a sealed module changed after its seal | 2 | — | Required |
+| SA305 | Detect hand edits to an embedded module before `quickscale update` | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191b ──► SA191c ──┐
 Track 3: SA191e ─────────────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
-Track 2: SA277 (a3) ──► SA277 (a2, after SA191d)
+Track 2: SA304 ──► SA305 ──► SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191a (done) ──► SA191b–e ──► operator publish 0.89.0
      critical path: SA191b ──► SA191c ──► SA191d ──► SA153 (f)
 ```
@@ -59,7 +61,7 @@ Track 2: SA277 (a3) ──► SA277 (a2, after SA191d)
 Arrows within a track are queue order; the table holds the dependency edges. SA191a has landed;
 SA191b and SA191e are independent and can start now in any order or in parallel; SA191c waits
 on SA191b's command name; SA191d is the operator's own production cutover after all four.
-SA277 (a3) runs now; (a2) waits on SA191d's cutover evidence.
+SA304 and SA305 run now, ahead of SA277 (a3); (a2) waits on SA191d's cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -75,7 +77,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191b | yes | no | yes | no | yes |
-| 2 | SA277 (a3) | yes | no | yes | no | no |
+| 2 | SA304 | yes | no | yes | no | no |
 | 3 | SA191e | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -228,7 +230,37 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
   on marker-derived enrollment and purge; schema changes ship incremental migrations on the
   frozen history. Close when every item is promoted or dropped with rationale.
 
-### Track 2 — upgrade path
+### Track 2 — module provenance and upgrade path
+
+Context shared by SA304 and SA305: SA302 changed `quickscale_modules/orgs/` on `v89` after
+`splits/orgs-module/0.89.0` was sealed at `6b970dc`, and nothing flagged the stale seal. SA191a
+then copied the fix into `bap-web-new/modules/orgs` by hand, leaving `.quickscale/state.yml`
+pointing at a split without it, where a later `quickscale update` could revert it. The instance
+itself is repaired by an operator reseal of the orgs split and a project update, outside these
+tickets; these tickets make the next one visible.
+
+- [ ] **SA304 — Fail the release check when a sealed module changed after its seal.**
+
+  Tier 2-fast. `make publish-module-status` and the publish-quality check compare each module's
+  current `quickscale_modules/<module>/` subtree split with its sealed `splits/<module>-module/X.Y.Z`
+  tag for the current `VERSION`, and report a mismatch as a blocking "sealed but stale" state
+  that names the module and points at the Phase 5 reseal path in `publish_procedure.md`.
+
+  **Acceptance:** a test repository with a sealed module tag and a later commit under that
+  module fails the check with that module named; an unchanged module and an unsealed module do
+  not fail it.
+
+- [ ] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
+
+  Tier 2-full. Before a subtree pull, `quickscale update` compares each embedded
+  `modules/<module>/` tree with the tree at its recorded `commit_sha` (allowing for the rewrites
+  embedding applies, such as `pyproject.toml`), and refuses with a list of the changed paths
+  unless `--allow-local-changes` is passed. `quickscale status` reports the same drift.
+  The roadmap rule that a QuickScale defect follows the release re-entry loop gains the line
+  "never patch an embedded module in a project; republish and update".
+
+  **Acceptance:** tests cover an unchanged module (passes), a hand-edited file (refused, path
+  listed), and the override flag; `quickscale status` shows the drift.
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
