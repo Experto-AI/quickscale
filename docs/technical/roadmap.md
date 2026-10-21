@@ -39,9 +39,8 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA191b | Import old `bap-web` form submissions into `bap-web-new` | 1 | — | Required |
-| SA191e | Bring the `bap-web-new` admin to parity with old `bap-web` | 3 | — | Required |
 | SA191c | Write the operator cutover checklist | 1 | SA191b | Required |
-| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191b, SA191c, SA191e | Required |
+| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191b, SA191c | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
@@ -52,15 +51,15 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191b ──► SA191c ──┐
-Track 3: SA191e ─────────────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
+Track 3: SA191e (done) ──────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
 Track 2: SA304 ──► SA305 ──► SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA191a (done) ──► SA191b–e ──► operator publish 0.89.0
+     release path:  SA191a, SA191e (done) ──► SA191b–d ──► operator publish 0.89.0
      critical path: SA191b ──► SA191c ──► SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191a has landed;
-SA191b and SA191e are independent and can start now in any order or in parallel; SA191c waits
-on SA191b's command name; SA191d is the operator's own production cutover after all four.
+Arrows within a track are queue order; the table holds the dependency edges. SA191a and SA191e
+have landed; SA191b can start now; SA191c waits on SA191b's command name; SA191d is the operator's
+own production cutover after SA191b and SA191c.
 SA304 and SA305 run now, ahead of SA277 (a3); (a2) waits on SA191d's cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
@@ -78,7 +77,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191b | yes | no | yes | no | yes |
 | 2 | SA304 | yes | no | yes | no | no |
-| 3 | SA191e | yes | yes | yes | yes | no |
+| 3 | — | no | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -170,18 +169,7 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
   **Acceptance:** tests with a fixture export in the old schema; a dry run against a sample
   export prints counts.
 
-- [ ] **SA191e — Bring the `bap-web-new` admin to parity with old `bap-web`.**
-
-  Tier 2-fast. A `manage.py shell` script, run in both projects, dumps the live admin registry:
-  every registered model with its `list_display`, `list_filter`, `search_fields`,
-  `readonly_fields`, `fieldsets`, inlines, actions, and app labels. Known differences to resolve:
-  old `bap-web`'s `CustomUserAdmin` (no `auth` admin in `bap-web-new`; confirm the user admin is
-  present), and the forms admin's columns, filters, and actions (mark spam/read/replied/archived,
-  mark active/inactive). The `published_date` → `published_at` rename and the added orgs,
-  notifications, and backups admins are intended and stay.
-
-  **Acceptance:** every registry difference is restored or listed as intended in the handoff
-  note; tests cover each restored admin option.
+- [x] **SA191e — Bring the `bap-web-new` admin to parity with old `bap-web`.**
 
 - [ ] **SA191c — Write the operator cutover checklist.**
 
