@@ -38,11 +38,10 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191a | Prove `bap-web-new` on a fresh local stack | 1 | — | Required |
 | SA191b | Import old `bap-web` form submissions into `bap-web-new` | 1 | — | Required |
 | SA191e | Bring the `bap-web-new` admin to parity with old `bap-web` | 3 | — | Required |
 | SA191c | Write the operator cutover checklist | 1 | SA191b | Required |
-| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191a, SA191b, SA191c, SA191e | Required |
+| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191b, SA191c, SA191e | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
@@ -50,17 +49,16 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191a ─────────────┐
-         SA191b ──► SA191c ──┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
-Track 3: SA191e ─────────────┘
+Track 1: SA191b ──► SA191c ──┐
+Track 3: SA191e ─────────────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
 Track 2: SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA191a–e ──► operator publish 0.89.0
+     release path:  SA191a (done) ──► SA191b–e ──► operator publish 0.89.0
      critical path: SA191b ──► SA191c ──► SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191a, SA191b,
-and SA191e are independent and can start now in any order or in parallel; SA191c waits on
-SA191b's command name; SA191d is the operator's own production cutover after all four.
+Arrows within a track are queue order; the table holds the dependency edges. SA191a has landed;
+SA191b and SA191e are independent and can start now in any order or in parallel; SA191c waits
+on SA191b's command name; SA191d is the operator's own production cutover after all four.
 SA277 (a3) runs now; (a2) waits on SA191d's cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
@@ -76,7 +74,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191a, SA191b | yes | no | yes | no | yes |
+| 1 | SA191b | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | SA191e | yes | yes | yes | yes | no |
 
@@ -155,14 +153,7 @@ SA191a, b, c, and e are coding-assistant tasks that touch no production system; 
 operator's own cutover. A QuickScale defect found follows the release re-entry loop; a project
 defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
 
-- [ ] **SA191a — Prove `bap-web-new` on a fresh local stack.**
-
-  Tier 2-full. Acceptance: on an empty database the first `migrate` prints no
-  `quickscale_orgs.W004`/`W007` and `manage check` afterwards reports none; the site
-  organization is created; `properties_seed_catalog` and the forms preset seed run under the
-  restricted runtime role with billing disabled; the project test suite passes; the Docker build
-  installs the local 0.89.0 candidate without the developer's filesystem or unpublished PyPI
-  packages, with source commit, install method, and module refs recorded in the handoff note.
+- [x] **SA191a — Prove `bap-web-new` on a fresh local stack.**
 
 - [ ] **SA191b — Import old `bap-web` form submissions into `bap-web-new`.**
 
