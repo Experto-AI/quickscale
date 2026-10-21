@@ -249,6 +249,10 @@ remote tip was observed, it prints a ready-to-paste `make publish-module …` li
 through maintainer recovery; an unobservable branch requires restoring remote access and re-running
 status. Neither state emits a publish command that is guaranteed to fail.
 
+A module whose `splits/<module>-module/X.Y.Z` seal tag no longer points at its current split is
+reported as **sealed but stale**. `make release-gate` fails on that state; correct it before
+publishing through the [Phase 5](#phase-5--seal-the-split-tags) reseal path.
+
 **Then verify before sealing.** Phases 4a and 4b below are the verification loop; a failure there means fixing
 the cause, re-running the quality gate, and republishing whatever status then reports as outdated, per the
 [re-entry loop](#re-entry-loop-for-phase-4a4b-defects). Nothing is consumed by iterating.

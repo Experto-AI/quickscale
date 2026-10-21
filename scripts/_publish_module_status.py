@@ -11,10 +11,15 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import _publish_module_core as _core
 import _publish_module_git as _git
 from _publish_module_git import GitError, GitRunner, SealError
+
+#: Status label for a module whose immutable ``VERSION`` seal tag no longer
+#: names the module's current subtree split.
+SEAL_STALE = "sealed but stale"
 
 
 def _show_provenance_diagnostics(runner: GitRunner) -> bool:
@@ -68,43 +73,105 @@ def _get_module_publish_state(
     return "outdated", local_sha, published_sha, "remote-live"
 
 
-def _get_module_seal_state(
+@dataclass(frozen=True)
+class ModuleSealInspection:
+    """One module's immutable seal tag compared with its current split."""
+
+    module: str
+    tag: str
+    split_sha: str
+    split_tree_sha: str
+    tag_sha: str
+    tag_tree_sha: str
+    state: str
+    error: str | None = None
+
+
+def _inspect_module_seal(
     module_name: str,
     version: str,
-    published_sha: str,
+    split_sha: str,
     runner: GitRunner,
-) -> str:
-    """Determine seal state from the remote tag target, read-only."""
+    *,
+    repo_root: Path | None = None,
+) -> ModuleSealInspection:
+    """
+    Compare the remote ``VERSION`` seal tag with the module's current split.
+
+    Freshness follows content identity, not commit identity: sealing reuses the
+    previous release commit when the split tree is unchanged
+    (release_gates_policy.md Rule 6), so the comparison is between the two
+    trees.  A lightweight tag has no peeled ``ls-remote`` record; the shared
+    tag resolver falls back to the direct target only when peeling is absent.
+    """
     try:
         tag = _git.resolve_split_tag(module_name, version)
-        # A lightweight tag has no peeled ls-remote record.  The shared tag
-        # resolver prefers that record for annotated tags and falls back to
-        # the direct target only when peeling is absent.  This fallback is
-        # intentionally limited to read-only status; newly pushed tags below
-        # still use the peeled-only verification path.
-        peeled_sha = _git.resolve_remote_ref("origin", tag, runner=runner)
-    except GitError, ModuleNotFoundError:
-        # Status is diagnostic rather than a gate.  A runner that cannot resolve
-        # a remote target is represented as unsealed instead of causing a
-        # mutation or turning inspection into a release-authority failure.  The
-        # minimal hermetic publication fixture also omits the manifest package
-        # used by the shared version parser; that is the same unsealed state for
-        # this read-only diagnostic.
-        return "unsealed"
-    if not peeled_sha:
-        return "unsealed"
+    except (GitError, ModuleNotFoundError) as exc:
+        return ModuleSealInspection(
+            module_name, "", split_sha, "", "", "", "unobservable", str(exc)
+        )
     try:
-        normalized_peeled = _git._seal_sha(
+        if repo_root is None:
+            peeled_sha = _git.resolve_remote_ref("origin", tag, runner=runner)
+        else:
+            peeled_sha = _git.resolve_remote_ref("origin", tag, path=repo_root, runner=runner)
+    except (GitError, ModuleNotFoundError) as exc:
+        return ModuleSealInspection(
+            module_name, tag, split_sha, "", "", "", "unobservable", str(exc)
+        )
+    if not peeled_sha:
+        return ModuleSealInspection(module_name, tag, split_sha, "", "", "", "unsealed")
+    try:
+        tag_sha = _git._seal_sha(
             peeled_sha,
             description=f"peeled remote tag {tag!r}",
             module=module_name,
             version=version,
         )
-    except SealError:
-        return "unsealed"
-    if published_sha and normalized_peeled == published_sha.lower():
+    except SealError as exc:
+        return ModuleSealInspection(
+            module_name, tag, split_sha, "", "", "", "unobservable", str(exc)
+        )
+    try:
+        split_tree_sha = _git.get_tree_sha(split_sha, path=repo_root, runner=runner)
+        tag_tree_sha = _git.get_tree_sha(tag_sha, path=repo_root, runner=runner)
+    except (GitError, OSError) as exc:
+        return ModuleSealInspection(
+            module_name, tag, split_sha, "", tag_sha, "", "unobservable", str(exc)
+        )
+    if split_tree_sha == tag_tree_sha:
+        state = "sealed"
+    else:
+        state = "stale"
+    return ModuleSealInspection(
+        module_name,
+        tag,
+        split_sha,
+        split_tree_sha,
+        tag_sha,
+        tag_tree_sha,
+        state,
+    )
+
+
+def _get_module_seal_state(
+    module_name: str,
+    version: str,
+    split_sha: str,
+    runner: GitRunner,
+) -> str:
+    """Return the read-only status label for one module's seal tag."""
+    inspection = _inspect_module_seal(module_name, version, split_sha, runner)
+    if inspection.state == "sealed":
         return f"sealed@{version}"
-    return "sealed-conflict"
+    if inspection.state == "stale":
+        return SEAL_STALE
+    # Status is diagnostic rather than a gate: an absent tag, a runner that
+    # cannot resolve a remote target, or the minimal hermetic publication
+    # fixture (which omits the manifest package used by the shared version
+    # parser) all read as unsealed here.  The release check keeps the
+    # unobservable distinction and fails closed on it.
+    return "unsealed"
 
 
 @dataclass
@@ -114,12 +181,13 @@ class _StatusRoll:
     outdated: list[str]
     unpublished: list[str]
     unobservable: list[str]
+    sealed_stale: list[str]
     remote_shas: dict[str, str]
     all_sealed: bool
 
     @property
     def needs_attention(self) -> bool:
-        return bool(self.outdated or self.unpublished or self.unobservable)
+        return bool(self.outdated or self.unpublished or self.unobservable or self.sealed_stale)
 
 
 def _print_module_status(
@@ -166,11 +234,12 @@ def _collect_module_statuses(
     outdated: list[str] = []
     unpublished: list[str] = []
     unobservable: list[str] = []
+    sealed_stale: list[str] = []
     all_sealed = True
     remote_shas: dict[str, str] = {}
     for module_name in frozen_modules:
         state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name, runner)
-        seal_state = _get_module_seal_state(module_name, version, pub_sha, runner)
+        seal_state = _get_module_seal_state(module_name, version, local_sha, runner)
         remote_shas[module_name] = pub_sha
         _print_module_status(module_name, state, seal_state, local_sha, pub_sha, pub_source)
         if state == "outdated":
@@ -179,9 +248,11 @@ def _collect_module_statuses(
             unpublished.append(module_name)
         elif state == "unobservable":
             unobservable.append(module_name)
+        if seal_state == SEAL_STALE:
+            sealed_stale.append(module_name)
         if seal_state != f"sealed@{version}":
             all_sealed = False
-    return _StatusRoll(outdated, unpublished, unobservable, remote_shas, all_sealed)
+    return _StatusRoll(outdated, unpublished, unobservable, sealed_stale, remote_shas, all_sealed)
 
 
 def _print_status_warnings(roll: _StatusRoll) -> None:
@@ -191,6 +262,8 @@ def _print_status_warnings(roll: _StatusRoll) -> None:
         _core._print_warning(f"Unpublished split branches: {' '.join(roll.unpublished)}")
     if roll.unobservable:
         _core._print_warning(f"Unobservable split branches: {' '.join(roll.unobservable)}")
+    if roll.sealed_stale:
+        _core._print_warning(f"Sealed but stale (blocking): {' '.join(roll.sealed_stale)}")
 
 
 def _print_next_actions(roll: _StatusRoll, *, is_auth: bool) -> None:
@@ -208,6 +281,12 @@ def _print_next_actions(roll: _StatusRoll, *, is_auth: bool) -> None:
             "  A confirmed absent branch is not publication authorization; "
             "restore it through maintainer recovery, then re-run status."
         )
+    if roll.sealed_stale:
+        _core._print_info(
+            "  Delete each stale remote and local split tag, republish the split "
+            "branch, then reseal:"
+        )
+        _core._print_info("    docs/technical/publish_procedure.md#phase-5--seal-the-split-tags")
     if roll.outdated:
         if roll.unpublished or roll.unobservable:
             _core._print_info("  Recover every blocked branch before using make publish-modules.")
