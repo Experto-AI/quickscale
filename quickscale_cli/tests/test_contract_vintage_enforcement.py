@@ -7,6 +7,7 @@ import quickscale_cli.commands._module_shared as _module_shared
 import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_cli.commands._module_embed as _module_embed
 import quickscale_cli.commands._module_update as _module_update
+import quickscale_cli.commands._module_update_guard as _module_update_guard
 import quickscale_cli.commands._module_update_io as _module_update_io
 import quickscale_core.advisory_lock as _advisory_lock
 import quickscale_cli.commands._state as _state_2
@@ -58,6 +59,23 @@ from quickscale_core.schema.state_schema import (
 
 
 _DECLARED_STEP_IDS = tuple(step.id for step in load_project_contract_vintage().steps)
+
+
+@pytest.fixture(autouse=True)
+def _stub_module_content_drift(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep contract-vintage tests independent of SA305 provenance.
+
+    Their fixture state records no real subtree history, so the hand-edit
+    guard would refuse every update; the guard has dedicated command-boundary
+    coverage in test_update_local_changes.py.
+    """
+    monkeypatch.setattr(
+        _module_update_guard,
+        "_collect_module_content_drift",
+        lambda state, project_path: [],
+    )
+
+
 # The ids a confirmation records for the default fixture state: the project
 # declaration steps plus each installed module's declared vintage id.
 _RECORDED_STEP_IDS = tuple(declared_adoption_step_ids(("orgs",)))
