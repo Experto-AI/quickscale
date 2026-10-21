@@ -241,10 +241,12 @@ tickets; these tickets make the next one visible.
 
 - [ ] **SA304 — Fail the release check when a sealed module changed after its seal.**
 
-  Tier 2-fast. `make publish-module-status` and the publish-quality check compare each module's
-  current `quickscale_modules/<module>/` subtree split with its sealed `splits/<module>-module/X.Y.Z`
-  tag for the current `VERSION`, and report a mismatch as a blocking "sealed but stale" state
-  that names the module and points at the Phase 5 reseal path in `publish_procedure.md`.
+  Tier 2-fast. `make publish-module-status` already lists orgs as "unsealed outdated", but only
+  as a warning, and it does not say that a remote `0.89.0` seal exists on the stale commit. The
+  status and the publish-quality check report a module whose sealed `splits/<module>-module/X.Y.Z`
+  tag for the current `VERSION` differs from its current subtree split as a blocking
+  "sealed but stale" state that names the module and points at the Phase 5 reseal path in
+  `publish_procedure.md`.
 
   **Acceptance:** a test repository with a sealed module tag and a later commit under that
   module fails the check with that module named; an unchanged module and an unsealed module do
