@@ -7,7 +7,7 @@
 The immediate goal is one convention across all modules, as recorded in
 [module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
 once, onto the standardized names: the regenerated `bap-web-new`, already at visual parity, is
-cut over (SA191a–e) and then carries the first property portal in a project-owned extension
+cut over (SA191c–d) and then carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves
 their value.
 
@@ -48,16 +48,14 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191c ─────────────┐
-Track 3: SA191e (done) ──────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
+Track 1: SA191c ──► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
 Track 2: SA305 ──► SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA191a, SA191b, SA191e (done) ──► SA191c–d ──► operator publish 0.89.0
+     release path:  SA191c–d ──► operator publish 0.89.0
      critical path: SA191c ──► SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191a, SA191b,
-and SA191e have landed; SA191c can start now; SA191d is the operator's own production cutover
-after SA191c.
+Arrows within a track are queue order; the table holds the dependency edges. SA191c can start
+now; SA191d is the operator's own production cutover after SA191c.
 SA305 runs now, ahead of SA277 (a3); (a2) waits on SA191d's cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
@@ -104,7 +102,7 @@ A track is **truly green** only when all three states are yes.
   settings names, `is_enabled()`, and the per-module personal-data declarations with the orgs
   personal-data check, and the maintainer migration tools (`beta_migration/`) with their smoke
   gate, playbook, gap ledger, and the `showcase_react` design layer.
-- Track 3 owns the `bap-web-new` admin parity (SA191e), the orgs tenancy, purge,
+- Track 3 owns the orgs tenancy, purge,
   removal-obligation, invite-throttle, and boot path (`orgs/apps.py`, `orgs/removal.py`, `orgs/views.py`), the privileged-command and runtime-role
   stations, `is_platform_operator` and `operator_access`, the `quickscale_core.runtime`
   settings facade and its scheduled-off refusal helper, the generated settings templates
@@ -137,34 +135,28 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Tracks 1 and 3 — cutover and the property portal
+### Track 1 — cutover and the property portal
 
 **SA191 family — validate and cut over the regenerated `bap-web-new`.** Context shared by
-SA191a–e: old `bap-web` (`~/code/bap-web`) serves production on Railway with no users, only form
-submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
+SA191c and SA191d: old `bap-web` (`~/code/bap-web`) serves production on Railway with no users,
+only form submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
 module (`auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, `storage`), carries
 the `properties` app with `/api/properties/` and `properties_seed_catalog`, and recreates the six
 BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
 `alquiler-inquilino`, `reubicacion`, `consulta-general`) in
 `client_extensions/.../forms_seed_presets.py`.
-SA191e runs on track 3; the rest on track 1.
-SA191a, b, c, and e are coding-assistant tasks that touch no production system; SA191d is the
-operator's own cutover. A QuickScale defect found follows the release re-entry loop; a project
-defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
-
-- [x] **SA191a — Prove `bap-web-new` on a fresh local stack.**
-
-- [x] **SA191b — Import old `bap-web` form submissions into `bap-web-new`.**
-
-- [x] **SA191e — Bring the `bap-web-new` admin to parity with old `bap-web`.**
+SA191c is a coding-assistant task that touches no production system; SA191d is the operator's
+own cutover. A QuickScale defect found follows the release re-entry loop; a project defect is
+fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
 
 - [ ] **SA191c — Write the operator cutover checklist.**
 
   Tier 1. `bap-web-new/CUTOVER.md`, one page: export the old database and forms (`pg_dump` plus
-  the SA191b `dumpdata` command); the Railway variables for the new service (secret key, allowed
-  hosts, database URL, analytics key, email provider and sender, storage backend, site
-  organization); deploy as a new Railway service beside the old one; the post-deploy commands
-  (migrate, site organization, catalog and forms seed, SA191b's import); the checks
+  a `dumpdata` export of `quickscale_modules_forms`); the Railway variables for the new service
+  (secret key, allowed hosts, database URL, analytics key, email provider and sender, storage
+  backend, site organization); deploy as a new Railway service beside the old one; the
+  post-deploy commands (migrate, site organization, catalog and forms seed, the form-submission
+  import); the checks
   (healthcheck, home, property search and detail, a form submission with its notification email
   received, imported submissions visible in admin); the domain switch; and rollback (point the
   domain back; the old service stays untouched until the operator retires it).
@@ -208,8 +200,8 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
 ### Track 2 — module provenance and upgrade path
 
 Context for SA305: SA302 changed `quickscale_modules/orgs/` on `v89` after
-`splits/orgs-module/0.89.0` was sealed at `6b970dc`, and nothing flagged the stale seal. SA191a
-then copied the fix into `bap-web-new/modules/orgs` by hand, leaving `.quickscale/state.yml`
+`splits/orgs-module/0.89.0` was sealed at `6b970dc`, and nothing flagged the stale seal. The fix
+was then copied into `bap-web-new/modules/orgs` by hand, leaving `.quickscale/state.yml`
 pointing at a split without it, where a later `quickscale update` could revert it. The instance
 itself is repaired by an operator reseal of the orgs split and a project update, outside these
 tickets; these tickets make the next one visible.
