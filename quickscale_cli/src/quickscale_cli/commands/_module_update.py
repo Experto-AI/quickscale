@@ -299,9 +299,11 @@ def _enforce_no_local_module_changes(
     )
     if not allow_local_changes:
         click.echo(
-            "💡 Restore the recorded module content by reverting the edit, move "
-            "the change upstream and update from a newer split, or re-run with "
-            "--allow-local-changes to proceed anyway.",
+            "💡 Restore the recorded module content (revert the edit) before a "
+            "normal update, or pass --allow-local-changes to proceed. A change "
+            "you want to keep must be published upstream and brought in by an "
+            "allowed update, since upstreaming alone does not move the recorded "
+            "baseline.",
             err=True,
         )
         raise click.Abort()
