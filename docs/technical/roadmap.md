@@ -7,7 +7,7 @@
 The immediate goal is one convention across all modules, as recorded in
 [module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
 once, onto the standardized names: the regenerated `bap-web-new`, already at visual parity, is
-cut over (SA191c–d) and then carries the first property portal in a project-owned extension
+cut over (SA191d) and then carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves
 their value.
 
@@ -38,25 +38,25 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191c | Write the operator cutover checklist | 1 | — | Required |
-| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191c | Required |
+| SA191d | Cut over production to `bap-web-new` (operator) | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
+| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 | SA305 | Detect hand edits to an embedded module before `quickscale update` | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191c ──► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
-Track 2: SA305 ──► SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA191c–d ──► operator publish 0.89.0
-     critical path: SA191c ──► SA191d ──► SA153 (f)
+Track 1: SA191d (operator) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
+Track 2: SA305
+Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
+     release path:  SA191d ──► operator publish 0.89.0
+     critical path: SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191c can start
-now; SA191d is the operator's own production cutover after SA191c.
-SA305 runs now, ahead of SA277 (a3); (a2) waits on SA191d's cutover evidence.
+Arrows within a track are queue order; the table holds the dependency edges. SA191d is the
+operator's own cutover; SA153 (r) and SA277 (a3) need nothing from it and run now. SA153 (f)
+and SA277 (a2) wait on SA191d.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -71,9 +71,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191c | yes | no | yes | no | yes |
-| 2 | SA305 | yes | no | yes | no | no |
-| 3 | — | no | yes | yes | yes | no |
+| 1 | SA153 (r); SA191d (operator) | yes | no | yes | no | yes |
+| 2 | SA305 | yes | yes | yes | yes | no |
+| 3 | SA277 (a3) | yes | no | yes | no | no |
 
 ### Ownership and merge coordination
 
@@ -100,8 +100,7 @@ A track is **truly green** only when all three states are yes.
   that patch them, the blog and storage upload-path builders and the storage Markdownx upload,
   and, for the conventions, the manifest option schema and the CLI's `module_config`, module
   settings names, `is_enabled()`, and the per-module personal-data declarations with the orgs
-  personal-data check, and the maintainer migration tools (`beta_migration/`) with their smoke
-  gate, playbook, gap ledger, and the `showcase_react` design layer.
+  personal-data check, and the `showcase_react` design layer.
 - Track 3 owns the orgs tenancy, purge,
   removal-obligation, invite-throttle, and boot path (`orgs/apps.py`, `orgs/removal.py`, `orgs/views.py`), the privileged-command and runtime-role
   stations, `is_platform_operator` and `operator_access`, the `quickscale_core.runtime`
@@ -118,7 +117,8 @@ A track is **truly green** only when all three states are yes.
   re-exports, the conformance harness with its registry row, parity families and
   `module-extension.md`'s authoring checklist, the five `_anonymization.py` handlers with
   core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
-  `decisions.md` § Clean-Break Migration History.
+  `decisions.md` § Clean-Break Migration History, and the maintainer migration tools
+  (`beta_migration/`) with their smoke gate, playbook, gap ledger, and the upgrade prompt.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
   `project_contract.yml`, and [decisions.md](decisions.md). Each track resolves the shared set at
@@ -137,29 +137,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — cutover and the property portal
 
-**SA191 family — validate and cut over the regenerated `bap-web-new`.** Context shared by
-SA191c and SA191d: old `bap-web` (`~/code/bap-web`) serves production on Railway with no users,
+**SA191d context.** Old `bap-web` (`~/code/bap-web`) serves production on Railway with no users,
 only form submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
 module (`auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, `storage`), carries
 the `properties` app with `/api/properties/` and `properties_seed_catalog`, and recreates the six
 BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
 `alquiler-inquilino`, `reubicacion`, `consulta-general`) in
 `client_extensions/.../forms_seed_presets.py`.
-SA191c is a coding-assistant task that touches no production system; SA191d is the operator's
-own cutover. A QuickScale defect found follows the release re-entry loop; a project defect is
-fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
-
-- [ ] **SA191c — Write the operator cutover checklist.**
-
-  Tier 1. `bap-web-new/CUTOVER.md`, one page: export the old database and forms (`pg_dump` plus
-  a `dumpdata` export of `quickscale_modules_forms`); the Railway variables for the new service
-  (secret key, allowed hosts, database URL, analytics key, email provider and sender, storage
-  backend, site organization); deploy as a new Railway service beside the old one; the
-  post-deploy commands (migrate, site organization, catalog and forms seed, the form-submission
-  import); the checks
-  (healthcheck, home, property search and detail, a form submission with its notification email
-  received, imported submissions visible in admin); the domain switch; and rollback (point the
-  domain back; the old service stays untouched until the operator retires it).
+The cutover procedure is `bap-web-new/CUTOVER.md`. A QuickScale defect follows the release
+re-entry loop (never patch an embedded module in a project; republish and update); a project
+defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
 
 - [ ] **SA191d — Cut over production to `bap-web-new` (operator).**
 
@@ -197,14 +184,11 @@ fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
   on marker-derived enrollment and purge; schema changes ship incremental migrations on the
   frozen history. Close when every item is promoted or dropped with rationale.
 
-### Track 2 — module provenance and upgrade path
+### Track 2 — module provenance
 
-Context for SA305: SA302 changed `quickscale_modules/orgs/` on `v89` after
-`splits/orgs-module/0.89.0` was sealed at `6b970dc`, and nothing flagged the stale seal. The fix
-was then copied into `bap-web-new/modules/orgs` by hand, leaving `.quickscale/state.yml`
-pointing at a split without it, where a later `quickscale update` could revert it. The instance
-itself is repaired by an operator reseal of the orgs split and a project update, outside these
-tickets; these tickets make the next one visible.
+Context: `bap-web-new/modules/orgs` carries a hand-copied orgs fix that its recorded split lacks,
+so a `quickscale update` would revert it; the operator reseals the orgs split and updates the
+project outside this ticket.
 
 - [ ] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
 
@@ -212,14 +196,15 @@ tickets; these tickets make the next one visible.
   `modules/<module>/` tree with the tree at its recorded `commit_sha` (allowing for the rewrites
   embedding applies, such as `pyproject.toml`), and refuses with a list of the changed paths
   unless `--allow-local-changes` is passed. `quickscale status` reports the same drift.
-  The roadmap rule that a QuickScale defect follows the release re-entry loop gains the line
-  "never patch an embedded module in a project; republish and update". The update's dependency
+  The update's dependency
   sync also keeps a project's `quickscale-core` path dependency on a committed wheel: in
   `bap-web-new` it rewrote it to `>=0.89.0,<0.90.0`, a version not yet on PyPI.
 
   **Acceptance:** tests cover an unchanged module (passes), a hand-edited file (refused, path
   listed), and the override flag; `quickscale status` shows the drift; an update of a project
   whose `quickscale-core` is a wheel path leaves that line unchanged.
+
+### Track 3 — upgrade path
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
@@ -239,10 +224,8 @@ tickets; these tickets make the next one visible.
   trigger, and decisions say so.
 
   **Slices:**
-  - [x] (a1) The handoff names every recorded gap; draft decision record in
-    `docs/planning/migration-upgrade-path-draft.md`.
   - [ ] (a2) After SA191d's cutover: the decision record and boundary rule in decisions, the
-    (a1) draft confirmed or amended against the cutover evidence, and the operator docs pruned of
+    draft (`docs/planning/migration-upgrade-path-draft.md`) confirmed or amended against the cutover evidence, and the operator docs pruned of
     steps either stage covers (Tier 2-fast).
   - [ ] (a3) The supported source-version range, test projects generated at each version in it
     with `beta_migration` smoke runs against them, and the prompt moved into the QuickScale
