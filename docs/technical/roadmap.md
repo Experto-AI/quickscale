@@ -38,8 +38,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA300 | Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com | 1 | — | Required |
-| SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | SA300 | Required |
+| SA191 | Validate and cut over the regenerated `bap-web-new` | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191 | Optional |
@@ -47,16 +46,17 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA300 (c) ──► SA191 (a, b) ──► SA153 (r, f) ──► SA154 (inventory)
+Track 1: SA300 (done) ──► SA191 (a, b) ──► SA153 (r, f) ──► SA154 (inventory)
 Track 2: SA277 (a3) ──► SA277 (a2, after SA191)
 Track 3: SA303 (done)
-     release path:  SA300 ──► SA191 ──► operator publish 0.89.0
-     critical path: SA300 ──► SA191 ──► SA153 (f)
+     release path:  SA300 (done) ──► SA191 ──► operator publish 0.89.0
+     critical path: SA300 (done) ──► SA191 ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Track 1's queue
-head is SA300 (c): (a) and (b) have landed, and (c) continues before SA191 validates and cuts
-over. SA277 (a3) runs now; (a2) waits on SA191's cutover evidence.
+head is SA191 (a): SA300's design system, browser harness, and parity pass have landed, and
+SA191 rehearses and validates before the cutover. SA277 (a3) runs now; (a2) waits on SA191's
+cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -71,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA300 (c, parity pass) | yes | no | yes | no | yes |
+| 1 | SA191 (a, rehearsal) | yes | no | yes | no | yes |
 | 2 | SA277 (a3) | yes | no | yes | no | no |
 | 3 | — | no | yes | yes | yes | no |
 
@@ -137,40 +137,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — parity, cutover, and the property portal
 
-- [ ] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
-
-  The live buenosairesproperties.com is the reference, read through a browser, so parity does
-  not depend on the local `bap-web` checkout matching the deployed commit.
-
-  **Page list.** Required (live menu crawled 2026-10-20): `/` (Inicio), `/about` (Nosotros), and
-  `/contact` (Contacto). `/privacidad` is footer-linked; (b)'s handoff lists it for the
-  operator's decision. Any other page joins only by that decision.
-
-  **Parity bar.** A required page has no differences when, at desktop (1280×720) and mobile
-  (390×844) viewports, against the live page:
-  - the screenshot pixel diff is at most 1% of the page area, with an anti-aliasing tolerance
-    (`pixelmatch` threshold 0.1) and with data-driven regions masked (listing photos, prices,
-    counts, and dates, since the catalog is reseeded);
-  - the visible static text, the menu items and their targets, and the fields of every form
-    are identical;
-  - computed fonts, colors, and spacing of the header, footer, menu, buttons, and form controls
-    match;
-  - the page shows no console errors and no broken links or images the live page lacks.
-  A difference the operator accepts as an improvement is recorded as such, not as a failure.
-
-  **Slices:**
-  - [x] (a) Design system: `bap-web-new`'s `frontend/design/` is the single token source.
-  - [x] (b) Browser harness: fixed the stale `e2e/home.spec.ts.j2` (it now asserts the current
-    dashboard heading and targets the Django origin), crawled the live menu to fix the required
-    page list, and added the page-by-page comparison above of the local `bap-web-new`
-    deployment against the live site. The local side runs `quickscale up` in `bap-web-new`
-    (its `start.sh` migrates and seeds the forms presets), then
-    `quickscale manage properties_seed_catalog` to load the catalog; the harness documents both
-    steps and runs against that stack (Tier 2-full). Landed in `bap-web-new` at `b73c286`
-    (`frontend/e2e/parity/`, `docs/sa300-parity-harness.md`); the run passes the parity bar on
-    `/`, `/about`, and `/contact` at both viewports.
-  - [ ] (c) Iterate until every required page meets the parity bar. Spotted improvements are
-    recorded as a separate list and do not block parity (Tier 2-fast).
+- [x] **SA300 — Extract the `bap-web` design system and reach visual parity with buenosairesproperties.com.**
 
 - [ ] **SA191 — Validate and cut over the regenerated `bap-web-new`.**
 
