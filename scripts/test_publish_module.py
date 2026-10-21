@@ -1173,6 +1173,11 @@ class TestSealCliAndStatus:
             "resolve_remote_ref",
             lambda remote, ref, *, runner: HEAD_SHA,
         )
+        monkeypatch.setattr(
+            git_module,
+            "get_tree_sha",
+            lambda commit, path=None, *, runner: "shared-tree",
+        )
 
         publish_module._show_status(object(), version=VERSION)
         output = capsys.readouterr().out
@@ -1324,6 +1329,11 @@ class TestSealCliAndStatus:
             git_module,
             "resolve_remote_ref",
             resolve_direct_target,
+        )
+        monkeypatch.setattr(
+            git_module,
+            "get_tree_sha",
+            lambda commit, path=None, *, runner: "shared-tree",
         )
 
         runner = publish_module.GitRunner(executable="git", env={})

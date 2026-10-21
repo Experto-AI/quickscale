@@ -117,11 +117,16 @@ def _maybe_clean_subtree_cache(clean: bool) -> None:
             shutil.rmtree(cache_dir)
 
 
-def _get_local_split_sha(module_path: str, runner: GitRunner) -> str | None:
+def _get_local_split_sha(
+    module_path: str,
+    runner: GitRunner,
+    *,
+    repo_root: Path | None = None,
+) -> str | None:
     """Compute the subtree split SHA for *module_path* without creating a branch."""
     result = runner.run(
         ["subtree", "split", f"--prefix={module_path}", "--ignore-joins"],
-        cwd=_core._REPO_ROOT,
+        cwd=repo_root or _core._REPO_ROOT,
         capture_output=True,
         text=True,
     )

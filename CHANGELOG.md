@@ -96,6 +96,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     data export, the new service's variables and deploy, the site-organization, catalog, forms,
     and submission-import commands, the pre-switch checks, the domain move, and a rollback that
     leaves the old service untouched.
+  - **A stale module seal fails the release check.** `make release-gate` names any module whose
+    `X.Y.Z` split tag no longer matches its current split, and `make publish-module-status` reports
+    the same **sealed but stale** state with the Phase 5 reseal path.
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
   - **`ClientIdentityMiddleware` in generated projects.** A first-position middleware aligns ordinary DRF request identity with the canonical resolver, so a short forwarded chain cannot be trusted by one consumer and rejected by another. Proxy configuration is validated before mutation and the production proxy count is derived rather than guessed.

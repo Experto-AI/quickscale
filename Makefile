@@ -58,6 +58,7 @@
 #   make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version>)
 #   make seal-modules         - Seal all split-branch tags (VERSION=<version>)
 #   make seal-status          - Show seal status (VERSION=<version>)
+#   make check-module-seals   - Fail when a module changed after its split tag was sealed
 #   make legacy-mount         - Mount legacy quickscale symlink
 #   make legacy-unmount       - Unmount legacy quickscale symlink
 #   make legacy-status        - Show legacy symlink status
@@ -66,7 +67,7 @@
 .PHONY: setup bootstrap install \
         test test-unit test-integration test-bypassrls test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-postgres-provisioning \
         lint lint-fix lint-frontend lint-agent typecheck format \
-        fix check ci ci-e2e release-gate retry retry-show \
+        fix check ci ci-e2e release-gate check-module-seals retry retry-show \
         docs \
         build build-core clean \
 		beta-migrate-fresh \
@@ -295,7 +296,7 @@ help:
 	@echo "  make test-integration     - Integration tests for quickscale_modules/* (requires PostgreSQL)"
 	@echo "  make test-cov             - Tests with coverage report (aggregates backups DR-engine coverage when PostgreSQL is available)"
 	@echo "  make test-e2e             - E2E tests (needs Docker + Playwright)"
-	@echo "  make release-gate         - Post-ci-e2e closeout lanes (migration topology + generated-project proof + integration/typecheck/e2e/quality)"
+	@echo "  make release-gate         - Post-ci-e2e closeout lanes (seal freshness + migration topology + generated-project proof + integration/typecheck/e2e/quality)"
 	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
 	@echo "  make frontend-proof       - Render showcase_react and run pnpm install/type-check/build"
@@ -326,6 +327,7 @@ help:
 	@echo "  make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha> - Publish module to split branch"
 	@echo "  make publish-modules      - Publish every outdated module, each against its own freshly observed remote SHA"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
+	@echo "  make check-module-seals   - Fail when a module changed after its split tag was sealed"
 	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Check status; publish observed outdated branches or recover confirmed absent branches"
 	@echo "  make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version> [PREVIOUS_VERSION=<version>])"
 	@echo "  make seal-modules         - Seal all split-branch tags (VERSION=<version> [PREVIOUS_VERSION=<version>])"
@@ -1432,6 +1434,7 @@ check:
 # skips.  Each line is its own shell, so GNU Make aborts the target at the first
 # failing lane rather than reporting a late lane's success as the verdict.
 release-gate:
+	$(PYTHON) scripts/check_module_seals.py
 	$(PYTHON) -m pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short -o addopts= --no-cov
 	$(PYTHON) -m pytest quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_all_module_initial_migrations_apply_from_embedded_sources -q --tb=short -o addopts= --no-cov
 	@$(MAKE) test-integration
@@ -1532,6 +1535,11 @@ publish-modules:
 # Show split-branch status for all modules
 publish-module-status:
 	@scripts/publish_module.sh --status
+
+# Fail when a module changed after its immutable VERSION split tag was sealed.
+# The check names the stale module and points at the Phase 5 reseal path.
+check-module-seals:
+	@$(PYTHON) scripts/check_module_seals.py
 
 # Disabled in SA117 Phase 4: inspect status before choosing publication or recovery.
 publish-modules-outdated:
