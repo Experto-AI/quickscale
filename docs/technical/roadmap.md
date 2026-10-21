@@ -38,9 +38,8 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191b | Import old `bap-web` form submissions into `bap-web-new` | 1 | — | Required |
-| SA191c | Write the operator cutover checklist | 1 | SA191b | Required |
-| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191b, SA191c | Required |
+| SA191c | Write the operator cutover checklist | 1 | — | Required |
+| SA191d | Cut over production to `bap-web-new` (operator) | 1 | SA191c | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
@@ -50,16 +49,16 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191b ──► SA191c ──┐
+Track 1: SA191c ─────────────┐
 Track 3: SA191e (done) ──────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
 Track 2: SA304 ──► SA305 ──► SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA191a, SA191e (done) ──► SA191b–d ──► operator publish 0.89.0
-     critical path: SA191b ──► SA191c ──► SA191d ──► SA153 (f)
+     release path:  SA191a, SA191b, SA191e (done) ──► SA191c–d ──► operator publish 0.89.0
+     critical path: SA191c ──► SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191a and SA191e
-have landed; SA191b can start now; SA191c waits on SA191b's command name; SA191d is the operator's
-own production cutover after SA191b and SA191c.
+Arrows within a track are queue order; the table holds the dependency edges. SA191a, SA191b,
+and SA191e have landed; SA191c can start now; SA191d is the operator's own production cutover
+after SA191c.
 SA304 and SA305 run now, ahead of SA277 (a3); (a2) waits on SA191d's cutover evidence.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
@@ -75,7 +74,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191b | yes | no | yes | no | yes |
+| 1 | SA191c | yes | no | yes | no | yes |
 | 2 | SA304 | yes | no | yes | no | no |
 | 3 | — | no | yes | yes | yes | no |
 
@@ -156,18 +155,7 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
 
 - [x] **SA191a — Prove `bap-web-new` on a fresh local stack.**
 
-- [ ] **SA191b — Import old `bap-web` form submissions into `bap-web-new`.**
-
-  Tier 2-full. A project management command in `client_extensions` reads a JSON export of the
-  old `Form`, `FormSubmission`, and `FormFieldValue` rows (from
-  `manage dumpdata quickscale_modules_forms` against old `bap-web`), matches forms by `slug`,
-  assigns the site organization, and recreates submissions and field values, keeping
-  `submitted_at`, `status`, and `is_spam`. Old-only fields with no target (such as the GDPR
-  consent columns) are reported, not silently dropped. It is idempotent (re-running creates no
-  duplicates), supports `--dry-run`, and reports unmatched forms or fields.
-
-  **Acceptance:** tests with a fixture export in the old schema; a dry run against a sample
-  export prints counts.
+- [x] **SA191b — Import old `bap-web` form submissions into `bap-web-new`.**
 
 - [x] **SA191e — Bring the `bap-web-new` admin to parity with old `bap-web`.**
 
