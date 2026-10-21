@@ -259,10 +259,13 @@ tickets; these tickets make the next one visible.
   embedding applies, such as `pyproject.toml`), and refuses with a list of the changed paths
   unless `--allow-local-changes` is passed. `quickscale status` reports the same drift.
   The roadmap rule that a QuickScale defect follows the release re-entry loop gains the line
-  "never patch an embedded module in a project; republish and update".
+  "never patch an embedded module in a project; republish and update". The update's dependency
+  sync also keeps a project's `quickscale-core` path dependency on a committed wheel: in
+  `bap-web-new` it rewrote it to `>=0.89.0,<0.90.0`, a version not yet on PyPI.
 
   **Acceptance:** tests cover an unchanged module (passes), a hand-edited file (refused, path
-  listed), and the override flag; `quickscale status` shows the drift.
+  listed), and the override flag; `quickscale status` shows the drift; an update of a project
+  whose `quickscale-core` is a wheel path leaves that line unchanged.
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
