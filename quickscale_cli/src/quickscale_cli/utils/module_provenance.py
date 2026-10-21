@@ -294,13 +294,22 @@ def _is_allowed_pyproject_rewrite(baseline: bytes, local: bytes) -> bool:
     if baseline_dependencies is None or local_dependencies is None:
         return baseline_document == local_document
 
-    for dependency_name in [
-        name
-        for name, value in baseline_dependencies.items()
-        if _is_path_dependency(value)
-    ]:
+    missing = object()
+    for dependency_name, baseline_value in list(baseline_dependencies.items()):
+        if not _is_path_dependency(baseline_value):
+            continue
+        local_value = local_dependencies.get(dependency_name, missing)
+        if local_value is missing:
+            # Embedding rewrites the dependency value; it never removes the
+            # dependency, so a missing entry is a hand edit.
+            return False
+        if not (
+            (isinstance(local_value, str) and local_value.strip())
+            or _is_path_dependency(local_value)
+        ):
+            return False
         del baseline_dependencies[dependency_name]
-        local_dependencies.pop(dependency_name, None)
+        del local_dependencies[dependency_name]
 
     return baseline_document == local_document
 

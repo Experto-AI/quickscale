@@ -159,10 +159,11 @@ the QuickScale-managed files. It never rewrites the rest of what generation copi
 project. Before pulling, it compares each `modules/<name>/` tree with the split commit recorded in
 `.quickscale/state.yml` (the `pyproject.toml` dependency rewrite the embed path applies is
 allowed). If a file was added, changed, or removed, the update stops before any pull and lists the
-changed paths; commit or revert them, or pass `--allow-local-changes` to let the pull replace them.
-`quickscale status` reports the same drift. The check needs the recorded split commit in the
-project's history; when it is unavailable, status reports the check as unverifiable rather than
-clean and the update proceeds with a warning. An update also refuses to replace an applied
+changed paths; restore the recorded content by reverting the edit, move the change upstream and
+update from a newer split, or pass `--allow-local-changes` to proceed. `quickscale status` reports
+the same drift. The check needs the recorded split commit in the project's history; when it is
+unavailable, status reports the check as unverifiable rather than clean and the update refuses the
+module unless `--allow-local-changes` is passed. An update also refuses to replace an applied
 migration file while the module's version label is unchanged, and on every pull once the project's
 applied vintage is at or after the migration-freeze release: from that release on, the applied
 migration files are the database's schema identity, so replacing one would leave it unidentified

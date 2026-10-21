@@ -199,3 +199,23 @@ def test_non_git_project_is_unverifiable(tmp_path: Path) -> None:
 
     assert not drift.verifiable
     assert "not a git repository" in (drift.unverifiable_reason or "")
+
+
+def test_removing_the_rewritten_path_dependency_is_reported(tmp_path: Path) -> None:
+    """Deleting the rewritten dependency is an edit, not an allowed rewrite."""
+    project, commit_sha = _write_project_with_subtree(tmp_path)
+    _apply_embed_pyproject_rewrite(project)
+    pyproject_path = project / _MODULE_PREFIX / "pyproject.toml"
+    pyproject_path.write_text(
+        "\n".join(
+            line
+            for line in pyproject_path.read_text().splitlines()
+            if not line.startswith("quickscale-core =")
+        )
+        + "\n"
+    )
+    _commit_all(project, "remove dependency")
+
+    drift = detect_module_content_drift(project, "auth", commit_sha)
+
+    assert drift.changed_paths == ("modules/auth/pyproject.toml",)

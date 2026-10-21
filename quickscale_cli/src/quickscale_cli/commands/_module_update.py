@@ -219,17 +219,30 @@ def _collect_module_content_drift(
 
 def _report_unverifiable_module_content_drift(
     drifts: list[_module_provenance.ModuleContentDrift],
+    *,
+    allow_local_changes: bool,
 ) -> None:
-    """Warn when a module's recorded tree cannot be read for comparison."""
-    for drift in drifts:
-        if drift.verifiable:
-            continue
+    """Report modules whose recorded tree cannot be read for comparison."""
+    unverifiable = [drift for drift in drifts if not drift.verifiable]
+    if not unverifiable:
+        return
+
+    if allow_local_changes:
         click.secho(
-            f"⚠️  Cannot check {drift.module} for local changes: "
-            f"{drift.unverifiable_reason}; continuing without the hand-edit check.",
+            "\n⚠️  Cannot verify embedded module(s) against their recorded commit; "
+            "continuing because --allow-local-changes was passed:",
             fg="yellow",
             err=True,
         )
+    else:
+        click.secho(
+            "\n❌ Cannot verify embedded module(s) against their recorded commit:",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+    for drift in unverifiable:
+        click.echo(f"  • {drift.module}: {drift.unverifiable_reason}", err=True)
 
 
 def _report_module_content_changes(
@@ -260,12 +273,6 @@ def _report_module_content_changes(
         click.echo(f"  • {drift.module}:", err=True)
         for path in drift.changed_paths:
             click.echo(f"    - {path}", err=True)
-    if not allow_local_changes:
-        click.echo(
-            "💡 Commit or revert these edits, or re-run with "
-            "--allow-local-changes to let 'quickscale update' overwrite them.",
-            err=True,
-        )
 
 
 def _enforce_no_local_module_changes(
@@ -274,11 +281,29 @@ def _enforce_no_local_module_changes(
     *,
     allow_local_changes: bool,
 ) -> None:
-    """Refuse the update when an embedded module differs from its recorded tree."""
+    """Refuse the update when an embedded module differs or cannot be checked.
+
+    A comparison that cannot be established is refused for the same reason as
+    a detected edit: the update must not replace a tree whose local content is
+    unknown.  ``--allow-local-changes`` is the explicit authorization to
+    proceed in either case.
+    """
     drifts = _collect_module_content_drift(state, project_path)
-    _report_unverifiable_module_content_drift(drifts)
+    blocked = any(drift.has_changes or not drift.verifiable for drift in drifts)
+    if not blocked:
+        return
+
     _report_module_content_changes(drifts, allow_local_changes=allow_local_changes)
-    if not allow_local_changes and any(drift.has_changes for drift in drifts):
+    _report_unverifiable_module_content_drift(
+        drifts, allow_local_changes=allow_local_changes
+    )
+    if not allow_local_changes:
+        click.echo(
+            "💡 Restore the recorded module content by reverting the edit, move "
+            "the change upstream and update from a newer split, or re-run with "
+            "--allow-local-changes to proceed anyway.",
+            err=True,
+        )
         raise click.Abort()
 
 
@@ -804,8 +829,8 @@ def _report_update_outcome(
     "--allow-local-changes",
     is_flag=True,
     help=(
-        "Proceed when embedded module files were edited locally; "
-        "the subtree pull can overwrite them."
+        "Proceed when embedded module files were edited locally or cannot be "
+        "verified; the subtree pull can overwrite them."
     ),
 )
 def update(
@@ -820,7 +845,8 @@ def update(
     \b
     This command:
       - Reads installed modules from .quickscale/config.yml
-      - Refuses modules whose files were edited since their recorded commit
+      - Refuses modules whose files were edited since their recorded commit,
+        or whose recorded tree cannot be verified
       - Updates ONLY modules you've explicitly installed
       - Shows a diff preview before updating (unless --no-preview)
       - Updates the installed version in config after successful update

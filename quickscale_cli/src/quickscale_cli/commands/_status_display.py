@@ -296,8 +296,8 @@ def _display_module_content_drift(diagnostics: dict) -> None:
             for path in entry["changed_paths"]:
                 click.secho(f"       • {path}", fg="yellow")
         click.echo(
-            "     Commit or revert these edits, or use "
-            "'quickscale update --allow-local-changes' to overwrite them."
+            "     Restore the recorded content or use "
+            "'quickscale update --allow-local-changes' to proceed."
         )
     elif not unverifiable:
         click.secho("   Module content drift: ✅ clean", fg="green")

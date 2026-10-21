@@ -155,6 +155,19 @@ def _commit_local_edit(project: Path) -> Path:
     return edited_path
 
 
+def _rewrite_state_commit_sha(project: Path, commit_sha: str | None) -> None:
+    """Replace or remove the module's recorded commit in state.yml."""
+    state_path = project / ".quickscale" / "state.yml"
+    state = yaml.safe_load(state_path.read_text())
+    if commit_sha is None:
+        state["modules"]["auth"].pop("commit_sha", None)
+    else:
+        state["modules"]["auth"]["commit_sha"] = commit_sha
+    state_path.write_text(yaml.dump(state, sort_keys=False))
+    _run_git(project, "add", "-A")
+    _run_git(project, "commit", "-qm", "state update")
+
+
 def _patched_update(
     latest_sha: str,
     args: list[str],
@@ -255,3 +268,50 @@ def test_status_reports_the_same_module_drift(
     assert drift[0]["module"] == "auth"
     assert drift[0]["changed_paths"] == [f"{_MODULE_PREFIX}/src/auth.py"]
     assert drift[0]["unverifiable_reason"] is None
+
+
+@pytest.mark.parametrize(
+    ("commit_sha", "reason_fragment"),
+    [
+        (None, "does not record a commit_sha"),
+        ("b" * 40, "not in this project's git history"),
+    ],
+)
+def test_update_refuses_unverifiable_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    commit_sha: str | None,
+    reason_fragment: str,
+) -> None:
+    """A missing or unavailable baseline is refused, not silently accepted."""
+    remote_dir, initial_sha, latest_sha = _write_split_remote(tmp_path)
+    project = _write_project(tmp_path, remote_dir, initial_sha)
+    _rewrite_state_commit_sha(project, commit_sha)
+    monkeypatch.chdir(project)
+
+    result, pull = _patched_update(latest_sha, ["--no-preview"])
+
+    assert result.exit_code != 0
+    assert "Cannot verify embedded module(s)" in result.output
+    assert reason_fragment in result.output
+    assert "--allow-local-changes" in result.output
+    pull.assert_not_called()
+
+
+def test_update_allows_override_for_unverifiable_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The override flag explicitly authorizes proceeding without a baseline."""
+    remote_dir, initial_sha, latest_sha = _write_split_remote(tmp_path)
+    project = _write_project(tmp_path, remote_dir, initial_sha)
+    _rewrite_state_commit_sha(project, None)
+    monkeypatch.chdir(project)
+
+    result, pull = _patched_update(
+        latest_sha, ["--no-preview", "--allow-local-changes"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "continuing because --allow-local-changes was passed" in result.output
+    pull.assert_called_once()

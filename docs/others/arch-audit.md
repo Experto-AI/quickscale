@@ -64,6 +64,7 @@ confirmation needed: none for the open finding.
 | Project adopted declared steps | operator confirmation in `contract_vintage.py` | convention | 46 → 53 steps |
 | Module resource contracts (subpaths, payload shapes) out of user-owned pages | none — single module references are allowed by rule 37 | convention | 6 theme files |
 | Module migrations frozen | SA204 (h, j) freeze gate | gated | new |
+| Embedded module edits are detected before update | `quickscale_cli/utils/module_provenance.py`; update refusal and status drift | gated (refuses unless `--allow-local-changes`) | new |
 
 ## Summary table
 
@@ -80,12 +81,11 @@ snapshot_basis: "cca2eac9 (v89), clean worktree, no uncommitted inputs"
 items:
   - {id: generated-file-ownership-unmodeled, status: open, rank: 1, title: "Module contracts live in user-owned generated files",
      lenses: [V, VII, XIX], horizon: now, confidence: High, size: M, reversibility: two-way door,
-     depends_on: [], amplifies: [vendored-module-edits-undetected],
+     depends_on: [], amplifies: [],
      anchors: [quickscale_core/src/quickscale_core/project_state_hashes.py, quickscale_core/src/quickscale_core/data/project_contract.yml, quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/pages/CrmPage.tsx],
      last_verified: 2026-10-20}
   - {id: core-holds-module-vocabulary, status: watchlist}
   - {id: manifest-dsl-vocabulary-growth, status: watchlist}
-  - {id: vendored-module-edits-undetected, status: watchlist}
   - {id: session-advisory-lock-pooling, status: watchlist}
   - {id: modules-english-only, status: watchlist}
   - {id: two-filesystem-lock-implementations, status: watchlist}
@@ -160,7 +160,7 @@ Verdict: exonerated (SA286 works).
 
 ## Fix order and interactions
 
-Single open finding. Its fix amplifies-down `vendored-module-edits-undetected` (fewer hand edits).
+Single open finding. SA305 resolved `vendored-module-edits-undetected` for the update and status paths.
 
 ## Sound load-bearing decisions
 
@@ -175,7 +175,6 @@ Single open finding. Its fix amplifies-down `vendored-module-edits-undetected` (
 |---|---|---|---|
 | `core-holds-module-vocabulary` | Core/CLI name modules | 13th module, new module-named apply step | not fired (12 modules; SA287 moved option validation to a generic hook) |
 | `manifest-dsl-vocabulary-growth` | DSL gains a keyword per module need | a keyword added for one module | not fired (SA291 throttle scopes is generic) |
-| `vendored-module-edits-undetected` | Vendored edits go undetected | second project with edits, subtree conflict | not fired |
 | `session-advisory-lock-pooling` | Billing mutex is a session advisory lock | pooled `DATABASE_URL` | not fired (no pooler config found) |
 | `modules-english-only` | Module pages English-only | SA153/154 needs Spanish module page | not fired |
 | `two-filesystem-lock-implementations` | `advisory_lock.py` and `dr_engine/_lock.py` | a third implementation | not fired (still two) |
@@ -197,3 +196,7 @@ Single open finding. Its fix amplifies-down `vendored-module-edits-undetected` (
 - 2026-10-20 — `generated-file-ownership-unmodeled`: still-open (SA289 relocated API bases;
   resource paths remain; steps 46 → 53).
 - 2026-10-20 — all nine watchlist items: carried (triggers not fired, evaluations above).
+- 2026-10-21 — `vendored-module-edits-undetected`: resolved by SA305. `quickscale update`
+  compares each embedded module with its recorded split commit and refuses a changed or
+  unverifiable tree unless `--allow-local-changes` is passed; `quickscale status` reports the
+  same drift. `bap-web-new`'s hand edit is the trigger instance the new check detects.
