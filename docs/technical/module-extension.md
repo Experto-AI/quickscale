@@ -339,7 +339,7 @@ arbitrary new module HTTP APIs.
 | Tier 1: Stable | Project-owned app when adopted, settings, template overrides, documented helper/service APIs, documented signals | Survives normal module updates with little or no merge work |
 | Tier 2: Structured | Module-specific subclassing such as abstract models or admin bases | Survives minor updates while the contract is documented and versioned |
 
-Any direct edit to files under `modules/<name>/` is outside the supported extension contract. Users who make such edits accept responsibility for manual reconciliation during `quickscale update`.
+Any direct edit to files under `modules/<name>/` is outside the supported extension contract. `quickscale update` compares the embedded tree with the split commit recorded in `.quickscale/state.yml`, refuses to pull a detected edit while listing the changed paths, and accepts `--allow-local-changes` to proceed; users who override accept responsibility for manual reconciliation.
 
 A template override survives updates because updates never touch it, which also means it stops receiving the module's later fixes to that template. See [user_manual.md: What `quickscale update` changes, and what stays yours](./user_manual.md#what-quickscale-update-changes-and-what-stays-yours) for override placement, drift, and the post-update checklist.
 

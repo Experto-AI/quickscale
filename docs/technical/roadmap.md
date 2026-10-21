@@ -42,13 +42,11 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
-| SA305 | Detect hand edits to an embedded module before `quickscale update` | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191d (operator) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
-Track 2: SA305
 Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
@@ -72,7 +70,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA153 (r); SA191d (operator) | yes | no | yes | no | yes |
-| 2 | SA305 | yes | yes | yes | yes | no |
+| 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
 ### Ownership and merge coordination
@@ -186,23 +184,7 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
 
 ### Track 2 — module provenance
 
-Context: `bap-web-new/modules/orgs` carries a hand-copied orgs fix that its recorded split lacks,
-so a `quickscale update` would revert it; the operator reseals the orgs split and updates the
-project outside this ticket.
-
-- [ ] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
-
-  Tier 2-full. Before a subtree pull, `quickscale update` compares each embedded
-  `modules/<module>/` tree with the tree at its recorded `commit_sha` (allowing for the rewrites
-  embedding applies, such as `pyproject.toml`), and refuses with a list of the changed paths
-  unless `--allow-local-changes` is passed. `quickscale status` reports the same drift.
-  The update's dependency
-  sync also keeps a project's `quickscale-core` path dependency on a committed wheel: in
-  `bap-web-new` it rewrote it to `>=0.89.0,<0.90.0`, a version not yet on PyPI.
-
-  **Acceptance:** tests cover an unchanged module (passes), a hand-edited file (refused, path
-  listed), and the override flag; `quickscale status` shows the drift; an update of a project
-  whose `quickscale-core` is a wheel path leaves that line unchanged.
+- [x] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
 
 ### Track 3 — upgrade path
 

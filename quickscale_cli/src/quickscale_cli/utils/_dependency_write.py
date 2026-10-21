@@ -221,6 +221,23 @@ def _resolve_declared_dependency_path(
     return dep_path
 
 
+def _is_existing_wheel_path_dependency(base_path: Path, dep_value: Any) -> bool:
+    """Return whether a dependency already points at a wheel on disk.
+
+    A generated project may resolve ``quickscale-core`` from a committed
+    wheel (``{path = ".quickscale/wheels/...whl"}``) when the version is not
+    on PyPI yet.  That is a deliberate local resolution: dependency sync must
+    leave the line untouched rather than replace it with an index pin that
+    cannot be resolved.
+    """
+    dep_path = _resolve_declared_dependency_path(base_path, dep_value)
+    return (
+        dep_path is not None
+        and dep_path.is_file()
+        and dep_path.suffix.lower() == ".whl"
+    )
+
+
 def _has_unresolvable_path_dependency(
     install_path: Path,
     module_poetry_deps: Mapping[str, Any],

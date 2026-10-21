@@ -784,6 +784,7 @@ class TestComputeDriftDiagnostics:
         assert "managed_files_consolidated" in result
         assert "filesystem_drift" in result
         assert "managed_file_drift" in result
+        assert "module_content_drift" in result
         assert "version_drift" in result
 
     def test_legacy_compat_active_when_no_consolidated(self, tmp_path):
