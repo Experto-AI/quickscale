@@ -2222,7 +2222,7 @@ class TestUpdateCommand:
     """Tests for update click command."""
 
     @patch(
-        "quickscale_cli.commands._module_update._collect_module_content_drift",
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
         return_value=[],
     )
     @patch("quickscale_cli.commands._module_update._update_single_module")
@@ -2278,7 +2278,7 @@ class TestUpdateCommand:
         mock_update.assert_called_once()
 
     @patch(
-        "quickscale_cli.commands._module_update._collect_module_content_drift",
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
         return_value=[],
     )
     @patch("quickscale_cli.commands._module_update._update_single_module")
@@ -2326,7 +2326,7 @@ class TestUpdateCommand:
         assert result.exit_code == 0
 
     @patch(
-        "quickscale_cli.commands._module_update._collect_module_content_drift",
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
         return_value=[],
     )
     @patch("quickscale_cli.commands._module_update._update_single_module")
@@ -2515,7 +2515,7 @@ class TestUpdateVersionDriftWarning:
         assert drift[0].module == "auth"
 
     @patch(
-        "quickscale_cli.commands._module_update._collect_module_content_drift",
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
         return_value=[],
     )
     @patch("quickscale_cli.commands._module_update._update_single_module")
