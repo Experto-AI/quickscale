@@ -174,9 +174,7 @@ re-enabled builds by plan tier (Enterprise, Pro, then Hobby, Free, Trial). Every
 old variables is treated as exposed: the Resend key is rotated before use; the old
 `SECRET_KEY` and `DJANGO_SUPERUSER_*` are not carried; the old PostgreSQL 17 credentials are
 rollback-only (rotate or retire after the cutover). Values generated after the incident (the
-new PostgreSQL 18 service, runtime role, `SECRET_KEY`) are clean. The (swap) slice changed
-nothing on Railway (legacy refs trigger no deploy; `railway link` only writes local CLI state)
-and ran regardless.
+new PostgreSQL 18 service, runtime role, `SECRET_KEY`) are clean.
 
 The (swap) slice made `~/code/bap-web` the new project and `~/code/bap-web-old` the old one. The
 procedure is `bap-web/CUTOVER.md`; the (build) slice rewrote it to this strategy. A QuickScale
