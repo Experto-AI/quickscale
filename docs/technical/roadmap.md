@@ -152,7 +152,7 @@ each environment gets a **new PostgreSQL 18 service** restored from a locally bu
 the app's `DATABASE_URL` is repointed to it; the old PostgreSQL 17 service stays untouched as the
 rollback. `develop` is the rehearsal; `production` repeats it. Downtime is accepted.
 
-Measured on 2026-10-22 (P1 done): rollback copies (production `pg_dump`, both environments'
+Measured on 2026-10-22, before the (build) slice: rollback copies (production `pg_dump`, both environments'
 variables) are in `~/bap-cutover/` (mode 700, outside every repository). Old mail goes through
 Resend's SMTP relay (`smtp.resend.com:2587`, the same `re_…` key in both environments as
 `EMAIL_HOST_PASSWORD`); the new project uses the Resend API with that key as `RESEND_API_KEY`,
