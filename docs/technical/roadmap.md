@@ -163,7 +163,19 @@ submissions. Operator decisions: sender, reply-to, and notification address
 apply rule refuses switching `analytics` off while `forms` requires it; the `develop` test
 submissions are not carried. The (build) dump is `~/bap-cutover/new-2026-10-22.dump`.
 `railway ssh` has an operator SSH key; exports otherwise read the database directly
-(`DATABASE_PUBLIC_URL` of the PostgreSQL service).
+(`DATABASE_PUBLIC_URL` of the PostgreSQL service). Secrets staged in `~/bap-cutover/` (mode
+600): `resend-api-key`, `posthog-key`, `resend-webhook-secret-develop`, and
+`resend-webhook-secret-production`; the last three were never stored in Railway.
+
+**Railway security incident (2026-10-21).** Railway disclosed a platform incident, recommends
+revoking every variable stored in Railway, invalidated API tokens and OAuth sessions, and
+re-enabled builds by plan tier (Enterprise, Pro, then Hobby, Free, Trial). Every value in the
+old variables is treated as exposed: the Resend key is rotated before use; the old
+`SECRET_KEY` and `DJANGO_SUPERUSER_*` are not carried; the old PostgreSQL 17 credentials are
+rollback-only (rotate or retire after the cutover). Values generated after the incident (the
+new PostgreSQL 18 service, runtime role, `SECRET_KEY`) are clean. The (swap) slice changes
+nothing on Railway (legacy refs trigger no deploy; `railway link` only writes local CLI state)
+and runs regardless.
 
 After slice (swap), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
 procedure is `bap-web-new/CUTOVER.md`; the (build) slice rewrote it to this strategy. A QuickScale
@@ -188,18 +200,29 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
   - [ ] (swap) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
     `v-legacy` from the old checkout; rename the folders; remove the old checkout's `origin`;
     add `origin` in the new one; relink Railway per folder. Push no new code.
-  - [ ] (develop) Rehearsal on Railway `develop` (Tier 2-full): add a PostgreSQL 18
+  - [ ] (develop) Rehearsal on Railway `develop` (Tier 2-full). Preconditions, each a stop
+    condition: Railway's status page shows builds enabled for the workspace's plan; the operator
+    confirms the Resend key was rotated (`~/bap-cutover/resend-api-key` is newer than
+    `old-variables.json` and differs from its `EMAIL_HOST_PASSWORD`, compared without printing)
+    and the old key deleted in Resend; the operator confirms the service's GitHub source still
+    shows `VictorRocco/BAP-web` (reconnected if Railway's credential reset dropped it) and the
+    GitHub security log shows no anomalous access. Then add a PostgreSQL 18
     service and restore the (build) dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
     `DJANGO_SETTINGS_MODULE=bap_web.settings.production`, `ALLOWED_HOSTS`, `DATABASE_URL` to the
     new service, the runtime-role trio, `RESEND_API_KEY`,
     `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`, `POSTHOG_API_KEY`; remove `EMAIL_*` and
     `DJANGO_SUPERUSER_*`);
     force-push `main` to `develop`; acceptance as above on `bap-web-develop.up.railway.app`,
-    including a delivered email and the Resend webhook. Record every deviation in `CUTOVER.md`.
+    including a delivered email and the Resend webhook. Webhook secrets are per environment
+    (`resend-webhook-secret-develop` here). Record every deviation in `CUTOVER.md`.
   - [ ] (production) Switch on Railway `production` (Tier 2-full; the one-way step stands alone): repeat (develop) in
-    `production` with a fresh restore, force-push `main` to `main`, and pass the acceptance on
-    the domain. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore the
-    variables from `~/bap-cutover/old-variables.json`, and deploy `legacy-main`.
+    `production` with a fresh restore and `resend-webhook-secret-production`, force-push `main`
+    to `main`, and pass the acceptance on the domain. After it passes, the operator deletes the
+    develop Resend webhook (Resend sends every account event to every endpoint, and unmatched
+    events fail on the other site). Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17
+    service, restore the variables from `~/bap-cutover/old-variables.json` (their old Resend key
+    is revoked, so the old site sends no mail until it gets the rotated key), and deploy
+    `legacy-main`.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
