@@ -46,7 +46,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191d (c1 ──► c2 ──► c3 ──► c4) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
+Track 1: SA191d (build ──► swap ──► develop ──► production) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
 Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
@@ -69,7 +69,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191d (c1); SA153 (r) | yes | no | yes | no | yes |
+| 1 | SA191d (build); SA153 (r) | yes | no | yes | no | yes |
 | 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
@@ -163,8 +163,8 @@ submissions. Operator decisions: sender, reply-to, and notification address
 `develop` test submissions are not carried. `railway ssh` has an operator SSH key; exports
 otherwise read the database directly (`DATABASE_PUBLIC_URL` of the PostgreSQL service).
 
-After slice (c2), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
-procedure is `bap-web-new/CUTOVER.md`; slice (c1) rewrites it to this strategy. A QuickScale
+After slice (swap), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
+procedure is `bap-web-new/CUTOVER.md`; slice (build) rewrites it to this strategy. A QuickScale
 defect follows the release re-entry loop (never patch an embedded module in a project; republish
 and update); a project defect is fixed in `bap-web-new`, project-specific behavior in its
 `client_extensions`.
@@ -182,7 +182,7 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
   rollback.
 
   **Slices:**
-  - [ ] (c1) Local build (Tier 2-full; no Railway writes): in `bap-web-new`, set the
+  - [ ] (build) Local database build (Tier 2-full; no Railway writes): in `bap-web-new`, set the
     `notifications` block (sender, reply-to `info@buenosairesproperties.com`, `resend_domain:
     buenosairesproperties.com`) and `modules.analytics.enabled: false`, `quickscale apply`, and
     commit on `main`. Build a fresh PostgreSQL 18 database locally (`postgres:18`): `migrate`,
@@ -193,17 +193,17 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
     settings, healthcheck, `/`, `/contact`, operator admin review. Rewrite `CUTOVER.md` to this
     ticket's strategy (develop rehearsal, new PostgreSQL 18 service, `DATABASE_URL` repoint,
     rollback by repointing).
-  - [ ] (c2) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
+  - [ ] (swap) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
     `v-legacy` from the old checkout; rename the folders; remove the old checkout's `origin`;
     add `origin` in the new one; relink Railway per folder. Push no new code.
-  - [ ] (c3) Develop rehearsal (Tier 2-full): in Railway `develop`, add a PostgreSQL 18
-    service and restore the c1 dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
+  - [ ] (develop) Rehearsal on Railway `develop` (Tier 2-full): add a PostgreSQL 18
+    service and restore the (build) dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
     `DJANGO_SETTINGS_MODULE=bap_web.settings.production`, `ALLOWED_HOSTS`, `DATABASE_URL` to the
     new service, the runtime-role trio, `RESEND_API_KEY`,
     `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`; remove `EMAIL_*` and `DJANGO_SUPERUSER_*`);
     force-push `main` to `develop`; acceptance as above on `bap-web-develop.up.railway.app`,
     including a delivered email and the Resend webhook. Record every deviation in `CUTOVER.md`.
-  - [ ] (c4) Production switch (Tier 2-full; the one-way step stands alone): repeat c3 in
+  - [ ] (production) Switch on Railway `production` (Tier 2-full; the one-way step stands alone): repeat (develop) in
     `production` with a fresh restore, force-push `main` to `main`, and pass the acceptance on
     the domain. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore the
     variables from `~/bap-cutover/old-variables.json`, and deploy `legacy-main`.
@@ -221,7 +221,7 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
   deployed site, and the SA208 and SA246 declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Audit the portal work already in `bap-web-new` (`~/code/bap-web` after SA191d c2; the `properties` app, its API, and
+  - [ ] (r) Audit the portal work already in `bap-web-new` (`~/code/bap-web` after SA191d (swap); the `properties` app, its API, and
     the React pages) against this acceptance, list what is missing, and close the gaps with
     tests in the project (Tier 2-full).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA191d's cutover; re-prove the journey on
@@ -278,7 +278,7 @@ and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 **Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
 current dashboard heading against the Django-served origin, and `bap-web-new` (`~/code/bap-web`
-after SA191d c2) has a live-site
+after SA191d (swap)) has a live-site
 screenshot harness; the repository still has no full journey suite. Remaining
 order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
