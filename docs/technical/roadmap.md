@@ -46,7 +46,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191d (c1 ──► c2 ──► c3) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
+Track 1: SA191d (c1 ──► c2 ──► c3 ──► c4) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
 Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
@@ -142,33 +142,71 @@ the `properties` app with `/api/properties/` and `properties_seed_catalog`, and 
 BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
 `alquiler-inquilino`, `reubicacion`, `consulta-general`) in
 `client_extensions/.../forms_seed_presets.py`.
-The cutover runs **in place**: the same Railway service, custom domain, DNS records, and GitHub
-repository (`VictorRocco/BAP-web`) take the new code; the old history stays as `legacy-*`
-branches and the `v-legacy` tag. The new database is built and tested locally, then restored
-over the old schema; downtime is accepted. After slice (c2), `~/code/bap-web` is the new project
-and `~/code/bap-web-old` the old one. The procedure is `bap-web-new/CUTOVER.md` (phases P0–P7);
-exports and rollback copies live in `~/bap-cutover/`, outside every repository. A QuickScale defect follows the release
-re-entry loop (never patch an embedded module in a project; republish and update); a project
-defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
+The cutover runs **in place** on Railway project `bap-web`, which has two environments, each an
+app service fed by GitHub `VictorRocco/BAP-web` plus a PostgreSQL 17 service: `develop` (branch
+`develop`, `bap-web-develop.up.railway.app`, 14 test submissions) and `production` (branch
+`main`, `buenosairesproperties.com`, 0 submissions). The custom domain and DNS are never touched.
+The new code replaces the old by force-push (the histories are unrelated); the old history stays
+as `legacy-main`, `legacy-develop`, and the `v-legacy` tag. The project targets PostgreSQL 18, so
+each environment gets a **new PostgreSQL 18 service** restored from a locally built database and
+the app's `DATABASE_URL` is repointed to it; the old PostgreSQL 17 service stays untouched as the
+rollback. `develop` is the rehearsal; `production` repeats it. Downtime is accepted.
 
-- [ ] **SA191d — Cut over production to `bap-web-new` (operator).**
+Measured on 2026-10-22 (P1 done): rollback copies (production `pg_dump`, both environments'
+variables) are in `~/bap-cutover/` (mode 700, outside every repository). Old mail goes through
+Resend's SMTP relay (`smtp.resend.com:2587`, the same `re_…` key in both environments as
+`EMAIL_HOST_PASSWORD`); the new project uses the Resend API with that key as `RESEND_API_KEY`,
+plus a webhook signing secret. All ten old forms notify `info@buenosairesproperties.com`; four
+(`contact`, `feedback`, `newsletter`, `support`) are not recreated and have no production
+submissions. Operator decisions: sender, reply-to, and notification address
+`info@buenosairesproperties.com`; analytics off via `modules.analytics.enabled: false`; the
+`develop` test submissions are not carried. `railway ssh` has an operator SSH key; exports
+otherwise read the database directly (`DATABASE_PUBLIC_URL` of the PostgreSQL service).
+
+After slice (c2), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
+procedure is `bap-web-new/CUTOVER.md`; slice (c1) rewrites it to this strategy. A QuickScale
+defect follows the release re-entry loop (never patch an embedded module in a project; republish
+and update); a project defect is fixed in `bap-web-new`, project-specific behavior in its
+`client_extensions`.
+
+- [ ] **SA191d — Cut over production to `bap-web-new` in place (delegated, operator-gated).**
 
   Delegated to an AI assistant, one slice per session, each ending with a handoff note in the
-  project's `docs/`. The operator does P0 (deployed branch, auto-deploy off, vendor keys),
-  `createsuperuser`, and the admin review; every push and every production write is an
-  operator gate.
+  project's `docs/`. Every push, every Railway variable or service change, and every restore is
+  an operator gate; the operator runs `createsuperuser` and the admin and inbox reviews. Secrets
+  are read from `~/bap-cutover/` or Railway, never printed or committed.
 
-  **Acceptance:** the P7 live checks pass on `https://buenosairesproperties.com`, the imported
-  submission count matches the final export, and the rollback copies (old dump, old variables)
-  exist in `~/bap-cutover/`.
+  **Acceptance:** on `https://buenosairesproperties.com`, `/healthcheck/` prints `OK`, `/` and
+  `/contact` (six forms) render, a submitted form reaches `info@buenosairesproperties.com` through
+  Resend, and `/admin/` shows it; the old PostgreSQL 17 service and the legacy refs exist for
+  rollback.
 
   **Slices:**
-  - [ ] (c1) P1–P4: export the old data, configure `quickscale.yml`, build the database locally,
-    and pass local acceptance (Tier 2-full; no production writes).
-  - [ ] (c2) P5: legacy branches and tag pushed, folders renamed, remotes and Railway link
-    repointed, `main` not pushed (Tier 2-fast).
-  - [ ] (c3) P6–P7: final import, variables, schema restore, force-push, live checks (Tier
-    2-full; the one-way step stands alone, each production write operator-approved).
+  - [ ] (c1) Local build (Tier 2-full; no Railway writes): in `bap-web-new`, set the
+    `notifications` block (sender, reply-to `info@buenosairesproperties.com`, `resend_domain:
+    buenosairesproperties.com`) and `modules.analytics.enabled: false`, `quickscale apply`, and
+    commit on `main`. Build a fresh PostgreSQL 18 database locally (`postgres:18`): `migrate`,
+    `quickscale_orgs_create_site_org buenos-aires-properties "Buenos Aires Properties"`,
+    `properties_seed_catalog`, `forms_seed_presets --notify-emails
+    info@buenosairesproperties.com`; operator runs `createsuperuser`; `pg_dump -Fc` to
+    `~/bap-cutover/new-<date>.dump`. Acceptance: `manage.py check --deploy` with production
+    settings, healthcheck, `/`, `/contact`, operator admin review. Rewrite `CUTOVER.md` to this
+    ticket's strategy (develop rehearsal, new PostgreSQL 18 service, `DATABASE_URL` repoint,
+    rollback by repointing).
+  - [ ] (c2) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
+    `v-legacy` from the old checkout; rename the folders; remove the old checkout's `origin`;
+    add `origin` in the new one; relink Railway per folder. Push no new code.
+  - [ ] (c3) Develop rehearsal (Tier 2-full): in Railway `develop`, add a PostgreSQL 18
+    service and restore the c1 dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
+    `DJANGO_SETTINGS_MODULE=bap_web.settings.production`, `ALLOWED_HOSTS`, `DATABASE_URL` to the
+    new service, the runtime-role trio, `RESEND_API_KEY`,
+    `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`; remove `EMAIL_*` and `DJANGO_SUPERUSER_*`);
+    force-push `main` to `develop`; acceptance as above on `bap-web-develop.up.railway.app`,
+    including a delivered email and the Resend webhook. Record every deviation in `CUTOVER.md`.
+  - [ ] (c4) Production switch (Tier 2-full; the one-way step stands alone): repeat c3 in
+    `production` with a fresh restore, force-push `main` to `main`, and pass the acceptance on
+    the domain. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore the
+    variables from `~/bap-cutover/old-variables.json`, and deploy `legacy-main`.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
