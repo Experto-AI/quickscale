@@ -7,7 +7,7 @@
 The immediate goal is one convention across all modules, as recorded in
 [module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
 once, onto the standardized names: the regenerated `bap-web-new`, already at visual parity, is
-cut over (SA191a–e) and then carries the first property portal in a project-owned extension
+cut over (SA191d) and then carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves
 their value.
 
@@ -38,26 +38,23 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to `bap-web-new` (operator) | 1 | — | Required |
+| SA191d | Cut over production to `bap-web-new` in place (delegated, operator-gated) | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 2 | SA191d | Optional |
-| SA305 | Detect hand edits to an embedded module before `quickscale update` | 2 | — | Optional |
+| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191c (done) ──────┐
-Track 3: SA191e (done) ──────┼─► SA191d (operator) ──► SA153 (r, f) ──► SA154 (inventory)
-Track 2: SA305 ──► SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA191a, SA191b, SA191c, SA191e (done) ──► SA191d ──► operator publish 0.89.0
+Track 1: SA191d (build ──► swap ──► develop ──► production) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
+Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
+     release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191a, SA191b,
-SA191c, and SA191e have landed; SA191d is the operator's own production cutover and can start
-now.
-SA305 runs now, ahead of SA277 (a3); (a2) waits on SA191d's cutover evidence.
+Arrows within a track are queue order; the table holds the dependency edges. SA191d is
+delegated, with every production write operator-gated; SA153 (r) and SA277 (a3) need nothing from it and run now. SA153 (f)
+and SA277 (a2) wait on SA191d.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -72,9 +69,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191d | yes | no | yes | no | yes |
-| 2 | SA305 | yes | no | yes | no | no |
-| 3 | — | no | yes | yes | yes | no |
+| 1 | SA191d (build); SA153 (r) | yes | no | yes | no | yes |
+| 2 | — | yes | yes | yes | yes | no |
+| 3 | SA277 (a3) | yes | no | yes | no | no |
 
 ### Ownership and merge coordination
 
@@ -101,9 +98,8 @@ A track is **truly green** only when all three states are yes.
   that patch them, the blog and storage upload-path builders and the storage Markdownx upload,
   and, for the conventions, the manifest option schema and the CLI's `module_config`, module
   settings names, `is_enabled()`, and the per-module personal-data declarations with the orgs
-  personal-data check, and the maintainer migration tools (`beta_migration/`) with their smoke
-  gate, playbook, gap ledger, and the `showcase_react` design layer.
-- Track 3 owns the `bap-web-new` admin parity (SA191e), the orgs tenancy, purge,
+  personal-data check, and the `showcase_react` design layer.
+- Track 3 owns the orgs tenancy, purge,
   removal-obligation, invite-throttle, and boot path (`orgs/apps.py`, `orgs/removal.py`, `orgs/views.py`), the privileged-command and runtime-role
   stations, `is_platform_operator` and `operator_access`, the `quickscale_core.runtime`
   settings facade and its scheduled-off refusal helper, the generated settings templates
@@ -119,7 +115,8 @@ A track is **truly green** only when all three states are yes.
   re-exports, the conformance harness with its registry row, parity families and
   `module-extension.md`'s authoring checklist, the five `_anonymization.py` handlers with
   core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
-  `decisions.md` § Clean-Break Migration History.
+  `decisions.md` § Clean-Break Migration History, and the maintainer migration tools
+  (`beta_migration/`) with their smoke gate, playbook, gap ledger, and the upgrade prompt.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
   `project_contract.yml`, and [decisions.md](decisions.md). Each track resolves the shared set at
@@ -136,34 +133,80 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Tracks 1 and 3 — cutover and the property portal
+### Track 1 — cutover and the property portal
 
-**SA191 family — validate and cut over the regenerated `bap-web-new`.** Context shared by
-SA191a–e: old `bap-web` (`~/code/bap-web`) serves production on Railway with no users, only form
-submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
+**SA191d context.** Old `bap-web` (`~/code/bap-web`) serves production on Railway with no users,
+only form submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
 module (`auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, `storage`), carries
 the `properties` app with `/api/properties/` and `properties_seed_catalog`, and recreates the six
 BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
 `alquiler-inquilino`, `reubicacion`, `consulta-general`) in
 `client_extensions/.../forms_seed_presets.py`.
-SA191e runs on track 3; the rest on track 1.
-SA191a, b, c, and e are coding-assistant tasks that touch no production system; SA191d is the
-operator's own cutover. A QuickScale defect found follows the release re-entry loop; a project
-defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
+The cutover runs **in place** on Railway project `bap-web`, which has two environments, each an
+app service fed by GitHub `VictorRocco/BAP-web` plus a PostgreSQL 17 service: `develop` (branch
+`develop`, `bap-web-develop.up.railway.app`, 14 test submissions) and `production` (branch
+`main`, `buenosairesproperties.com`, 0 submissions). The custom domain and DNS are never touched.
+The new code replaces the old by force-push (the histories are unrelated); the old history stays
+as `legacy-main`, `legacy-develop`, and the `v-legacy` tag. The project targets PostgreSQL 18, so
+each environment gets a **new PostgreSQL 18 service** restored from a locally built database and
+the app's `DATABASE_URL` is repointed to it; the old PostgreSQL 17 service stays untouched as the
+rollback. `develop` is the rehearsal; `production` repeats it. Downtime is accepted.
 
-- [x] **SA191a — Prove `bap-web-new` on a fresh local stack.**
+Measured on 2026-10-22 (P1 done): rollback copies (production `pg_dump`, both environments'
+variables) are in `~/bap-cutover/` (mode 700, outside every repository). Old mail goes through
+Resend's SMTP relay (`smtp.resend.com:2587`, the same `re_…` key in both environments as
+`EMAIL_HOST_PASSWORD`); the new project uses the Resend API with that key as `RESEND_API_KEY`,
+plus a webhook signing secret. All ten old forms notify `info@buenosairesproperties.com`; four
+(`contact`, `feedback`, `newsletter`, `support`) are not recreated and have no production
+submissions. Operator decisions: sender, reply-to, and notification address
+`info@buenosairesproperties.com`; analytics off via `modules.analytics.enabled: false`; the
+`develop` test submissions are not carried. `railway ssh` has an operator SSH key; exports
+otherwise read the database directly (`DATABASE_PUBLIC_URL` of the PostgreSQL service).
 
-- [x] **SA191b — Import old `bap-web` form submissions into `bap-web-new`.**
+After slice (swap), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
+procedure is `bap-web-new/CUTOVER.md`; slice (build) rewrites it to this strategy. A QuickScale
+defect follows the release re-entry loop (never patch an embedded module in a project; republish
+and update); a project defect is fixed in `bap-web-new`, project-specific behavior in its
+`client_extensions`.
 
-- [x] **SA191e — Bring the `bap-web-new` admin to parity with old `bap-web`.**
+- [ ] **SA191d — Cut over production to `bap-web-new` in place (delegated, operator-gated).**
 
-- [x] **SA191c — Write the operator cutover checklist.**
+  Delegated to an AI assistant, one slice per session, each ending with a handoff note in the
+  project's `docs/`. Every push, every Railway variable or service change, and every restore is
+  an operator gate; the operator runs `createsuperuser` and the admin and inbox reviews. Secrets
+  are read from `~/bap-cutover/` or Railway, never printed or committed.
 
-- [ ] **SA191d — Cut over production to `bap-web-new` (operator).**
+  **Acceptance:** on `https://buenosairesproperties.com`, `/healthcheck/` prints `OK`, `/` and
+  `/contact` (six forms) render, a submitted form reaches `info@buenosairesproperties.com` through
+  Resend, and `/admin/` shows it; the old PostgreSQL 17 service and the legacy refs exist for
+  rollback.
 
-  Operator action, not handed off. Run `CUTOVER.md` on Railway, switch the domain, then retire
-  the old service and archive the `bap-web` repository. Each production step is
-  operator-authorized; the old database export is kept outside every repository.
+  **Slices:**
+  - [ ] (build) Local database build (Tier 2-full; no Railway writes): in `bap-web-new`, set the
+    `notifications` block (sender, reply-to `info@buenosairesproperties.com`, `resend_domain:
+    buenosairesproperties.com`) and `modules.analytics.enabled: false`, `quickscale apply`, and
+    commit on `main`. Build a fresh PostgreSQL 18 database locally (`postgres:18`): `migrate`,
+    `quickscale_orgs_create_site_org buenos-aires-properties "Buenos Aires Properties"`,
+    `properties_seed_catalog`, `forms_seed_presets --notify-emails
+    info@buenosairesproperties.com`; operator runs `createsuperuser`; `pg_dump -Fc` to
+    `~/bap-cutover/new-<date>.dump`. Acceptance: `manage.py check --deploy` with production
+    settings, healthcheck, `/`, `/contact`, operator admin review. Rewrite `CUTOVER.md` to this
+    ticket's strategy (develop rehearsal, new PostgreSQL 18 service, `DATABASE_URL` repoint,
+    rollback by repointing).
+  - [ ] (swap) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
+    `v-legacy` from the old checkout; rename the folders; remove the old checkout's `origin`;
+    add `origin` in the new one; relink Railway per folder. Push no new code.
+  - [ ] (develop) Rehearsal on Railway `develop` (Tier 2-full): add a PostgreSQL 18
+    service and restore the (build) dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
+    `DJANGO_SETTINGS_MODULE=bap_web.settings.production`, `ALLOWED_HOSTS`, `DATABASE_URL` to the
+    new service, the runtime-role trio, `RESEND_API_KEY`,
+    `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`; remove `EMAIL_*` and `DJANGO_SUPERUSER_*`);
+    force-push `main` to `develop`; acceptance as above on `bap-web-develop.up.railway.app`,
+    including a delivered email and the Resend webhook. Record every deviation in `CUTOVER.md`.
+  - [ ] (production) Switch on Railway `production` (Tier 2-full; the one-way step stands alone): repeat (develop) in
+    `production` with a fresh restore, force-push `main` to `main`, and pass the acceptance on
+    the domain. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore the
+    variables from `~/bap-cutover/old-variables.json`, and deploy `legacy-main`.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -178,7 +221,7 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
   deployed site, and the SA208 and SA246 declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Audit the portal work already in `bap-web-new` (the `properties` app, its API, and
+  - [ ] (r) Audit the portal work already in `bap-web-new` (`~/code/bap-web` after SA191d (swap); the `properties` app, its API, and
     the React pages) against this acceptance, list what is missing, and close the gaps with
     tests in the project (Tier 2-full).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA191d's cutover; re-prove the journey on
@@ -195,29 +238,11 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
   on marker-derived enrollment and purge; schema changes ship incremental migrations on the
   frozen history. Close when every item is promoted or dropped with rationale.
 
-### Track 2 — module provenance and upgrade path
+### Track 2 — module provenance
 
-Context for SA305: SA302 changed `quickscale_modules/orgs/` on `v89` after
-`splits/orgs-module/0.89.0` was sealed at `6b970dc`, and nothing flagged the stale seal. SA191a
-then copied the fix into `bap-web-new/modules/orgs` by hand, leaving `.quickscale/state.yml`
-pointing at a split without it, where a later `quickscale update` could revert it. The instance
-itself is repaired by an operator reseal of the orgs split and a project update, outside these
-tickets; these tickets make the next one visible.
+- [x] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
 
-- [ ] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
-
-  Tier 2-full. Before a subtree pull, `quickscale update` compares each embedded
-  `modules/<module>/` tree with the tree at its recorded `commit_sha` (allowing for the rewrites
-  embedding applies, such as `pyproject.toml`), and refuses with a list of the changed paths
-  unless `--allow-local-changes` is passed. `quickscale status` reports the same drift.
-  The roadmap rule that a QuickScale defect follows the release re-entry loop gains the line
-  "never patch an embedded module in a project; republish and update". The update's dependency
-  sync also keeps a project's `quickscale-core` path dependency on a committed wheel: in
-  `bap-web-new` it rewrote it to `>=0.89.0,<0.90.0`, a version not yet on PyPI.
-
-  **Acceptance:** tests cover an unchanged module (passes), a hand-edited file (refused, path
-  listed), and the override flag; `quickscale status` shows the drift; an update of a project
-  whose `quickscale-core` is a wheel path leaves that line unchanged.
+### Track 3 — upgrade path
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
@@ -237,10 +262,8 @@ tickets; these tickets make the next one visible.
   trigger, and decisions say so.
 
   **Slices:**
-  - [x] (a1) The handoff names every recorded gap; draft decision record in
-    `docs/planning/migration-upgrade-path-draft.md`.
   - [ ] (a2) After SA191d's cutover: the decision record and boundary rule in decisions, the
-    (a1) draft confirmed or amended against the cutover evidence, and the operator docs pruned of
+    draft (`docs/planning/migration-upgrade-path-draft.md`) confirmed or amended against the cutover evidence, and the operator docs pruned of
     steps either stage covers (Tier 2-fast).
   - [ ] (a3) The supported source-version range, test projects generated at each version in it
     with `beta_migration` smoke runs against them, and the prompt moved into the QuickScale
@@ -254,7 +277,8 @@ Standing scope rules, presence contracts, and resource safeguards live in [decis
 and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 **Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
-current dashboard heading against the Django-served origin, and `bap-web-new` has a live-site
+current dashboard heading against the Django-served origin, and `bap-web-new` (`~/code/bap-web`
+after SA191d (swap)) has a live-site
 screenshot harness; the repository still has no full journey suite. Remaining
 order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;

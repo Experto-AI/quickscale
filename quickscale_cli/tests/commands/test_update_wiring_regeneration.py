@@ -11,6 +11,7 @@ old/new module set would otherwise fail mid-update.
 """
 
 from __future__ import annotations
+import quickscale_cli.commands._module_update_guard as _module_update_guard
 import quickscale_cli.commands._module_update_io as _module_update_io
 import quickscale_core.project_state_manager as _project_state_manager
 
@@ -19,6 +20,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -38,6 +40,22 @@ from quickscale_cli.commands._module_update import update
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_MANIFEST_ROOT = REPO_ROOT / "quickscale_modules"
+
+
+@pytest.fixture(autouse=True)
+def _stub_module_content_drift(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep these update-mechanics tests independent of SA305 provenance.
+
+    Their fixtures embed modules without a real subtree history, so the
+    hand-edit guard would refuse every update; the guard has dedicated
+    command-boundary coverage in test_update_local_changes.py.
+    """
+    monkeypatch.setattr(
+        _module_update_guard,
+        "_collect_module_content_drift",
+        lambda state, project_path: [],
+    )
+
 
 #: The emitted generated-project ``.gitignore`` template, verbatim (it holds
 #: no Jinja constructs), so the update fixture carries the real ignore rules.

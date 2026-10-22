@@ -2221,6 +2221,10 @@ class TestCommitModuleUpdate:
 class TestUpdateCommand:
     """Tests for update click command."""
 
+    @patch(
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+        return_value=[],
+    )
     @patch("quickscale_cli.commands._module_update._update_single_module")
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
@@ -2240,6 +2244,7 @@ class TestUpdateCommand:
         mock_validate,
         mock_manager_cls,
         mock_update,
+        mock_collect,
     ):
         """Billing updates should no longer abort on a stale readiness override."""
         mock_confirm.return_value = True
@@ -2272,6 +2277,10 @@ class TestUpdateCommand:
         )
         mock_update.assert_called_once()
 
+    @patch(
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+        return_value=[],
+    )
     @patch("quickscale_cli.commands._module_update._update_single_module")
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
@@ -2291,6 +2300,7 @@ class TestUpdateCommand:
         mock_validate,
         mock_manager_cls,
         mock_update,
+        mock_collect,
     ):
         """Test successful update of installed modules."""
         mock_confirm.return_value = True
@@ -2315,6 +2325,10 @@ class TestUpdateCommand:
 
         assert result.exit_code == 0
 
+    @patch(
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+        return_value=[],
+    )
     @patch("quickscale_cli.commands._module_update._update_single_module")
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
@@ -2327,6 +2341,7 @@ class TestUpdateCommand:
         mock_validate,
         mock_manager_cls,
         mock_update,
+        mock_collect,
     ):
         """Test update aborts when a module fails to update."""
         mock_confirm.return_value = True
@@ -2499,6 +2514,10 @@ class TestUpdateVersionDriftWarning:
         assert isinstance(drift[0], VersionDriftWarning)
         assert drift[0].module == "auth"
 
+    @patch(
+        "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+        return_value=[],
+    )
     @patch("quickscale_cli.commands._module_update._update_single_module")
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
@@ -2518,6 +2537,7 @@ class TestUpdateVersionDriftWarning:
         mock_validate,
         mock_manager_cls,
         mock_update,
+        mock_collect,
     ):
         """Update should still run when drift is detected (drift is non-fatal)."""
         mock_confirm.return_value = True

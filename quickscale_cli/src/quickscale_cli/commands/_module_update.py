@@ -38,6 +38,7 @@ import quickscale_core.advisory_lock as _advisory_lock
 import quickscale_core.utils.git_repo as _git_repo
 import quickscale_core.utils.git_subtree as _git_subtree
 import quickscale_cli.commands._module_embed as _module_embed
+import quickscale_cli.commands._module_update_guard as _module_update_guard
 
 
 def _ensure_authoritative_state_for_update(
@@ -601,11 +602,24 @@ def _record_confirmed_update_adoption(project_path: Path, *, enabled: bool) -> N
 
 
 def _run_update_under_lock(
-    state: Any, project_path: Path, *, no_preview: bool, confirm_contract_adoption: bool
+    state: Any,
+    project_path: Path,
+    *,
+    no_preview: bool,
+    confirm_contract_adoption: bool,
+    allow_local_changes: bool,
 ) -> tuple[list[str], list[str], bool]:
     """Run the locked update sequence and return (failed, updated, wiring_failed)."""
     lock = _acquire_update_lock(project_path)
     try:
+        # The hand-edit check runs under the lock, after the last read of
+        # state and before the first pull, so it judges the tree the update
+        # is about to replace.
+        _module_update_guard._enforce_no_local_module_changes(
+            state,
+            project_path,
+            allow_local_changes=allow_local_changes,
+        )
         pre_update_head = _resolve_pre_update_head(project_path)
         failed_modules, updated_modules = _update_all_modules(
             state, no_preview=no_preview
@@ -706,10 +720,12 @@ def _report_update_outcome(
         "and proceed."
     ),
 )
+@_module_update_guard.allow_local_changes_option
 def update(
     no_preview: bool,
     acknowledge_contract_vintage: bool,
     confirm_contract_adoption: bool,
+    allow_local_changes: bool,
 ) -> None:
     r"""
     Update all installed QuickScale modules to their latest versions.
@@ -717,6 +733,8 @@ def update(
     \b
     This command:
       - Reads installed modules from .quickscale/config.yml
+      - Refuses modules whose files were edited since their recorded commit,
+        or whose recorded tree cannot be verified
       - Updates ONLY modules you've explicitly installed
       - Shows a diff preview before updating (unless --no-preview)
       - Updates the installed version in config after successful update
@@ -758,6 +776,7 @@ def update(
             project_path,
             no_preview=no_preview,
             confirm_contract_adoption=confirm_contract_adoption,
+            allow_local_changes=allow_local_changes,
         )
 
         _report_update_outcome(

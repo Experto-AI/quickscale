@@ -2030,6 +2030,56 @@ class TestRepinExistingMode:
         # Other entries preserved
         assert 'Django = "^6.0"' in pyproject_content
 
+    def test_repin_preserves_an_existing_wheel_path_entry(self, tmp_path):
+        """A committed local wheel stays the project's quickscale-core source."""
+        project = _make_project(tmp_path)
+        wheel_path = (
+            project
+            / ".quickscale"
+            / "wheels"
+            / "quickscale_core-0.89.0-py3-none-any.whl"
+        )
+        wheel_path.parent.mkdir(parents=True)
+        wheel_path.write_bytes(b"wheel")
+        original_entry = (
+            'quickscale-core = {path = ".quickscale/wheels/'
+            'quickscale_core-0.89.0-py3-none-any.whl"}'
+        )
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            f"{original_entry}\n"
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = ">=0.86.0,<0.87.0"\n'
+            ),
+        )
+        (project / "modules" / "backups" / "module.yml").write_text(
+            'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"backups": {}},
+            repin_existing=True,
+        )
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.updated_package_dependencies == []
+        assert original_entry in pyproject_content
+        assert ">=0.86.0,<0.87.0" not in pyproject_content
+
     def test_repin_does_not_modify_already_correct_entry(self, tmp_path):
         """When the existing dependency already matches the declared spec,
         repin mode should not modify it."""

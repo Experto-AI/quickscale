@@ -156,16 +156,26 @@ See [decisions.md: CLI Command Matrix](./implementation_contract.md#cli-command-
 
 `quickscale update` pulls module code into `modules/<name>/` through `git subtree` and regenerates
 the QuickScale-managed files. It never rewrites the rest of what generation copied into your
-project. An update also refuses to replace an applied migration file while the module's version
-label is unchanged, and on every pull once the project's applied vintage is at or after the
-migration-freeze release: from that release on, the applied migration files are the database's
-schema identity, so replacing one would leave it unidentified and an update refuses to proceed
-while that identity cannot be established from the embedded module. A refused update restores the
-pre-update content, and a migration file the pull adds is applied forward on the next `migrate`.
+project. Before pulling, it compares each `modules/<name>/` tree with the split commit recorded in
+`.quickscale/state.yml` (the `pyproject.toml` dependency rewrite the embed path applies is
+allowed). If a file was added, changed, or removed, the update stops before any pull and lists the
+changed paths; restore the recorded content by reverting the edit before a normal update, or pass
+`--allow-local-changes` to proceed. A change you want to keep must be published upstream and
+brought in by that allowed update, since upstreaming alone does not move the recorded baseline.
+`quickscale status` reports the same drift. The check needs the recorded split commit in the
+project's history; when it is
+unavailable, status reports the check as unverifiable rather than clean and the update refuses the
+module unless `--allow-local-changes` is passed. An update also refuses to replace an applied
+migration file while the module's version label is unchanged, and on every pull once the project's
+applied vintage is at or after the migration-freeze release: from that release on, the applied
+migration files are the database's schema identity, so replacing one would leave it unidentified
+and an update refuses to proceed while that identity cannot be established from the embedded
+module. A refused update restores the pre-update content, and a migration file the pull adds is
+applied forward on the next `migrate`.
 
 | Project part | Changed by `quickscale update`? | Notes |
 | --- | --- | --- |
-| `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits here are unsupported and must be reconciled by hand on every update. |
+| `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits are unsupported; `quickscale update` refuses and lists them unless `--allow-local-changes` is passed. |
 | Managed wiring and generated pages — `<package>/settings/modules.py`, `<package>/urls_modules.py`, `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md` | Yes | QuickScale-owned; never edit them. |
 | `frontend/` — the React app | Never, except the managed `frontend/src/quickscaleSeam.d.ts` and `frontend/src/quickscaleSeam.keys.ts` above | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
 | `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, which loads the token source from Vite in DEBUG and the compiled React stylesheet otherwise; shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |

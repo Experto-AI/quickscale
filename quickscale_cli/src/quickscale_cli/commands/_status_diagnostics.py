@@ -27,6 +27,7 @@ import quickscale_core.config as _config
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_core.project_state_drift as _project_state_drift
 import quickscale_core.contracts.module_discovery as _module_discovery
+import quickscale_cli.utils.module_provenance as _module_provenance
 
 
 def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
@@ -128,6 +129,31 @@ def _filesystem_drift_diagnostics(
     }
 
 
+def _module_content_drift_diagnostics(
+    project_path: Path,
+    state: QuickScaleState | None,
+) -> list[dict[str, object]]:
+    """Return per-module edits against each module's recorded commit tree."""
+    if state is None:
+        return []
+    return [
+        {
+            "module": drift.module,
+            "commit_sha": drift.commit_sha,
+            "changed_paths": list(drift.changed_paths),
+            "unverifiable_reason": drift.unverifiable_reason,
+        }
+        for drift in (
+            _module_provenance.detect_module_content_drift(
+                project_path,
+                name,
+                module.commit_sha,
+            )
+            for name, module in sorted(state.modules.items())
+        )
+    ]
+
+
 def _version_drift_diagnostics(
     project_state_manager: ProjectStateManager,
 ) -> list[dict[str, object]]:
@@ -177,6 +203,8 @@ def _compute_drift_diagnostics(
       is populated in state.
     * ``filesystem_drift`` — orphaned, missing, and incomplete modules.
     * ``managed_file_drift`` — managed files that drifted since last apply.
+    * ``module_content_drift`` — embedded module edits against each module's
+      recorded ``commit_sha`` tree.
     * ``version_drift`` — version disagreements between state and config.
     """
     state_dir = project_path / ".quickscale"
@@ -210,6 +238,9 @@ def _compute_drift_diagnostics(
     managed_file_drift = [
         {"path": r.path, "expected_hash": r.hash} for r in managed_drift_records
     ]
+
+    # Embedded module content drift against each recorded commit_sha.
+    module_content_drift = _module_content_drift_diagnostics(project_path, state)
 
     # Version drift between state and config.
     version_drift = _version_drift_diagnostics(project_state_manager)
@@ -245,6 +276,7 @@ def _compute_drift_diagnostics(
             "incomplete_modules": filesystem_drift["incomplete_modules"],
         },
         "managed_file_drift": managed_file_drift,
+        "module_content_drift": module_content_drift,
         "version_drift": version_drift,
         "contract_vintage": contract_vintage,
     }

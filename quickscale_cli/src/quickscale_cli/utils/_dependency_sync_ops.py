@@ -247,7 +247,9 @@ def sync_project_module_dependencies(
     entries are compared against the declared package spec, and any
     that differ are replaced inline.  This is used by the update path to
     repin pre-SA9.1 path-style or out-of-range entries to the correct
-    compatible version range.
+    compatible version range.  An existing path to a wheel already on disk is
+    left unchanged: it is a committed local artifact, not a stale monorepo
+    path.
     """
     if not module_options_by_name:
         return _dependency_io.ProjectDependencySyncResult()
@@ -329,6 +331,13 @@ def sync_project_module_dependencies(
             )
 
             if dependency_name in existing_dependency_names:
+                # A committed wheel path is a deliberate local resolution —
+                # typically an unpublished quickscale-core build — and must
+                # not be repinned to an index version that does not exist.
+                if _dependency_write._is_existing_wheel_path_dependency(
+                    project_path, project_dependencies[dependency_name]
+                ):
+                    continue
                 if (
                     local_wheel is not None
                     and project_dependencies[dependency_name] != local_wheel

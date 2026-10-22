@@ -279,6 +279,39 @@ def _display_managed_file_drift(diagnostics: dict) -> None:
         )
 
 
+def _display_module_content_drift(diagnostics: dict) -> None:
+    """Display embedded module edits against each recorded commit tree."""
+    entries = diagnostics.get("module_content_drift", [])
+    changed = [entry for entry in entries if entry.get("changed_paths")]
+    unverifiable = [entry for entry in entries if entry.get("unverifiable_reason")]
+
+    if changed:
+        modules = ", ".join(entry["module"] for entry in changed)
+        click.secho(
+            f"   Module content drift: ⚠️  {len(changed)} module(s) edited ({modules})",
+            fg="yellow",
+        )
+        for entry in changed:
+            click.echo(f"     {entry['module']}:")
+            for path in entry["changed_paths"]:
+                click.secho(f"       • {path}", fg="yellow")
+        click.echo(
+            "     Restore the recorded content or use "
+            "'quickscale update --allow-local-changes' to proceed."
+        )
+    elif not unverifiable:
+        click.secho("   Module content drift: ✅ clean", fg="green")
+
+    if unverifiable:
+        modules = ", ".join(entry["module"] for entry in unverifiable)
+        click.secho(
+            f"   Module content check: ⚠️  unverifiable for {modules}",
+            fg="yellow",
+        )
+        for entry in unverifiable:
+            click.echo(f"     {entry['module']}: {entry['unverifiable_reason']}")
+
+
 def _display_version_drift(diagnostics: dict) -> None:
     """Display module-version drift."""
     vd = diagnostics["version_drift"]
@@ -373,6 +406,7 @@ def _display_drift_diagnostics(diagnostics: dict) -> None:
     _display_managed_files(diagnostics)
     _display_filesystem_drift(diagnostics)
     _display_managed_file_drift(diagnostics)
+    _display_module_content_drift(diagnostics)
     _display_version_drift(diagnostics)
     _display_contract_vintage(diagnostics)
 

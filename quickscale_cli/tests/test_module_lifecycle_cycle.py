@@ -1131,6 +1131,10 @@ def test_update_after_removal_only_targets_remaining_modules(
             "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
         ),
         patch(
+            "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+            return_value=[],
+        ),
+        patch(
             "quickscale_cli.commands._module_update._update_single_module",
             return_value=True,
         ) as mock_update_single_module,
@@ -1365,6 +1369,10 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
             "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
         ),
         patch(
+            "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+            return_value=[],
+        ),
+        patch(
             "quickscale_cli.commands._module_update._update_single_module",
             return_value=True,
         ) as mock_update_single_module,
@@ -1565,6 +1573,10 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
             patch(
                 "click.confirm",
                 return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
+                return_value=[],
             ),
             patch(
                 "quickscale_cli.commands._module_embed._sync_module_dependencies",
