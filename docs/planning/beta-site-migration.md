@@ -34,8 +34,8 @@ Rules for the current maintainer tool:
 
 ## Working documents
 
-The port's `MIGRATION_PROMPT.md` and `CUTOVER.md` live in the recipient repository
-(`bap-web-new`), which the tool writes them into; this repository keeps no copies. The two-stage
+The port's `MIGRATION_PROMPT.md` and `CUTOVER.md` live in the recipient repository,
+which the tool writes them into; this repository keeps no copies. The two-stage
 upgrade path is drafted in [`migration-upgrade-path-draft.md`](migration-upgrade-path-draft.md).
 SA299 deletes and regenerates `bap-web-new`; the earlier port's prompt, `CUTOVER.md`, run report,
 and history are preserved in `~/code/bap-web-new-salvage/` outside every repository.
@@ -67,7 +67,7 @@ make publish-modules           # push current module code to the splits/<module>
 
 ### One iteration
 
-`make beta-migrate-iterate DONOR=/home/victor/code/bap-web RECIPIENT=/home/victor/code/bap-web-new`
+`make beta-migrate-iterate DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/throwaway-recipient`
 is the one non-interactive iteration procedure. It reads slug, package, theme, and modules from the
 donor's `quickscale.yml`, regenerates the throwaway recipient through a staging directory and
 `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it.
