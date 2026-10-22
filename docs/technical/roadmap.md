@@ -69,7 +69,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191d (build); SA153 (r) | yes | no | yes | no | yes |
+| 1 | SA191d (swap); SA153 (r) | yes | no | yes | no | yes |
 | 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
@@ -159,12 +159,14 @@ Resend's SMTP relay (`smtp.resend.com:2587`, the same `re_…` key in both envir
 plus a webhook signing secret. All ten old forms notify `info@buenosairesproperties.com`; four
 (`contact`, `feedback`, `newsletter`, `support`) are not recreated and have no production
 submissions. Operator decisions: sender, reply-to, and notification address
-`info@buenosairesproperties.com`; analytics off via `modules.analytics.enabled: false`; the
-`develop` test submissions are not carried. `railway ssh` has an operator SSH key; exports
-otherwise read the database directly (`DATABASE_PUBLIC_URL` of the PostgreSQL service).
+`info@buenosairesproperties.com`; analytics stays on with `POSTHOG_API_KEY`, because the shipped
+apply rule refuses switching `analytics` off while `forms` requires it; the `develop` test
+submissions are not carried. The (build) dump is `~/bap-cutover/new-2026-10-22.dump`.
+`railway ssh` has an operator SSH key; exports otherwise read the database directly
+(`DATABASE_PUBLIC_URL` of the PostgreSQL service).
 
 After slice (swap), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
-procedure is `bap-web-new/CUTOVER.md`; slice (build) rewrites it to this strategy. A QuickScale
+procedure is `bap-web-new/CUTOVER.md`; the (build) slice rewrote it to this strategy. A QuickScale
 defect follows the release re-entry loop (never patch an embedded module in a project; republish
 and update); a project defect is fixed in `bap-web-new`, project-specific behavior in its
 `client_extensions`.
@@ -182,17 +184,7 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
   rollback.
 
   **Slices:**
-  - [ ] (build) Local database build (Tier 2-full; no Railway writes): in `bap-web-new`, set the
-    `notifications` block (sender, reply-to `info@buenosairesproperties.com`, `resend_domain:
-    buenosairesproperties.com`) and `modules.analytics.enabled: false`, `quickscale apply`, and
-    commit on `main`. Build a fresh PostgreSQL 18 database locally (`postgres:18`): `migrate`,
-    `quickscale_orgs_create_site_org buenos-aires-properties "Buenos Aires Properties"`,
-    `properties_seed_catalog`, `forms_seed_presets --notify-emails
-    info@buenosairesproperties.com`; operator runs `createsuperuser`; `pg_dump -Fc` to
-    `~/bap-cutover/new-<date>.dump`. Acceptance: `manage.py check --deploy` with production
-    settings, healthcheck, `/`, `/contact`, operator admin review. Rewrite `CUTOVER.md` to this
-    ticket's strategy (develop rehearsal, new PostgreSQL 18 service, `DATABASE_URL` repoint,
-    rollback by repointing).
+  - [x] (build) Local database build.
   - [ ] (swap) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
     `v-legacy` from the old checkout; rename the folders; remove the old checkout's `origin`;
     add `origin` in the new one; relink Railway per folder. Push no new code.
@@ -200,7 +192,8 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
     service and restore the (build) dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
     `DJANGO_SETTINGS_MODULE=bap_web.settings.production`, `ALLOWED_HOSTS`, `DATABASE_URL` to the
     new service, the runtime-role trio, `RESEND_API_KEY`,
-    `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`; remove `EMAIL_*` and `DJANGO_SUPERUSER_*`);
+    `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`, `POSTHOG_API_KEY`; remove `EMAIL_*` and
+    `DJANGO_SUPERUSER_*`);
     force-push `main` to `develop`; acceptance as above on `bap-web-develop.up.railway.app`,
     including a delivered email and the Resend webhook. Record every deviation in `CUTOVER.md`.
   - [ ] (production) Switch on Railway `production` (Tier 2-full; the one-way step stands alone): repeat (develop) in
