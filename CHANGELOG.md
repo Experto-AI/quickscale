@@ -92,10 +92,6 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     command recreates each matched submission and field value in the form's organization with its
     timestamp, status, spam flag, IP, and user agent. It reports unmatched forms, fields, and
     old-only columns, and a rerun or `--dry-run` writes nothing twice.
-  - **The production cutover has an operator checklist.** `bap-web-new/CUTOVER.md` covers the old
-    data export, the new service's variables and deploy, the site-organization, catalog, forms,
-    and submission-import commands, the pre-switch checks, the domain move, and a rollback that
-    leaves the old service untouched.
   - **A stale module seal fails the release check.** `make release-gate` names any module whose
     `X.Y.Z` split tag no longer matches its current split, and `make publish-module-status` reports
     the same **sealed but stale** state with the Phase 5 reseal path.
