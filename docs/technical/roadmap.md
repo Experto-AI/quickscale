@@ -6,7 +6,7 @@
 
 The immediate goal is one convention across all modules, as recorded in
 [module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
-once, onto the standardized names: the regenerated `bap-web-new`, already at visual parity, is
+once, onto the standardized names: the regenerated `bap-web`, already at visual parity, is
 cut over (SA191d) and then carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves
 their value.
@@ -38,7 +38,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to `bap-web-new` in place (delegated, operator-gated) | 1 | — | Required |
+| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
@@ -69,16 +69,16 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191d (swap); SA153 (r) | yes | no | yes | no | yes |
+| 1 | SA191d (develop); SA153 (r) | yes | no | yes | no | yes |
 | 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
 ### Ownership and merge coordination
 
 - Track 1 owns the generated `urls.py.j2` and the theme's social seam pages, the parity oracles,
-  the hosted workflow triggers (including `e2e.yml`'s tag pattern), the `bap-web-new` cutover,
+  the hosted workflow triggers (including `e2e.yml`'s tag pattern), the `bap-web` cutover,
   the property extension, public templates, and the portal's
-  extension documentation, the `bap-web-new` forms import, the design-system
+  extension documentation, the `bap-web` forms import, the design-system
   extraction and the visual-parity harness, the managed CI-environment and operations-guide
   includes, and, for the conventions, module identities, models and their `0001_initial`,
   module READMEs, and module templates, static files, and template tags, with the module page templates and the generated
@@ -135,9 +135,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — cutover and the property portal
 
-**SA191d context.** Old `bap-web` (`~/code/bap-web`) serves production on Railway with no users,
-only form submissions and configuration. `bap-web-new` (`~/code/bap-web-new`) already declares every
-module (`auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, `storage`), carries
+**SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway with no
+users, only form submissions and configuration. The regenerated `bap-web` (`~/code/bap-web`,
+formerly `bap-web-new`) already declares every module (`auth`, `listings`, `forms`, `analytics`,
+`notifications`, `orgs`, `storage`), carries
 the `properties` app with `/api/properties/` and `properties_seed_catalog`, and recreates the six
 BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
 `alquiler-inquilino`, `reubicacion`, `consulta-general`) in
@@ -173,17 +174,17 @@ re-enabled builds by plan tier (Enterprise, Pro, then Hobby, Free, Trial). Every
 old variables is treated as exposed: the Resend key is rotated before use; the old
 `SECRET_KEY` and `DJANGO_SUPERUSER_*` are not carried; the old PostgreSQL 17 credentials are
 rollback-only (rotate or retire after the cutover). Values generated after the incident (the
-new PostgreSQL 18 service, runtime role, `SECRET_KEY`) are clean. The (swap) slice changes
+new PostgreSQL 18 service, runtime role, `SECRET_KEY`) are clean. The (swap) slice changed
 nothing on Railway (legacy refs trigger no deploy; `railway link` only writes local CLI state)
-and runs regardless.
+and ran regardless.
 
-After slice (swap), `~/code/bap-web` is the new project and `~/code/bap-web-old` the old one. The
-procedure is `bap-web-new/CUTOVER.md`; the (build) slice rewrote it to this strategy. A QuickScale
+The (swap) slice made `~/code/bap-web` the new project and `~/code/bap-web-old` the old one. The
+procedure is `bap-web/CUTOVER.md`; the (build) slice rewrote it to this strategy. A QuickScale
 defect follows the release re-entry loop (never patch an embedded module in a project; republish
-and update); a project defect is fixed in `bap-web-new`, project-specific behavior in its
+and update); a project defect is fixed in `bap-web`, project-specific behavior in its
 `client_extensions`.
 
-- [ ] **SA191d — Cut over production to `bap-web-new` in place (delegated, operator-gated).**
+- [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
   Delegated to an AI assistant, one slice per session, each ending with a handoff note in the
   project's `docs/`. Every push, every Railway variable or service change, and every restore is
@@ -197,9 +198,7 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
 
   **Slices:**
   - [x] (build) Local database build.
-  - [ ] (swap) Repository swap (Tier 2-fast): push `legacy-main`, `legacy-develop`, and tag
-    `v-legacy` from the old checkout; rename the folders; remove the old checkout's `origin`;
-    add `origin` in the new one; relink Railway per folder. Push no new code.
+  - [x] (swap) Repository swap.
   - [ ] (develop) Rehearsal on Railway `develop` (Tier 2-full). Preconditions, each a stop
     condition: Railway's status page shows builds enabled for the workspace's plan; the operator
     confirms the Resend key was rotated (`~/bap-cutover/resend-api-key` is newer than
@@ -237,7 +236,7 @@ and update); a project defect is fixed in `bap-web-new`, project-specific behavi
   deployed site, and the SA208 and SA246 declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Audit the portal work already in `bap-web-new` (`~/code/bap-web` after SA191d (swap); the `properties` app, its API, and
+  - [ ] (r) Audit the portal work already in `bap-web` (`~/code/bap-web`; the `properties` app, its API, and
     the React pages) against this acceptance, list what is missing, and close the gaps with
     tests in the project (Tier 2-full).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA191d's cutover; re-prove the journey on
@@ -293,9 +292,8 @@ Standing scope rules, presence contracts, and resource safeguards live in [decis
 and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 **Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
-current dashboard heading against the Django-served origin, and `bap-web-new` (`~/code/bap-web`
-after SA191d (swap)) has a live-site
-screenshot harness; the repository still has no full journey suite. Remaining
+current dashboard heading against the Django-served origin, and `bap-web` (`~/code/bap-web`) has
+a live-site screenshot harness; the repository still has no full journey suite. Remaining
 order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
 (4) full journey E2E against the Docker stack, only if it fits the E2E time budget in
