@@ -38,7 +38,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to `bap-web-new` (operator) | 1 | — | Required |
+| SA191d | Cut over production to `bap-web-new` in place (delegated, operator-gated) | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
@@ -46,14 +46,14 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191d (operator) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
+Track 1: SA191d (c1 ──► c2 ──► c3) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
 Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA191d is the
-operator's own cutover; SA153 (r) and SA277 (a3) need nothing from it and run now. SA153 (f)
+Arrows within a track are queue order; the table holds the dependency edges. SA191d is
+delegated, with every production write operator-gated; SA153 (r) and SA277 (a3) need nothing from it and run now. SA153 (f)
 and SA277 (a2) wait on SA191d.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
@@ -69,7 +69,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA153 (r); SA191d (operator) | yes | no | yes | no | yes |
+| 1 | SA191d (c1); SA153 (r) | yes | no | yes | no | yes |
 | 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
@@ -142,15 +142,33 @@ the `properties` app with `/api/properties/` and `properties_seed_catalog`, and 
 BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
 `alquiler-inquilino`, `reubicacion`, `consulta-general`) in
 `client_extensions/.../forms_seed_presets.py`.
-The cutover procedure is `bap-web-new/CUTOVER.md`. A QuickScale defect follows the release
+The cutover runs **in place**: the same Railway service, custom domain, DNS records, and GitHub
+repository (`VictorRocco/BAP-web`) take the new code; the old history stays as `legacy-*`
+branches and the `v-legacy` tag. The new database is built and tested locally, then restored
+over the old schema; downtime is accepted. After slice (c2), `~/code/bap-web` is the new project
+and `~/code/bap-web-old` the old one. The procedure is `bap-web-new/CUTOVER.md` (phases P0–P7);
+exports and rollback copies live in `~/bap-cutover/`, outside every repository. A QuickScale defect follows the release
 re-entry loop (never patch an embedded module in a project; republish and update); a project
 defect is fixed in `bap-web-new`, project-specific behavior in its `client_extensions`.
 
 - [ ] **SA191d — Cut over production to `bap-web-new` (operator).**
 
-  Operator action, not handed off. Run `CUTOVER.md` on Railway, switch the domain, then retire
-  the old service and archive the `bap-web` repository. Each production step is
-  operator-authorized; the old database export is kept outside every repository.
+  Delegated to an AI assistant, one slice per session, each ending with a handoff note in the
+  project's `docs/`. The operator does P0 (deployed branch, auto-deploy off, vendor keys),
+  `createsuperuser`, and the admin review; every push and every production write is an
+  operator gate.
+
+  **Acceptance:** the P7 live checks pass on `https://buenosairesproperties.com`, the imported
+  submission count matches the final export, and the rollback copies (old dump, old variables)
+  exist in `~/bap-cutover/`.
+
+  **Slices:**
+  - [ ] (c1) P1–P4: export the old data, configure `quickscale.yml`, build the database locally,
+    and pass local acceptance (Tier 2-full; no production writes).
+  - [ ] (c2) P5: legacy branches and tag pushed, folders renamed, remotes and Railway link
+    repointed, `main` not pushed (Tier 2-fast).
+  - [ ] (c3) P6–P7: final import, variables, schema restore, force-push, live checks (Tier
+    2-full; the one-way step stands alone, each production write operator-approved).
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -165,7 +183,7 @@ defect is fixed in `bap-web-new`, project-specific behavior in its `client_exten
   deployed site, and the SA208 and SA246 declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Audit the portal work already in `bap-web-new` (the `properties` app, its API, and
+  - [ ] (r) Audit the portal work already in `bap-web-new` (`~/code/bap-web` after SA191d c2; the `properties` app, its API, and
     the React pages) against this acceptance, list what is missing, and close the gaps with
     tests in the project (Tier 2-full).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA191d's cutover; re-prove the journey on
@@ -221,7 +239,8 @@ Standing scope rules, presence contracts, and resource safeguards live in [decis
 and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 **Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
-current dashboard heading against the Django-served origin, and `bap-web-new` has a live-site
+current dashboard heading against the Django-served origin, and `bap-web-new` (`~/code/bap-web`
+after SA191d c2) has a live-site
 screenshot harness; the repository still has no full journey suite. Remaining
 order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
 (2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
