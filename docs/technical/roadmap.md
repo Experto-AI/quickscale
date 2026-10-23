@@ -42,12 +42,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA306 | Make the generated `ci.yml` start on GitHub and pass on `bap-web` | 1 | — | Required |
+| SA307 | Make System-org public content reachable for logged-in staff in forms and the admin | 1 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191d (build ──► swap ──► develop ──► production) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory) ∥ SA306
+Track 1: SA191d (build ──► swap ──► develop ──► production) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory) ∥ SA306 ∥ SA307
 Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
@@ -70,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191d (production); SA153 (r); SA306 | yes | no | yes | no | yes |
+| 1 | SA191d (production); SA153 (r); SA306; SA307 | yes | no | yes | no | yes |
 | 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
@@ -207,8 +208,8 @@ and update); a project defect is fixed in `bap-web`, project-specific behavior i
     `resend-webhook-secret-production`; force-push `main` to `main` with the lease on `782b11c`;
     acceptance on the domain, with the browser check from a private window (a logged-in admin
     gets 404 on public forms). After it passes, the operator deletes the develop Resend webhook,
-    the old PostgreSQL 17 service, and renames the new service and volume to `Postgres` /
-    `postgres-volume`. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore
+    the old PostgreSQL 17 service, and, 48 hours later (Railway reserves deleted names), renames
+    the new service and volume to `Postgres` / `postgres-volume`, as on `develop`. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore
     the variables from `~/bap-cutover/old-variables.json` (their Resend key is revoked), and
     deploy `legacy-main`.
 
@@ -219,6 +220,15 @@ and update); a project defect is fixed in `bap-web`, project-specific behavior i
   `bap-web` `develop`, run 39920079023). Fix the template (step-level guard or an always-run job),
   add an `actionlint` check over the generated workflows, ship through the release re-entry loop,
   update `bap-web`, and iterate until its CI is green on `develop` (Tier 2-full).
+
+- [ ] **SA307 — Make System-org public content reachable for logged-in staff in forms and the admin.**
+
+  Public forms and their submissions live in the System org, but a staff session resolves its
+  personal org: on `bap-web` `develop` the public submit returns 404 to a logged-in admin, and the
+  admin lists show no forms or submissions with no visible way to pick an org (only
+  `?organization__id__exact=<id>` works). Public form resolution must not depend on the visitor's
+  session org, and the admin must offer an org selector that includes the System org. Ship
+  through the release re-entry loop and re-prove both on `bap-web` (Tier 2-full).
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 

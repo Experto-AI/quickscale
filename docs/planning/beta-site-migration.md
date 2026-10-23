@@ -349,13 +349,12 @@ See [railway.md § Minimum environment variable contract](../deployment/railway-
 
 ### `notifications`
 
-Deploy first, then open Django admin → Notification Settings and set the env var name fields
-(defaults to `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET`). Then add to Railway:
-
-```
-RESEND_API_KEY=re_...
-RESEND_WEBHOOK_SECRET=whsec_...
-```
+The module reads its vendor values from the environment: `RESEND_API_KEY` and
+`QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET` (the Resend endpoint's signing secret, one per
+environment). Sender and Resend domain come from `quickscale.yml` through `quickscale apply`.
+Delete any old `EMAIL_*` and `DEFAULT_FROM_EMAIL` variables: the module owns mail settings. A
+Resend account sends every event to every endpoint, so remove a rehearsal environment's
+endpoint once the production one is live.
 
 ### `backups`
 
@@ -369,39 +368,64 @@ No env vars. Configure links and embeds via Django admin after migration.
 
 ## Railway deployment
 
-### Before pushing — set env vars for new modules
+Proven on the `bap-web` cutover (an in-place replacement on Railway; the recipient's
+`CUTOVER.md` holds the full procedure and its run record). Rehearse on a non-production
+environment first, then repeat on production as a separate step.
 
-```bash
-# Set all in one batch to trigger only one Railway redeploy
-railway variables --set \
-  RESEND_API_KEY=re_... \
-  RESEND_WEBHOOK_SECRET=whsec_... \
-  --service bap-web
-```
+### Variables
+
+- Pass `-s`/`-e` **after** the subcommand: `railway variable set KEY --stdin --skip-deploys -s
+  <app> -e <env>`. Placed before it they are ignored and the write lands on the linked service,
+  which after `railway add` is the new database. Send secrets on stdin, never on argv.
+- `railway variable delete` has no `--skip-deploys`: each delete redeploys the app.
+- Delete `DJANGO_SUPERUSER_*` before the new code first boots. `start.sh` creates a superuser from
+  them, and inherited values must be treated as exposed. The admin user comes from the restored
+  database.
+- Reference the database by name (`DATABASE_URL=${{<db>.DATABASE_URL}}`; build
+  `RUNTIME_DATABASE_URL` on `${{<db>.RAILWAY_PRIVATE_DOMAIN}}`). `start.sh` creates the runtime
+  role from `RUNTIME_DB_ROLE` / `RUNTIME_DB_PASSWORD` at boot.
+
+### Replacing the database
+
+- `railway add -d postgres` creates `Postgres-<suffix>` with volume `postgres-volume-<suffix>` in
+  the **linked** environment and links the CLI folder to it; check `railway status` first.
+- The template creates no public TCP proxy, and `railway connect --tunnel-only` fails against the
+  SSH gateway. Restore inside the container instead: stream the dump with
+  `railway ssh -s <db> -e <env> -- sh -c 'cat > /tmp/x.dump; sha256sum /tmp/x.dump' < dump`,
+  compare checksums, then run `pg_restore -U postgres -d railway --no-owner --no-privileges
+  --exit-on-error` there. `railway ssh` needs a registered key (`railway ssh keys add`).
+- Keep the old database service until acceptance passes; it is the rollback. Dump it before
+  deleting it. A deleted service's and volume's names stay reserved for about 48 hours, so
+  renaming the new service back to `Postgres` waits that long.
+- Template defaults change between major versions (`max_connections` fell from 500 to 100);
+  compare `pg_settings` of old and new before accepting.
 
 ### Push and deploy
 
-```bash
-# Merge to main → Railway auto-deploys (recommended)
-git push origin <branch-name>
+- Check whether automatic deploys are on: a push to the watched branch deploys at once, before
+  the variables may be ready. Deploy an exact revision with
+  `railway redeploy -s <app> -e <env> --commit <sha> --yes`.
+- Force-push over an unrelated history with an explicit lease on the old head
+  (`git push --force-with-lease=<branch>:<old-sha> origin main:<branch>`), after pushing the old
+  head to a `legacy-*` branch.
+- Watch the boot log through migrate, seeds, cache table, and the superuser step, which must not
+  report "created".
 
-# Or deploy directly:
-railway up --service bap-web
-```
+### Acceptance
 
-### Confirm migrations ran
-
-```bash
-railway logs --service bap-web --follow
-# Expect lines like: Applying social.0001_initial... OK
-```
+- Public forms belong to the System org. Submit test forms from a private window: a browser
+  logged into `/admin/` resolves the staff member's org and gets 404 on the submit. In the admin,
+  select the System org (`?organization__id__exact=<id>`) to see forms and submissions.
+- Confirm delivery from the database, not only the inbox: the notification delivery row reaches
+  `delivered`, with `email.sent` and `email.delivered` webhook events.
+- A GitHub CI run that fails in 0 seconds with no jobs is a workflow GitHub rejected; lint it with
+  `actionlint`.
 
 ### Rollback
 
-```bash
-# Railway dashboard: Deployments tab → previous deployment → Redeploy
-railway redeploy <deployment-id> --service bap-web
-```
+Repoint `DATABASE_URL` to the kept old database, restore the exported old variables, and deploy
+the `legacy-*` branch (`railway redeploy -s <app> -e <env> --commit <sha>`). Submissions accepted
+after the switch exist only in the new database; export them first.
 
 ---
 
