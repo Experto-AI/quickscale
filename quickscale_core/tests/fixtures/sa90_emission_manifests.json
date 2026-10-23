@@ -61,7 +61,8 @@
       "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa299d": "Regenerated 2026-10-20 \u2014 the generated project's test harness passes as rendered: pyproject.toml collects tests/ only, the Makefile test-backend target and the CI test and migration steps set QUICKSCALE_ALLOW_BYPASSRLS=1 when orgs is installed, the tenant-isolation target's prerequisite migration uses QUICKSCALE_PRIVILEGED_COMMAND=migrate, and README.md's direct pytest commands carry the same allowance. Changed per variant: README.md and pyproject.toml; react_default also .github/workflows/ci.yml and Makefile. All unrelated paths, hashes, and modes remain authoritative.",
       "sa300b": "Regenerated 2026-10-20 \u2014 the generated home E2E spec asserts the current dashboard heading and its Playwright config targets the Django-served origin, because the React starter validates window.__QUICKSCALE__ and Vite alone cannot serve an E2E target. 2 fixture hashes updated per variant: frontend/e2e/home.spec.ts and frontend/playwright.config.ts. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa308": "Regenerated 2026-10-23 \u2014 generated runtime pins moved to Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6; the Pillow (13), virtualenv (21.14.13), and React starter lockfile (DOMPurify 3.4.17, Vitest 4.1.12) advisory floors landed, and the generated README names the Node 24.22.1 prerequisite. 8 fixture hashes updated per variant: .github/workflows/ci.yml, Dockerfile, docker-compose.yml, frontend/package.json, frontend/pnpm-lock.yaml, pyproject.toml, README.md, <package>/settings/production.py. All unrelated paths, hashes, and modes remain authoritative."
+      "sa308": "Regenerated 2026-10-23 \u2014 generated runtime pins moved to Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6; the Pillow (13), virtualenv (21.14.13), and React starter lockfile (DOMPurify 3.4.17, Vitest 4.1.12) advisory floors landed, and the generated README names the Node 24.22.1 prerequisite. 8 fixture hashes updated per variant: .github/workflows/ci.yml, Dockerfile, docker-compose.yml, frontend/package.json, frontend/pnpm-lock.yaml, pyproject.toml, README.md, <package>/settings/production.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa308-b": "Regenerated 2026-10-23 \u2014 the React starter declares its Tailwind animation plugin (`tailwindcss-animate`) as a build-only dev dependency instead of a runtime dependency, so production npm audits no longer see Tailwind's build-time `braces` and `postcss-selector-parser` chain. 2 fixture hashes updated per variant: frontend/package.json and frontend/pnpm-lock.yaml. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -194,7 +195,7 @@
     },
     "frontend/package.json": {
       "mode": "644",
-      "sha256": "b1b7b0876f2b3563bbc8d22013af54dd119fd7ce6db8e6921fa4f2133cc26f57"
+      "sha256": "f93faeef801a28b2a07d916d1423351fd48ab92f89a7cf5cce6f30d7ed917785"
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
@@ -202,7 +203,7 @@
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
-      "sha256": "eb8ddffea7488da567d631cbfcfa0defb3319af6add544dfc944a916a8450c00"
+      "sha256": "512ad526d08d474a222a81df0ac9c55da57f0d74f4a7c06cdf7c9af159a326ec"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -764,7 +765,7 @@
     },
     "frontend/package.json": {
       "mode": "644",
-      "sha256": "b1b7b0876f2b3563bbc8d22013af54dd119fd7ce6db8e6921fa4f2133cc26f57"
+      "sha256": "f93faeef801a28b2a07d916d1423351fd48ab92f89a7cf5cce6f30d7ed917785"
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
@@ -772,7 +773,7 @@
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
-      "sha256": "eb8ddffea7488da567d631cbfcfa0defb3319af6add544dfc944a916a8450c00"
+      "sha256": "512ad526d08d474a222a81df0ac9c55da57f0d74f4a7c06cdf7c9af159a326ec"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -1334,7 +1335,7 @@
     },
     "frontend/package.json": {
       "mode": "644",
-      "sha256": "b1b7b0876f2b3563bbc8d22013af54dd119fd7ce6db8e6921fa4f2133cc26f57"
+      "sha256": "f93faeef801a28b2a07d916d1423351fd48ab92f89a7cf5cce6f30d7ed917785"
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
@@ -1342,7 +1343,7 @@
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
-      "sha256": "eb8ddffea7488da567d631cbfcfa0defb3319af6add544dfc944a916a8450c00"
+      "sha256": "512ad526d08d474a222a81df0ac9c55da57f0d74f4a7c06cdf7c9af159a326ec"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
