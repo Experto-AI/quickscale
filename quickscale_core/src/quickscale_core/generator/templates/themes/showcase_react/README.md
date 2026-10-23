@@ -29,7 +29,7 @@ Fresh `showcase_react` generations also include dormant PostHog starter support 
 
 ### Prerequisites
 
-- Node.js 24+
+- Node.js 24.22.1+
 - pnpm (required)
 
 ### Installation

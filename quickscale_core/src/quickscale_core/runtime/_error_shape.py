@@ -59,15 +59,21 @@ def _validation_fields(detail: object, prefix: str = "") -> dict[str, list[str]]
 
     A nested serializer error becomes a dotted field path — ``{"address":
     {"city": ["Required."]}}`` normalizes to ``{"address.city": ["Required."]}``
-    — and a nested ``many=True`` serializer adds the item position —
-    ``{"addresses": [{}, {"city": ["Required."]}]}`` normalizes to
+    — and a nested ``many=True`` serializer adds the item position. DRF emits
+    that position as a list on older releases and as an index-keyed mapping on
+    3.18+; both ``{"addresses": [{}, {"city": ["Required."]}]}`` and
+    ``{"addresses": {1: {"city": ["Required."]}}}`` normalize to
     ``{"addresses[1].city": ["Required."]}`` — so every entry stays a plain
     list of human-readable strings that names the offending field.
     """
     if isinstance(detail, Mapping):
         fields: dict[str, list[str]] = {}
+        indexed = bool(prefix) and all(_is_index_key(key) for key in detail)
         for key, value in detail.items():
-            field = f"{prefix}.{key}" if prefix else str(key)
+            if indexed:
+                field = f"{prefix}[{key}]"
+            else:
+                field = f"{prefix}.{key}" if prefix else str(key)
             _collect_field_messages(fields, field, value)
         return fields
     if isinstance(detail, (list, tuple)) and any(
@@ -77,6 +83,11 @@ def _validation_fields(detail: object, prefix: str = "") -> dict[str, list[str]]
         _collect_field_messages(fields, prefix or _NON_FIELD_ERRORS_KEY, detail)
         return fields
     return {prefix or _NON_FIELD_ERRORS_KEY: _message_list(detail)}
+
+
+def _is_index_key(key: object) -> bool:
+    """Return whether *key* is a serializer item position, not a field name."""
+    return isinstance(key, int) or (isinstance(key, str) and key.isdecimal())
 
 
 def _collect_field_messages(

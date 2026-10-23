@@ -23,9 +23,11 @@ from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
     DJANGO_CONSTRAINT,
     POSTGRES_DOCKER_TAG,
+    POSTGRES_PATCH_VERSION,
     POSTGRES_VERSION,
     PYTHON_CONSTRAINT,
     PYTHON_DOCKER_TAG,
+    PYTHON_PATCH_VERSION,
     PYTHON_VERSION,
     QUICKSCALE_CORE_PIN,
 )
@@ -69,11 +71,13 @@ def test_context() -> dict[str, object]:
         "package_name": "testproject",
         "theme": "showcase_react",
         "python_version": PYTHON_VERSION,
+        "python_patch_version": PYTHON_PATCH_VERSION,
         "python_constraint": PYTHON_CONSTRAINT,
         "python_docker_tag": PYTHON_DOCKER_TAG,
         "django_constraint": DJANGO_CONSTRAINT,
         "django_ci_version": DJANGO_CI_MATRIX_VERSION,
         "postgres_version": POSTGRES_VERSION,
+        "postgres_patch_version": POSTGRES_PATCH_VERSION,
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
         "quickscale_core_pin": QUICKSCALE_CORE_PIN,
         **runtime_db_template_context("testproject"),
@@ -277,10 +281,11 @@ class TestRuntimePins:
     """Verify the runtime_pins module defines generated-project-owned pin values."""
 
     def test_python_pins_defined(self) -> None:
-        """Python version, constraint, and Docker tag should be exported."""
+        """Python line, patch release, constraint, and Docker tag are exported."""
         from quickscale_core.generator.runtime_pins import (
             PYTHON_CONSTRAINT,
             PYTHON_DOCKER_TAG,
+            PYTHON_PATCH_VERSION,
             PYTHON_VERSION,
         )
 
@@ -288,7 +293,8 @@ class TestRuntimePins:
         assert PYTHON_CONSTRAINT == (
             f">={PYTHON_VERSION},<{python_major}.{python_minor + 1}"
         )
-        assert PYTHON_DOCKER_TAG == f"{PYTHON_VERSION}-slim-bookworm"
+        assert PYTHON_PATCH_VERSION.startswith(f"{PYTHON_VERSION}.")
+        assert PYTHON_DOCKER_TAG == f"{PYTHON_PATCH_VERSION}-slim-bookworm"
 
     def test_django_pins_defined(self) -> None:
         """Django constraint and CI matrix version should be exported."""
@@ -305,15 +311,17 @@ class TestRuntimePins:
         assert django_upper == f"<{django_major}.{django_minor + 1}.0"
 
     def test_postgres_pins_defined(self) -> None:
-        """PostgreSQL version and Docker tag should be exported."""
+        """PostgreSQL major, patch release, and Docker tag are exported."""
         from quickscale_core.generator.runtime_pins import (
             POSTGRES_DOCKER_TAG,
+            POSTGRES_PATCH_VERSION,
             POSTGRES_VERSION,
         )
 
         assert POSTGRES_VERSION.isascii() and POSTGRES_VERSION.isdecimal()
         assert int(POSTGRES_VERSION) > 0
-        assert POSTGRES_DOCKER_TAG == f"{POSTGRES_VERSION}-alpine"
+        assert POSTGRES_PATCH_VERSION.startswith(f"{POSTGRES_VERSION}.")
+        assert POSTGRES_DOCKER_TAG == f"{POSTGRES_PATCH_VERSION}-alpine"
 
     def test_generator_injects_pin_context(
         self,
@@ -324,9 +332,11 @@ class TestRuntimePins:
             DJANGO_CONSTRAINT,
             DJANGO_CI_MATRIX_VERSION,
             POSTGRES_DOCKER_TAG,
+            POSTGRES_PATCH_VERSION,
             POSTGRES_VERSION,
             PYTHON_CONSTRAINT,
             PYTHON_DOCKER_TAG,
+            PYTHON_PATCH_VERSION,
             PYTHON_VERSION,
         )
 
@@ -346,11 +356,13 @@ class TestRuntimePins:
         # We can't call _generate_project easily in isolation, so verify
         # that the generator module imported the runtime pin values correctly.
         assert PYTHON_VERSION is not None
+        assert PYTHON_PATCH_VERSION is not None
         assert PYTHON_CONSTRAINT is not None
         assert PYTHON_DOCKER_TAG is not None
         assert DJANGO_CONSTRAINT is not None
         assert DJANGO_CI_MATRIX_VERSION is not None
         assert POSTGRES_VERSION is not None
+        assert POSTGRES_PATCH_VERSION is not None
         assert POSTGRES_DOCKER_TAG is not None
 
 
@@ -3331,7 +3343,7 @@ class TestDevOpsTemplateRendering:
         output = template.render(test_context)
 
         assert "services:" in output
-        assert "image: postgres:" in output
+        assert f"image: postgres:{POSTGRES_PATCH_VERSION}" in output
         assert "POSTGRES_HOST_AUTH_METHOD: trust" in output
         assert "--health-cmd pg_isready" in output
         assert "ports:" in output
@@ -3508,7 +3520,10 @@ class TestDevOpsTemplateRendering:
         assert "make test" in output
         assert "make lint" in output
         assert "make check" in output
-        assert "Node.js 24+ installed for the generated `frontend/` workspace" in output
+        assert (
+            "Node.js 24.22.1+ installed for the generated `frontend/` workspace"
+            in output
+        )
         assert "pnpm available for frontend setup and checks" in output
         assert "make lint-frontend" in output
         assert "make test-frontend" in output
@@ -3521,7 +3536,10 @@ class TestDevOpsTemplateRendering:
         output = template.render({**test_context, "theme": "showcase_react"})
 
         assert "### Frontend Code Quality" in output
-        assert "Node.js 24+ installed for the generated `frontend/` workspace" in output
+        assert (
+            "Node.js 24.22.1+ installed for the generated `frontend/` workspace"
+            in output
+        )
         assert "pnpm available for frontend setup and checks" in output
         assert "make lint-frontend" in output
         assert "make test-frontend" in output
@@ -3637,7 +3655,7 @@ class TestDevOpsTemplateRendering:
         assert "name: CI" in output
         assert "pytest --cov=testproject" in output
         assert "runs-on: ubuntu-24.04" in output
-        assert f'python-version: ["{PYTHON_VERSION}"]' in output
+        assert f'python-version: ["{PYTHON_PATCH_VERSION}"]' in output
         assert "apt.postgresql.org" in output
         assert "apt.postgresql.org.asc" in output
         assert f"postgresql-client-{POSTGRES_VERSION}" in output
@@ -3656,7 +3674,7 @@ class TestDevOpsTemplateRendering:
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
         assert (
-            f"if: matrix.python-version == '{PYTHON_VERSION}' && "
+            f"if: matrix.python-version == '{PYTHON_PATCH_VERSION}' && "
             f"matrix.django-version == '{DJANGO_CI_MATRIX_VERSION}'" in output
         )
         assert "3.13" not in output

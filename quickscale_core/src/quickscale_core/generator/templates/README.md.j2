@@ -11,7 +11,7 @@ The generated root `Makefile` is the default local entrypoint for setup, linting
 - Python {{ python_version }} installed (this project pins `{{ python_constraint }}` — newer minors are not accepted)
 - Poetry installed (`pip install poetry`)
 {% if theme == "showcase_react" %}
-- Node.js 24+ installed for the generated `frontend/` workspace
+- Node.js 24.22.1+ installed for the generated `frontend/` workspace
 - pnpm available for frontend setup and checks (`corepack enable pnpm` is the simplest option)
 {% endif %}
 - Docker and Docker Compose v2 (optional, for containerized development)

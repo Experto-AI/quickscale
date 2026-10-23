@@ -13,13 +13,15 @@ so a single change here propagates to every emitted file.
 from quickscale_core.version import __version__ as CORE_VERSION
 
 # ── Python ──────────────────────────────────────────────────────────
-# The Python major.minor version used in CI matrix, Docker tags,
-# MyPy configuration, and the Poetry constraint.
+# The Python major.minor line used by the Poetry constraint, MyPy
+# configuration, Ruff target, and the interpreter path inside the image.
 PYTHON_VERSION: str = "3.14"
+# The exact Python patch release the CI matrix and Docker images pin.
+PYTHON_PATCH_VERSION: str = "3.14.9"
 # Full Poetry-compatible constraint string for ``[tool.poetry.dependencies] python``.
 PYTHON_CONSTRAINT: str = f">={PYTHON_VERSION},<3.15"
 # Docker image tag for the Python slim-bookworm base image.
-PYTHON_DOCKER_TAG: str = f"{PYTHON_VERSION}-slim-bookworm"
+PYTHON_DOCKER_TAG: str = f"{PYTHON_PATCH_VERSION}-slim-bookworm"
 
 # ── Django ──────────────────────────────────────────────────────────
 # Full Poetry-compatible constraint string for ``[tool.poetry.dependencies] Django``.
@@ -28,10 +30,12 @@ DJANGO_CONSTRAINT: str = ">=6.0.7,<6.1.0"
 DJANGO_CI_MATRIX_VERSION: str = "6.0"
 
 # ── PostgreSQL ──────────────────────────────────────────────────────
-# PostgreSQL major version used for the Docker image tag and client package.
+# PostgreSQL major version used for the client package and version checks.
 POSTGRES_VERSION: str = "18"
+# The exact PostgreSQL patch release the container images pin.
+POSTGRES_PATCH_VERSION: str = "18.6"
 # Docker image tag for the PostgreSQL Alpine base image.
-POSTGRES_DOCKER_TAG: str = f"{POSTGRES_VERSION}-alpine"
+POSTGRES_DOCKER_TAG: str = f"{POSTGRES_PATCH_VERSION}-alpine"
 
 
 # ── QuickScale core (lockstep pin) ──────────────────────────────────

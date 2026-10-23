@@ -388,8 +388,8 @@ def test_frontend_workflows_match_maintained_toolchain_pattern() -> None:
         )
 
         assert node_setup < pnpm_setup
-        assert 'node-version: "24"' in content
-        assert "version: 11.0.9" in content
+        assert 'node-version: "24.22.1"' in content
+        assert "version: 11.18.0" in content
         assert 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV' in content
         assert "uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0" in content
         assert "path: ${{ env.STORE_PATH }}" in content

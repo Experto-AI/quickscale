@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.6-alpine
     labels:
       com.quickscale.owner: "quickscale"
       com.quickscale.lifecycle: "e2e"

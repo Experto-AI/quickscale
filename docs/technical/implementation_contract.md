@@ -425,28 +425,34 @@ Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core
 
 | Pin | `runtime_pins.py` constant | Template variable | Consumed by |
 |-----|---------------------------|-------------------|-------------|
-| Python version | `PYTHON_VERSION` | `python_version` | `pyproject.toml.j2`, `Dockerfile.j2`, `ci.yml.j2` |
+| Python major.minor line | `PYTHON_VERSION` | `python_version` | `pyproject.toml.j2`, `Dockerfile.j2` |
+| Python CI/image patch release | `PYTHON_PATCH_VERSION` | `python_patch_version` | `Dockerfile.j2`, `ci.yml.j2` |
 | Python constraint | `PYTHON_CONSTRAINT` | `python_constraint` | `pyproject.toml.j2` |
 | Python Docker image tag | `PYTHON_DOCKER_TAG` | `python_docker_tag` | `Dockerfile.j2` |
 | Django constraint | `DJANGO_CONSTRAINT` | `django_constraint` | `pyproject.toml.j2` |
 | Django CI matrix version | `DJANGO_CI_MATRIX_VERSION` | `django_ci_version` | `github/workflows/ci.yml.j2` |
 | PostgreSQL major version | `POSTGRES_VERSION` | `postgres_version` | `Dockerfile.j2`, `github/workflows/ci.yml.j2` |
+| PostgreSQL image patch release | `POSTGRES_PATCH_VERSION` | `postgres_patch_version` | `github/workflows/ci.yml.j2` |
 | PostgreSQL Docker image tag | `POSTGRES_DOCKER_TAG` | `postgres_docker_tag` | `docker-compose.yml.j2` |
+
+The generated Poetry constraint stays on the Python major.minor line (`>=3.14,<3.15`) so
+a developer on any 3.14 patch can install the project, while CI and the container images
+pin the exact tested patch (Python 3.14.9, PostgreSQL 18.6).
 
 **Frontend (Node.js / pnpm) pins — template literals:**
 
 | Constraint | Template file | Value |
 |------------|--------------|-------|
-| Node.js (Docker builder) | `Dockerfile.j2` | `node:24-slim` |
-| Node.js (CI matrix) | `github/workflows/ci.yml.j2` | `'24'` |
-| Node.js (Docker Compose) | `docker-compose.yml.j2` | `node:24-slim` |
-| Node.js (engines) | `themes/showcase_react/package.json.j2` | `>=24` |
+| Node.js (Docker builder) | `Dockerfile.j2` | `node:24.22.1-slim` |
+| Node.js (CI matrix) | `github/workflows/ci.yml.j2` | `'24.22.1'` |
+| Node.js (Docker Compose) | `docker-compose.yml.j2` | `node:24.22.1-slim` |
+| Node.js (engines) | `themes/showcase_react/package.json.j2` | `>=24.22.1` |
 | pnpm | `github/workflows/ci.yml.j2`, `themes/showcase_react/package.json.j2` | `11.18.0` |
 
 **Generated-project `pyproject.toml.j2` runtime deps:**
 - Django (via `{{ django_constraint }}`), psycopg2-binary `^2.9.12`, gunicorn `^26.0.0`, whitenoise `^6.12.0`, dj-database-url `^3.1.2`, python-decouple `^3.8`.
 
-**Generated-project dev deps:** pytest, pytest-django, pytest-cov, factory-boy, ruff, mypy, django-stubs, pre-commit, virtualenv.
+**Generated-project dev deps:** pytest, pytest-django, pytest-cov, factory-boy, ruff, mypy, django-stubs, pre-commit, virtualenv (`>=21.14.13,<22.0`; the earlier 20.x line carries open advisories).
 
 **Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode.
 
@@ -464,6 +470,6 @@ Standing constraint-duplication concerns:
 
 2. **Embedded-module Django pin:** All 12 packaged modules and `runtime_pins.DJANGO_CONSTRAINT` currently both carry `>=6.0.7,<6.1.0`. The module value is expressed separately from the pin (`_EXPECTED_MODULE_DJANGO_CONSTRAINT` in `test_templates.py`) so the modules *may* carry a tighter lower bound than the template — they historically did (`>=6.0.5` vs `>=6.0.3`). The two coincide as of the 6.0.7 bump. `test_module_django_lower_bound_drift` pins the expected module value, so changing either side without the other fails.
 
-3. **Frontend constraints are template literals:** Node.js v24, pnpm 11.18.0, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are literal values, not sourced from `runtime_pins.py`. Note `@types/node` tracks the *Node runtime major* (24), not npm's newest release, so it is deliberately held back from `latest`.
+3. **Frontend constraints are template literals:** Node.js 24.22.1, pnpm 11.18.0, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are literal values, not sourced from `runtime_pins.py`. Note `@types/node` tracks the *Node runtime major* (24), not npm's newest release, so it is deliberately held back from `latest`.
 
 4. **Ruff config roots shadow the shared `ruff.toml`:** Every package and module `pyproject.toml` that carries any `[tool.ruff.*]` table (e.g. an isort override) becomes Ruff's config root for that subtree, so the repo-root `ruff.toml` does **not** apply there. Those files therefore restate `target-version` and pin `[tool.ruff.lint] select` to Ruff's historical defaults (`E4`, `E7`, `E9`, `F`) explicitly — otherwise a Ruff release that widens its built-in defaults silently lands as hundreds of new findings. Ruff 0.16 did exactly that (~900 across the modules). Adopting the shared `select` in those packages is a worthwhile, separate cleanup — and it has a second payoff: because `I` is not among the pinned defaults, the `[tool.ruff.lint.isort] known-first-party` overrides in `quickscale_core`, `quickscale_cli`, and `quickscale_devtools` are presently **inert configuration** (they tune a rule that is not enabled). Enabling the shared select turns them on; at the time of writing that surfaces ~163 auto-fixable import-order findings across core and CLI.

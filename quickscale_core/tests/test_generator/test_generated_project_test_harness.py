@@ -9,8 +9,10 @@ from quickscale_core.generator.runtime_database import runtime_db_template_conte
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
     DJANGO_CONSTRAINT,
+    POSTGRES_PATCH_VERSION,
     POSTGRES_VERSION,
     PYTHON_CONSTRAINT,
+    PYTHON_PATCH_VERSION,
     PYTHON_VERSION,
     QUICKSCALE_CORE_PIN,
 )
@@ -27,10 +29,12 @@ def _render(template_name: str, **overrides: object) -> str:
         "package_name": "testproject",
         "theme": "showcase_react",
         "python_version": PYTHON_VERSION,
+        "python_patch_version": PYTHON_PATCH_VERSION,
         "python_constraint": PYTHON_CONSTRAINT,
         "django_constraint": DJANGO_CONSTRAINT,
         "django_ci_version": DJANGO_CI_MATRIX_VERSION,
         "postgres_version": POSTGRES_VERSION,
+        "postgres_patch_version": POSTGRES_PATCH_VERSION,
         "quickscale_core_pin": QUICKSCALE_CORE_PIN,
         **runtime_db_template_context("testproject"),
         "selected_modules": None,

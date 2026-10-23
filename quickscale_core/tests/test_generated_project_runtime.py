@@ -1852,8 +1852,6 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
 
     probe = textwrap.dedent(
         """
-        from types import SimpleNamespace
-
         import django
 
         django.setup()
@@ -1868,6 +1866,29 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
         from quickscale_modules_orgs.current_org import get_client_ip
 
 
+        class RequestHeaders:
+            # Django-style read-only view over a request's META mapping.
+
+            def __init__(self, meta):
+                self._meta = meta
+
+            def get(self, key, default=None):
+                return self._meta.get(
+                    "HTTP_" + key.upper().replace("-", "_"), default
+                )
+
+
+        class Request:
+            # Minimal request carrying the META/headers pair DRF reads.
+
+            def __init__(self, meta):
+                self.META = meta
+
+            @property
+            def headers(self):
+                return RequestHeaders(self.META)
+
+
         class OrdinaryDRFThrottle(SimpleRateThrottle):
             rate = "1/min"
 
@@ -1876,7 +1897,13 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
                 return self.get_ident(request)
 
 
-        assert rest_framework.VERSION == "3.17.2"
+        # The generated project resolves the module caret against the current
+        # 3.18.x line; 3.18.2 is the DRF advisory floor.
+        assert tuple(int(part) for part in rest_framework.VERSION.split(".")) >= (
+            3,
+            18,
+            2,
+        )
         remote_addr = "10.0.0.9"
         identity_cases = (
             ("disabled", False, 2, "attacker", remote_addr, None),
@@ -1915,7 +1942,7 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
             request_meta = {"REMOTE_ADDR": remote_addr}
             if xff is not None:
                 request_meta["HTTP_X_FORWARDED_FOR"] = xff
-            request = SimpleNamespace(META=request_meta)
+            request = Request(request_meta)
             observed = []
             response = object()
 
@@ -1952,8 +1979,8 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
             ("TRUSTED_PROXY_COUNT", True),
         )
         for setting_name, invalid_value in invalid_cases:
-            request = SimpleNamespace(
-                META={
+            request = Request(
+                {
                     "REMOTE_ADDR": remote_addr,
                     "HTTP_X_FORWARDED_FOR": "attacker, proxy",
                 }
@@ -1982,7 +2009,7 @@ def test_generated_client_identity_middleware_aligns_installed_drf(
                         ),
                         request,
                     ),
-                    (get_client_ip, SimpleNamespace(META=dict(original_meta))),
+                    (get_client_ip, Request(dict(original_meta))),
                 )
                 for consumer, consumer_request in consumers:
                     try:

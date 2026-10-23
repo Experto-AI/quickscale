@@ -25,7 +25,7 @@ ruff = "^0.16.0"
 mypy = "^2.3.0"
 django-stubs = "^6.0.7"
 pre-commit = "^4.6.1"
-virtualenv = ">=20.29,<21.0"  # pin to avoid virtualenv 21.x import breakage in Docker builds
+virtualenv = ">=21.14.13,<22.0"  # advisory floor; older virtualenv releases are affected
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]

@@ -99,6 +99,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     the split commit recorded in `.quickscale/state.yml`, stops with the changed paths before
     pulling, and lets `--allow-local-changes` override; `quickscale status` reports the same drift,
     and an existing `quickscale-core` wheel path is left unchanged.
+  - **Dependency refresh.** Generated projects raise the Pillow floor to 13, install DRF 3.18.3
+    and virtualenv 21.14.13 or newer, and pin Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6;
+    the React starter lockfile moves to DOMPurify 3.4.17 and Vitest 4.1.12.
   - **System-org public forms stay reachable for signed-in staff.** Public form schema and submit
     requests always resolve the System org regardless of the session's active org, and the forms
     submission admin exposes an organization column and filter so operators can select System.
