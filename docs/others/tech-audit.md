@@ -257,8 +257,8 @@ Every trigger was evaluated this pass. All were **not fired**.
 
 ### Accepted dependency advisories
 
-Recorded 2026-10-23 (SA308 C), after the audit snapshot, from
-`bap-web/docs/sa308-dependency-refresh.md` § SA308 (B) and a same-day recheck. These are
+Recorded 2026-10-23, after the audit snapshot, from
+`bap-web/docs/sa308-dependency-refresh.md` § (B) and a same-day recheck. These are
 verified, deliberate exceptions; they are not open findings.
 
 | ID | Advisory | Package@version | Owner | Expires |
@@ -276,8 +276,8 @@ verified, deliberate exceptions; they are not open findings.
   so the residual risk is a crafted selector entering a project's own CSS through a compromised
   dependency or contributor and consuming a developer or CI build worker's CPU; there is no
   runtime request path and no data exposure. Closing it needs `postcss-selector-parser` 7.1.6;
-  Tailwind 3.4.x resolves 6.x, so it waits on the Tailwind update or migration that SA308's
-  acceptance excludes.
+  Tailwind 3.4.x resolves 6.x, so it waits on a Tailwind update or migration, which is not
+  scheduled.
 - **Evidence (2026-10-23).** QuickScale's `showcase_react` template lock: `pnpm audit` exit 1 —
   exactly this finding, `dev: true`; `pnpm audit --prod` exit 0 — zero advisories;
   `uvx pip-audit -r <lock-derived requirements> --no-deps --disable-pip` (local path/wheel

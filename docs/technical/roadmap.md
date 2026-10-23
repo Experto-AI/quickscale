@@ -52,10 +52,9 @@ Track 3: SA277 (a3) ──► SA277 (a2)
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
 SA153 (r/h/j) and SA277 (a3) can ship before their ticket dependencies; SA153 (f) and SA277 (a2) wait for
-SA191d (production). SA191d (retire) closes the ticket. SA308 shipped the dependency refresh on
-Track 2 and is closed; SA309 clears `bap-web`'s pre-existing suite reds; SA191d (re-proof) owns
-publication, `develop` deployment, and their integration checks. Operator publication of 0.89.0
-follows SA191d. Each slice ships with its own checks and handoff.
+SA191d (production). SA191d (retire) closes the ticket; (re-proof) owns publication, `develop`
+deployment, and their integration checks. Operator publication of 0.89.0 follows SA191d. Each
+slice ships with its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change ships as a new
 migration. SA153's own tables live in the project-owned extension as `0002+` migrations.
@@ -64,26 +63,24 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA153 (r); SA309 | yes | no: SA309, then SA191d operator gates | yes: independent slices |
-| 2 | — (SA308 closed) | — | — | — |
-| 3 | SA277 (a3) | yes | no: SA191d (production) evidence for (a2) | yes: (a3) |
+| 1 | SA309; SA153 (r) | yes | no: SA309, then SA191d operator gates | yes: independent slices |
+| 2 | — (idle) | — | — | — |
+| 3 | SA277 (a3) | yes | no: SA191d (production) for (a2) | yes: (a3) |
 
-**Clearing blockers.** Track 1: SA309's suite-green baseline, then
-SA191d's operator publication, production-switch and retirement approvals; finish SA153's local
-slices meanwhile. Track 3: upstream
-SA191d (production) clears (a2); ship (a3) first. No track waits to start.
+**Clearing blockers.** Track 1: SA309 (upstream work), then the operator's SA191d publication,
+production-switch and retirement approvals; ship SA153 (r/h/j) meanwhile. Track 3: SA191d
+(production) clears (a2) (upstream only); ship (a3) first.
 
 ### Ownership and merge coordination
 
 - Track 1: `bap-web` cutover, project-owned property extension, React pages and managed seam hooks,
   crawler views and journey checks; joint publication and deployment in SA191d.
-- Track 2: dependency manifests and locks, runtime pins, and advisory disposition (SA308, closed);
-  prepared `bap-web`'s lock without publishing or deploying it.
+- Track 2: dependency manifests and locks, runtime pins, and advisory disposition (idle).
 - Track 3: `beta_migration/`, supported-version fixtures, versioned upgrade prompt, and upgrade
   decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
-  `decisions.md`, and `bap-web`'s dependency lock (Track 2 prepares; Track 1 consumes).
+  `decisions.md`, and `bap-web`'s dependency lock.
   Reconcile after each merge and run the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -167,13 +164,9 @@ defect is fixed in `bap-web`.
 
   Base `34e92c7` already fails its suites: 50 backend tests pass at 79.22% coverage under the
   90% gate, and 22 frontend starter-UI tests fail in `App.test.tsx`, `AppRoutes.test.tsx`, and
-  `RootDispatch.test.tsx`. SA308 (A) proved the lock refresh keeps that baseline; clear the reds
-  so SA191d (re-proof) can pass with CI green, without changing the dependency floors (Tier 2-full).
+  `RootDispatch.test.tsx`; the dependency refresh kept that baseline. Clear the reds so SA191d
+  (re-proof) can pass with CI green, without changing the dependency floors (Tier 2-full).
   Handoff: `bap-web/docs/sa308-dependency-refresh.md`.
-
-### Track 2 — dependencies
-
-- [x] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
 
 ### Track 3 — upgrade path
 
