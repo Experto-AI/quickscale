@@ -46,14 +46,13 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA153 (h → j) ──► [SA191d (production)] ──► SA153 (f) ──► SA154
 Track 2: SA191d (re-proof → production → retire)
-Track 3: SA277 (a3) ──► SA277 (a2)
+Track 3: [SA191d (production)] ──► SA277
      critical path: SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA153 (h/j) and SA277 (a3) can ship before their ticket dependencies; SA153 (f) and SA277 (a2) wait for
-SA191d (production). SA191d (retire) closes the ticket; (re-proof) owns publication, `develop`
-deployment, and their integration checks. Operator publication of 0.89.0 follows SA191d. Each
+SA153 (h/j) can ship before SA191d; SA153 (f) and SA277 wait for SA191d (production).
+SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its checks. Operator publication of 0.89.0 follows SA191d. Each
 slice ships with its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change ships as a new
@@ -65,12 +64,12 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 |---|---|---|---|---|
 | 1 | SA153 (h) | yes | no: SA191d (production) for (f) | yes: (h/j) |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof) |
-| 3 | SA277 (a2) | no: SA191d (production) | no: SA191d (production) | no: (a2) waits for SA191d |
+| 3 | SA277 | no: SA191d (production) | no: SA191d (production) | no: SA191d (production) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f) (upstream only); ship
 (h/j) meanwhile. Track 2: the operator's SA191d publication,
 production-switch and retirement approvals. Track 3: SA191d
-(production) clears (a2) (upstream only).
+(production) clears SA277 (upstream only).
 
 ### Ownership and merge coordination
 
@@ -97,7 +96,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Tracks 1–2 — property portal (1); suite reds and cutover (2)
+### Tracks 1–2 — property portal (1); cutover (2)
 
 **SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
 `bap-web` with no users and no production submissions. The regenerated `bap-web` (`~/code/bap-web`)
@@ -122,11 +121,9 @@ defect is fixed in `bap-web`.
   requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) Republish the changed modules once
-    (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
-    green and both dependency audits clean apart from the recorded dev-only exception (Tier 2-full).
-    Modules are republished on `0.89.0` and `bap-web` is updated and validated locally; the
-    `develop` push, hosted CI, and acceptance remain operator gates.
+  - [ ] (re-proof) Push the updated `bap-web` to `develop` and re-pass the acceptance there with
+    CI green and both dependency audits clean apart from the recorded dev-only exception
+    (Tier 2-fast).
   - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
@@ -149,8 +146,7 @@ defect is fixed in `bap-web`.
   deployed site, and the extension/tenant declarations pass in `manage.py check`.
 
   **Slices:**
-  - [x] (r)
-  - [ ] (h) After (r), close only served-head, crawler-summary, sitemap and robots gaps in the
+  - [ ] (h) Close only served-head, crawler-summary, sitemap and robots gaps in the
     project; request-level crawler tests pass with the existing React build (Tier 2-full).
   - [ ] (j) After (h), close search → detail → inquiry gaps; test organization isolation and
     extension declarations, with module data accessed through managed hooks (Tier 2-full).
@@ -163,8 +159,6 @@ defect is fixed in `bap-web`.
   saved searches, profiles, syndication, media, paid placement, cross-links or full-text search
   only for a concrete consumer, with bounded acceptance, dependencies and a track. Otherwise
   drop the item. Tenant schema changes use incremental migrations on the frozen history.
-
-- [x] **SA309 — Clear `bap-web`'s pre-existing suite reds.**
 
 ### Track 3 — upgrade path
 
@@ -180,19 +174,12 @@ defect is fixed in `bap-web`.
   into code; a one-off stays in the prompt), the revocation trigger (a second long-lived project
   or a template security fix), and the steps-per-release count to watch, trending toward zero
   (50 declared steps on 2026-10-16). Operator docs do not duplicate steps either stage covers.
-  `bap-web` is an old project; the path must also serve "not so old" ones: a declared supported
-  source-version range, `beta_migration` proven against projects generated at each version in
-  it, and the AI-assistant prompt kept and versioned in the QuickScale repository rather than only
-  in a recipient. Supporting further projects meets the "second long-lived project" revocation
-  trigger, and decisions say so.
+  Decisions say that supporting further projects meets the "second long-lived project"
+  revocation trigger.
 
-  **Slices:**
-  - [x] (a3) Declare the supported source-version range; generate a test project at each supported
-    version, pass `beta_migration` smoke runs, and version the upgrade prompt in QuickScale
-    (Tier 2-full). Fixtures and prompt ship together without changing production projects.
-  - [ ] (a2) After (a3) and SA191d (production), record the two-stage boundary and revocation
-    triggers against the cutover evidence; confirm/amend the existing upgrade-path draft and
-    remove duplicate operator steps (Tier 2-fast). Validate links and smoke instructions.
+  After SA191d (production), record the two-stage boundary and revocation triggers against the
+  cutover evidence; confirm/amend the upgrade-path draft and remove duplicate operator steps
+  (Tier 2-fast). Validate links and smoke instructions.
 
 ## Deferred constraints and references
 
