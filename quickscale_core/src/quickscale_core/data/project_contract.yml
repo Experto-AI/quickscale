@@ -368,3 +368,13 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current frontend/e2e/home.spec.ts and frontend/playwright.config.ts: the starter's home spec asserts the dashboard heading the theme actually renders, and Playwright targets the Django-served document at http://127.0.0.1:8000 (override with PLAYWRIGHT_BASE_URL) instead of the Vite dev server, because the React starter validates window.__QUICKSCALE__, which only the Django-rendered document injects. Start the stack with `quickscale up` before `pnpm test:e2e`. Test-only: no project runtime behavior changes."
       - "Compare and optionally copy the current frontend/README.md E2E note: it names the Django origin and the `quickscale up` prerequisite."
+
+  - id: sa308-dependency-runtime-refresh
+    minimum: "0.89.0"
+    title: "Adopt the refreshed runtime images and dependency floors"
+    adoption_steps:
+      - "Compare and manually adopt the current Dockerfile and docker-compose.yml runtime images: Python 3.14.9-slim-bookworm, Node 24.22.1-slim, and PostgreSQL 18.6 (the Compose database uses 18.6-alpine)."
+      - "Compare and manually adopt the current .github/workflows/ci.yml: the test matrix runs Python 3.14.9, the PostgreSQL service image is 18.6, and the frontend job runs Node 24.22.1 with pnpm 11.18.0."
+      - "Compare and manually adopt the current frontend/package.json and frontend/pnpm-lock.yaml: the engine floor is Node 24.22.1 and the lockfile carries DOMPurify 3.4.17 and Vitest 4.1.12."
+      - "Compare and manually adopt the current pyproject.toml dev dependency virtualenv floor (>=21.14.13,<22.0)."
+      - "Update the embedded modules once this release's modules are available (`quickscale update --confirm-contract-adoption`) so blog, listings, storage, and orgs carry the Pillow 13 floor, then refresh poetry.lock and pnpm-lock.yaml and re-run the generated project's test suite."

@@ -209,12 +209,13 @@ defect is fixed in `bap-web`.
 
 - [ ] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
 
-  Audited 2026-10-23 (pip-audit, pnpm audit; nothing depends on `litellm`). Open: Pillow 12.3.0
-  (the `blog`, `listings`, `storage`, `orgs` manifests cap it below 13), QuickScale's pinned DRF
-  3.17.2, `certifi`, `virtualenv`, and npm `dompurify` 3.4.16 (critical) with three transitive
-  others. Raise the caps, refresh both lockfiles, and pin Node 24.22.1, Python 3.14.9, and
-  PostgreSQL 18.6. Ships in the joint release. **Acceptance:** both audits clean and both test
-  suites pass (Tier 2-full).
+  The QuickScale delta is implemented: Pillow 13.0.0 (the four module caps raised), DRF 3.18.3,
+  certifi 2026.10.19, virtualenv 21.14.13, and the React starter's DOMPurify 3.4.17; the
+  Python audit is clean and the core/CLI and affected module suites pass. Runtime pins are
+  Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6. Remaining before close: `bap-web`'s lock
+  refresh in the joint release, and two dev-only npm advisories with no in-range fix (`braces`
+  3.0.3 has no released fix; `postcss-selector-parser` 7 needs a Tailwind 4 migration).
+  **Acceptance:** both audits clean and both test suites pass (Tier 2-full).
 
 ### Track 3 — tenancy and upgrade path
 

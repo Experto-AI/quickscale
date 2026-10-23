@@ -60,7 +60,8 @@
       "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative.",
       "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa299d": "Regenerated 2026-10-20 \u2014 the generated project's test harness passes as rendered: pyproject.toml collects tests/ only, the Makefile test-backend target and the CI test and migration steps set QUICKSCALE_ALLOW_BYPASSRLS=1 when orgs is installed, the tenant-isolation target's prerequisite migration uses QUICKSCALE_PRIVILEGED_COMMAND=migrate, and README.md's direct pytest commands carry the same allowance. Changed per variant: README.md and pyproject.toml; react_default also .github/workflows/ci.yml and Makefile. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa300b": "Regenerated 2026-10-20 \u2014 the generated home E2E spec asserts the current dashboard heading and its Playwright config targets the Django-served origin, because the React starter validates window.__QUICKSCALE__ and Vite alone cannot serve an E2E target. 2 fixture hashes updated per variant: frontend/e2e/home.spec.ts and frontend/playwright.config.ts. All unrelated paths, hashes, and modes remain authoritative."
+      "sa300b": "Regenerated 2026-10-20 \u2014 the generated home E2E spec asserts the current dashboard heading and its Playwright config targets the Django-served origin, because the React starter validates window.__QUICKSCALE__ and Vite alone cannot serve an E2E target. 2 fixture hashes updated per variant: frontend/e2e/home.spec.ts and frontend/playwright.config.ts. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa308": "Regenerated 2026-10-23 \u2014 generated runtime pins moved to Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6; the Pillow (13), virtualenv (21.14.13), and React starter lockfile (DOMPurify 3.4.17, Vitest 4.1.12) advisory floors landed, and the generated README names the Node 24.22.1 prerequisite. 8 fixture hashes updated per variant: .github/workflows/ci.yml, Dockerfile, docker-compose.yml, frontend/package.json, frontend/pnpm-lock.yaml, pyproject.toml, README.md, <package>/settings/production.py. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -110,9 +111,13 @@
       "mode": "644",
       "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
+    ".github/quickscale-ci-env": {
+      "mode": "644",
+      "sha256": "a131c83dc09a088bacf352d9c7a7194f2cb5c7c48c42df90e4917089e50d4387"
+    },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "e2cfbbbf120eaa63a2cc802b941a29cbc6d637a35ea3cba501f0af57d3910649"
+      "sha256": "6c330a42c1b4da0ff11284608f56d808b96d4cd0b3a2b1f7ff5c2da985d040eb"
     },
     ".gitignore": {
       "mode": "644",
@@ -124,7 +129,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "cc4ec3b997c7a0f48a097b5d51432f65891332b6d3095fc49bd68b5582b27f9c"
+      "sha256": "d0ded80295e2b821ed731e383f38666e9b420cf4aba9082afd903ea93ae136af"
     },
     "Makefile": {
       "mode": "644",
@@ -136,7 +141,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "43c6a50eb1f297ac8c6b2f5f11f1aefb4e581da04e87c94cfb64c4902961e7f2"
+      "sha256": "82bb274eb98a368e7bda0f7a5adc710c5564ba411c0a38646cc04221c6d2effe"
     },
     "db/init.sql": {
       "mode": "644",
@@ -144,7 +149,7 @@
     },
     "docker-compose.yml": {
       "mode": "644",
-      "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
+      "sha256": "a92725d8c978b14f802accfd5e8e590ebede1a4ca7ddace9dac5f22a922c3072"
     },
     "frontend/.prettierignore": {
       "mode": "644",
@@ -188,7 +193,7 @@
     },
     "frontend/package.json": {
       "mode": "644",
-      "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
+      "sha256": "b1b7b0876f2b3563bbc8d22013af54dd119fd7ce6db8e6921fa4f2133cc26f57"
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
@@ -196,7 +201,7 @@
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
-      "sha256": "e826e3a6e64a12c440586e081f27491aed27738f8f8ee214ec0fbcdf6b2404b0"
+      "sha256": "eb8ddffea7488da567d631cbfcfa0defb3319af6add544dfc944a916a8450c00"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -548,7 +553,11 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "ef48852db83adbe426418597ef738ca740b8b69bd06cea6eb18cec4cefdde4f7"
+      "sha256": "12d7881b2a385fc89b0bfbeaecde51c5fb5db962136f0f2a7b537603997e16e1"
+    },
+    "quickscale-operations.md": {
+      "mode": "644",
+      "sha256": "ae594592dfa4dfed170b21d12439000b86deb75243ccf1c9fe3e6373495da6f3"
     },
     "railway.json": {
       "mode": "644",
@@ -624,7 +633,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
+      "sha256": "43bcc800cc05b71b9e52863721ed79e5b6479f8e0b8db6973a18c8cbe76d7914"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -653,14 +662,6 @@
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
-    },
-    ".github/quickscale-ci-env": {
-      "mode": "644",
-      "sha256": "a131c83dc09a088bacf352d9c7a7194f2cb5c7c48c42df90e4917089e50d4387"
-    },
-    "quickscale-operations.md": {
-      "mode": "644",
-      "sha256": "ae594592dfa4dfed170b21d12439000b86deb75243ccf1c9fe3e6373495da6f3"
     }
   },
   "react_empty": {
@@ -680,9 +681,13 @@
       "mode": "644",
       "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
+    ".github/quickscale-ci-env": {
+      "mode": "644",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "f3f645e664739c9c86e95b8aa5e65ffa0dedb0a1353ae4e686fef8b80cf52ad7"
+      "sha256": "eaa1cfdea257daa8e6abc0e0084f592249e07d932abe66353cdd485ef55ee67b"
     },
     ".gitignore": {
       "mode": "644",
@@ -694,7 +699,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "cc4ec3b997c7a0f48a097b5d51432f65891332b6d3095fc49bd68b5582b27f9c"
+      "sha256": "d0ded80295e2b821ed731e383f38666e9b420cf4aba9082afd903ea93ae136af"
     },
     "Makefile": {
       "mode": "644",
@@ -706,7 +711,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "43c6a50eb1f297ac8c6b2f5f11f1aefb4e581da04e87c94cfb64c4902961e7f2"
+      "sha256": "82bb274eb98a368e7bda0f7a5adc710c5564ba411c0a38646cc04221c6d2effe"
     },
     "db/init.sql": {
       "mode": "644",
@@ -714,7 +719,7 @@
     },
     "docker-compose.yml": {
       "mode": "644",
-      "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
+      "sha256": "a92725d8c978b14f802accfd5e8e590ebede1a4ca7ddace9dac5f22a922c3072"
     },
     "frontend/.prettierignore": {
       "mode": "644",
@@ -758,7 +763,7 @@
     },
     "frontend/package.json": {
       "mode": "644",
-      "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
+      "sha256": "b1b7b0876f2b3563bbc8d22013af54dd119fd7ce6db8e6921fa4f2133cc26f57"
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
@@ -766,7 +771,7 @@
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
-      "sha256": "e826e3a6e64a12c440586e081f27491aed27738f8f8ee214ec0fbcdf6b2404b0"
+      "sha256": "eb8ddffea7488da567d631cbfcfa0defb3319af6add544dfc944a916a8450c00"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -1118,7 +1123,11 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "ef48852db83adbe426418597ef738ca740b8b69bd06cea6eb18cec4cefdde4f7"
+      "sha256": "12d7881b2a385fc89b0bfbeaecde51c5fb5db962136f0f2a7b537603997e16e1"
+    },
+    "quickscale-operations.md": {
+      "mode": "644",
+      "sha256": "c43df870f867f4d59e7d5e5251f7381ec20c229e57703b85e8a9dff2fa0b65e5"
     },
     "railway.json": {
       "mode": "644",
@@ -1194,7 +1203,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
+      "sha256": "43bcc800cc05b71b9e52863721ed79e5b6479f8e0b8db6973a18c8cbe76d7914"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -1223,14 +1232,6 @@
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
-    },
-    ".github/quickscale-ci-env": {
-      "mode": "644",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    "quickscale-operations.md": {
-      "mode": "644",
-      "sha256": "c43df870f867f4d59e7d5e5251f7381ec20c229e57703b85e8a9dff2fa0b65e5"
     }
   },
   "react_selected": {
@@ -1250,9 +1251,13 @@
       "mode": "644",
       "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
     },
+    ".github/quickscale-ci-env": {
+      "mode": "644",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "f3f645e664739c9c86e95b8aa5e65ffa0dedb0a1353ae4e686fef8b80cf52ad7"
+      "sha256": "eaa1cfdea257daa8e6abc0e0084f592249e07d932abe66353cdd485ef55ee67b"
     },
     ".gitignore": {
       "mode": "644",
@@ -1264,7 +1269,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "cc4ec3b997c7a0f48a097b5d51432f65891332b6d3095fc49bd68b5582b27f9c"
+      "sha256": "d0ded80295e2b821ed731e383f38666e9b420cf4aba9082afd903ea93ae136af"
     },
     "Makefile": {
       "mode": "644",
@@ -1276,7 +1281,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "43c6a50eb1f297ac8c6b2f5f11f1aefb4e581da04e87c94cfb64c4902961e7f2"
+      "sha256": "82bb274eb98a368e7bda0f7a5adc710c5564ba411c0a38646cc04221c6d2effe"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1284,7 +1289,7 @@
     },
     "docker-compose.yml": {
       "mode": "644",
-      "sha256": "9122449be5bda6e8ccdbb3c1af2de1a13ff540b95e2d412aa56a1ccd23b72544"
+      "sha256": "a92725d8c978b14f802accfd5e8e590ebede1a4ca7ddace9dac5f22a922c3072"
     },
     "frontend/.prettierignore": {
       "mode": "644",
@@ -1328,7 +1333,7 @@
     },
     "frontend/package.json": {
       "mode": "644",
-      "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
+      "sha256": "b1b7b0876f2b3563bbc8d22013af54dd119fd7ce6db8e6921fa4f2133cc26f57"
     },
     "frontend/playwright.config.ts": {
       "mode": "644",
@@ -1336,7 +1341,7 @@
     },
     "frontend/pnpm-lock.yaml": {
       "mode": "644",
-      "sha256": "e826e3a6e64a12c440586e081f27491aed27738f8f8ee214ec0fbcdf6b2404b0"
+      "sha256": "eb8ddffea7488da567d631cbfcfa0defb3319af6add544dfc944a916a8450c00"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -1688,7 +1693,11 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "ef48852db83adbe426418597ef738ca740b8b69bd06cea6eb18cec4cefdde4f7"
+      "sha256": "12d7881b2a385fc89b0bfbeaecde51c5fb5db962136f0f2a7b537603997e16e1"
+    },
+    "quickscale-operations.md": {
+      "mode": "644",
+      "sha256": "c43df870f867f4d59e7d5e5251f7381ec20c229e57703b85e8a9dff2fa0b65e5"
     },
     "railway.json": {
       "mode": "644",
@@ -1764,7 +1773,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "c6ad48daf841da533c94727fffec096f803d8e7e4084cc3ba9363bf58db643bc"
+      "sha256": "43bcc800cc05b71b9e52863721ed79e5b6479f8e0b8db6973a18c8cbe76d7914"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -1793,14 +1802,6 @@
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
-    },
-    ".github/quickscale-ci-env": {
-      "mode": "644",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    "quickscale-operations.md": {
-      "mode": "644",
-      "sha256": "c43df870f867f4d59e7d5e5251f7381ec20c229e57703b85e8a9dff2fa0b65e5"
     }
   }
 }

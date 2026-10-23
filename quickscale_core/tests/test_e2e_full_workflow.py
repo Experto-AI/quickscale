@@ -31,7 +31,7 @@ from quickscale_cli.utils.docker_utils import get_docker_compose_command
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
     POSTGRES_VERSION,
-    PYTHON_VERSION,
+    PYTHON_PATCH_VERSION,
 )
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 
@@ -1325,7 +1325,7 @@ class TestFullE2EWorkflow:
 
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
-        assert f'python-version: ["{PYTHON_VERSION}"]' in ci_content
+        assert f'python-version: ["{PYTHON_PATCH_VERSION}"]' in ci_content
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
         assert f"postgresql-client-{POSTGRES_VERSION}" in ci_content
@@ -1349,9 +1349,9 @@ class TestFullE2EWorkflow:
         )
         assert "files: ./coverage.xml" in ci_content
         assert "file: ./coverage.xml" not in ci_content
-        assert "version: 11.0.9" in ci_content
+        assert "version: 11.18.0" in ci_content
         assert (
-            f"if: matrix.python-version == '{PYTHON_VERSION}' && "
+            f"if: matrix.python-version == '{PYTHON_PATCH_VERSION}' && "
             f"matrix.django-version == '{DJANGO_CI_MATRIX_VERSION}'" in ci_content
         )
         assert "3.13" not in ci_content

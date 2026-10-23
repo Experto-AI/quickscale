@@ -15,9 +15,11 @@ from quickscale_core.generator.runtime_pins import (
     DJANGO_CONSTRAINT,
     DJANGO_CI_MATRIX_VERSION,
     POSTGRES_DOCKER_TAG,
+    POSTGRES_PATCH_VERSION,
     POSTGRES_VERSION,
     PYTHON_CONSTRAINT,
     PYTHON_DOCKER_TAG,
+    PYTHON_PATCH_VERSION,
     PYTHON_VERSION,
     QUICKSCALE_CORE_PIN,
 )
@@ -581,11 +583,13 @@ class ProjectGenerator:
             else None,
             # Generated-project runtime pins (owned by this module, not the generator)
             "python_version": PYTHON_VERSION,
+            "python_patch_version": PYTHON_PATCH_VERSION,
             "python_constraint": PYTHON_CONSTRAINT,
             "python_docker_tag": PYTHON_DOCKER_TAG,
             "django_constraint": DJANGO_CONSTRAINT,
             "django_ci_version": DJANGO_CI_MATRIX_VERSION,
             "postgres_version": POSTGRES_VERSION,
+            "postgres_patch_version": POSTGRES_PATCH_VERSION,
             "postgres_docker_tag": POSTGRES_DOCKER_TAG,
             "quickscale_core_pin": QUICKSCALE_CORE_PIN,
             # Contract value the generated operations guide renders (the one

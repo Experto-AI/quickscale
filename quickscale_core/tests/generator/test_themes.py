@@ -119,7 +119,7 @@ class TestProjectGenerationWithTheme:
 
         # Check Dockerfile has node parts
         dockerfile = (output_path / "Dockerfile").read_text()
-        assert "FROM node:24-slim as frontend-builder" in dockerfile
+        assert "FROM node:24.22.1-slim as frontend-builder" in dockerfile
         assert "pnpm run build" in dockerfile
 
     def test_generated_makefile_respects_frontend_presence(

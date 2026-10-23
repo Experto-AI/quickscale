@@ -272,9 +272,9 @@ def _validate_job_step_values(
     if not _step_matches(
         steps[1],
         {
-            "name": "Set up Python 3.14",
+            "name": "Set up Python 3.14.9",
             "uses": SETUP_PYTHON_REF,
-            "with": {"python-version": "3.14"},
+            "with": {"python-version": "3.14.9"},
         },
         strict=strict,
     ):
@@ -425,10 +425,10 @@ def _render_job(gate: dict[str, Any], job_id: str, make_target: str) -> str:
         "    steps:\n"
         f"{checkout}"
         "\n"
-        "    - name: Set up Python 3.14\n"
+        "    - name: Set up Python 3.14.9\n"
         f"      uses: {SETUP_PYTHON_REF} {SETUP_PYTHON_COMMENT}\n"
         "      with:\n"
-        '        python-version: "3.14"\n'
+        '        python-version: "3.14.9"\n'
         "\n"
         "    - name: Install Poetry\n"
         f"      uses: {INSTALL_POETRY_REF} {INSTALL_POETRY_COMMENT}\n"

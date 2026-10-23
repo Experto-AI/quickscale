@@ -121,7 +121,7 @@ SECURE_PROXY_SSL_HEADER = secure_proxy_ssl_header(USE_X_FORWARDED_FOR)
 
 # Recompute DRF's right-indexed selection count after production overrides.
 # The earlier request middleware supplies the short-chain fail-closed behavior
-# that stock DRF 3.17.2 does not implement on its own, and the throttle
+# that stock DRF does not implement on its own, and the throttle
 # defaults declared in base.py resolve their client identity through DRF's
 # own use of this count.
 REST_FRAMEWORK["NUM_PROXIES"] = num_proxies_for(  # noqa: F405

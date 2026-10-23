@@ -488,10 +488,10 @@ cleanup() {
 
 resolve_image() {
   local image_id
-  image_id=$(docker image inspect --format '{{.Id}}' postgres:18 2>/dev/null) || {
-    docker pull postgres:18 >/dev/null || die "unable to pull postgres:18"
+  image_id=$(docker image inspect --format '{{.Id}}' postgres:18.6 2>/dev/null) || {
+    docker pull postgres:18.6 >/dev/null || die "unable to pull postgres:18.6"
   }
-  image_id=$(docker image inspect --format '{{.Id}}' postgres:18 2>/dev/null) || die "unable to inspect postgres:18"
+  image_id=$(docker image inspect --format '{{.Id}}' postgres:18.6 2>/dev/null) || die "unable to inspect postgres:18.6"
   [[ "$image_id" =~ ^sha256:[0-9a-fA-F]{64}$ ]] || die "malformed immutable PostgreSQL image ID"
   printf '%s' "$image_id"
 }

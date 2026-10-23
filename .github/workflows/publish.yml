@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: "3.14"
+          python-version: "3.14.9"
 
       - name: Get version from tag
         id: get_version
@@ -59,7 +59,7 @@ jobs:
     needs: verify
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         options: >-
@@ -75,20 +75,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.14
+      - name: Set up Python 3.14.9
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: "3.14"
+          python-version: "3.14.9"
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "24"
+          node-version: "24.22.1"
 
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
         with:
-          version: 11.0.9
+          version: 11.18.0
 
       - name: Get pnpm store directory
         shell: bash
@@ -231,10 +231,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - name: Set up Python 3.14
+      - name: Set up Python 3.14.9
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: "3.14"
+          python-version: "3.14.9"
 
       - name: Install Poetry
         uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
@@ -367,10 +367,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - name: Set up Python 3.14
+      - name: Set up Python 3.14.9
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: "3.14"
+          python-version: "3.14.9"
 
       # Generated projects pin quickscale-core from the module manifests, so
       # a release that ships the CLI without quickscale-core on PyPI breaks
