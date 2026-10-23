@@ -65,7 +65,7 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA153 (r) | yes | no: SA308, then SA191d operator gates | yes: independent slices |
-| 2 | SA308 (A) | yes | yes | yes |
+| 2 | SA308 (B) | yes | yes | yes |
 | 3 | SA277 (a3) | yes | no: SA191d (production) evidence for (a2) | yes: (a3) |
 
 **Clearing blockers.** Track 1: upstream SA308 completion, then SA191d's operator publication,
@@ -171,8 +171,9 @@ defect is fixed in `bap-web`.
   ignores or Tailwind migration; fix production/build-output exposure or other findings first.
 
   **Ordered slices (Track 2):**
-  - [ ] (A) Refresh `bap-web`'s lock for the merged floors using local build artifacts; commit
+  - [x] (A) Refresh `bap-web`'s lock for the merged floors using local build artifacts; commit
     the lock and pass backend/frontend suites, without publishing/deploying (Tier 2-full).
+    Handoff: `bap-web/docs/sa308-dependency-refresh.md`.
   - [ ] (B) After (A), capture Python plus full/production npm audits in both trees; trace each
     advisory's version, dependency chain, build use and shipped output. Prove the two findings
     are dev-only and production audits clean; fix any production exposure (Tier 2-full).
