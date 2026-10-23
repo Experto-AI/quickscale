@@ -36,16 +36,17 @@ required; preparation ships separately.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA309 | Required |
+| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 2 | SA309 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA309 | Clear `bap-web`'s pre-existing suite reds before the cutover re-proof | 1 | — | Required |
+| SA309 | Clear `bap-web`'s pre-existing suite reds before the cutover re-proof | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (r → h → j) ∥ SA309 ──► SA191d (re-proof → production → retire) ──► SA153 (f) ──► SA154
+Track 1: SA153 (r → h → j) ──► [SA191d (production)] ──► SA153 (f) ──► SA154
+Track 2: SA309 ──► SA191d (re-proof → production → retire)
 Track 3: SA277 (a3) ──► SA277 (a2)
      critical path: SA309 ──► SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
@@ -63,24 +64,27 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA309; SA153 (r) | yes | no: SA309, then SA191d operator gates | yes: independent slices |
-| 2 | — (idle) | — | — | — |
+| 1 | SA153 (r) | yes | no: SA191d (production) for (f) | yes: (r/h/j) |
+| 2 | SA309 | yes | no: SA191d operator gates | yes: SA309 |
 | 3 | SA277 (a3) | yes | no: SA191d (production) for (a2) | yes: (a3) |
 
-**Clearing blockers.** Track 1: SA309 (upstream work), then the operator's SA191d publication,
-production-switch and retirement approvals; ship SA153 (r/h/j) meanwhile. Track 3: SA191d
+**Clearing blockers.** Track 1: SA191d (production) clears SA153 (f) (upstream only); ship
+(r/h/j) meanwhile. Track 2: SA309 (work), then the operator's SA191d publication,
+production-switch and retirement approvals. Track 3: SA191d
 (production) clears (a2) (upstream only); ship (a3) first.
 
 ### Ownership and merge coordination
 
-- Track 1: `bap-web` cutover, project-owned property extension, React pages and managed seam hooks,
-  crawler views and journey checks; joint publication and deployment in SA191d.
-- Track 2: dependency manifests and locks, runtime pins, and advisory disposition (idle).
+- Track 1: project-owned property extension, React pages and managed seam hooks, crawler views
+  and journey checks.
+- Track 2: `bap-web` suite reds (SA309) and cutover (SA191d), with joint publication and
+  deployment; dependency manifests, locks and advisory disposition.
 - Track 3: `beta_migration/`, supported-version fixtures, versioned upgrade prompt, and upgrade
   decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
-  `decisions.md`, and `bap-web`'s dependency lock.
+  `decisions.md`, `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
+(`App.test.tsx`, `AppRoutes.test.tsx`; SA309 fixes them, SA153 adds pages).
   Reconcile after each merge and run the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -94,7 +98,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Track 1 — cutover and the property portal
+### Tracks 1–2 — property portal (1); suite reds and cutover (2)
 
 **SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
 `bap-web` with no users and no production submissions. The regenerated `bap-web` (`~/code/bap-web`)
