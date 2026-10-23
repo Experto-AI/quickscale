@@ -255,6 +255,41 @@ Every trigger was evaluated this pass. All were **not fired**.
 | `development-workflow-intermittent-root-500` | one unreproduced 500 on `/` in E2E | a recurrence with a traceback | not fired |
 | `core-e2e-poetry-cache-install-candidates` | Poetry "Unable to find installation candidates" | a recurrence with a fresh cache | not fired |
 
+### Accepted dependency advisories
+
+Recorded 2026-10-23 (SA308 C), after the audit snapshot, from
+`bap-web/docs/sa308-dependency-refresh.md` § SA308 (B) and a same-day recheck. These are
+verified, deliberate exceptions; they are not open findings.
+
+| ID | Advisory | Package@version | Owner | Expires |
+|---|---|---|---|---|
+| `postcss-selector-parser-build-time-advisory` | `GHSA-rj75-hqrm-r3gf`, CVE-2026-104844 (moderate) | `postcss-selector-parser@6.1.4`, fixed in 7.1.6 | Track 2 (dependency manifests and locks) | 2026-11-22 |
+
+- **Path.** Both trees: `tailwindcss@3.4.19` → `postcss-nested@6.2.0` and a direct dependency →
+  `postcss-selector-parser@6.1.4`; `tailwindcss-animate@1.0.7` reaches the same tree through its
+  `tailwindcss` peer. `tailwindcss` and `tailwindcss-animate` are dev dependencies.
+- **Shipped output.** None. Both runtime images copy only `static/frontend/assets` and
+  `favicon.svg` (`quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2:181-182`,
+  `bap-web/Dockerfile:181-182`), never `node_modules`.
+- **Toolchain risk.** The advisory needs attacker-supplied selectors parsed synchronously
+  (quadratic complexity in flat-selector parsing). PostCSS here parses only repository-owned CSS,
+  so the residual risk is a crafted selector entering a project's own CSS through a compromised
+  dependency or contributor and consuming a developer or CI build worker's CPU; there is no
+  runtime request path and no data exposure. Closing it needs `postcss-selector-parser` 7.1.6;
+  Tailwind 3.4.x resolves 6.x, so it waits on the Tailwind update or migration that SA308's
+  acceptance excludes.
+- **Evidence (2026-10-23).** QuickScale's `showcase_react` template lock: `pnpm audit` exit 1 —
+  exactly this finding, `dev: true`; `pnpm audit --prod` exit 0 — zero advisories;
+  `uvx pip-audit -r <lock-derived requirements> --no-deps --disable-pip` (local path/wheel
+  packages excluded) exit 0 — 90 packages, none vulnerable. `bap-web`: `pnpm audit` exit 1 — the
+  same single finding, `dev: true`; `pnpm audit --prod` exit 0 — zero advisories; the same
+  `pip-audit` command exit 0 — 57 packages, none vulnerable. `GHSA-vfj7-8cjw-p6xm`
+  (`braces@3.0.3`, high) was withdrawn on 2026-10-23 and is no longer reported by either full
+  audit, so it is not recorded as an exception.
+- **Recheck.** Re-run the four audits on any dependency, lockfile, or exposure change and before
+  the expiry; remove an entry that is fixed, withdrawn, or expired. A finding with no matching
+  entry blocks release.
+
 ## Questions that would change severity
 
 - Do production generated projects run with `WEB_CONCURRENCY` > 1? A yes moves
@@ -270,3 +305,8 @@ Every trigger was evaluated this pass. All were **not fired**.
 - 2026-10-20 — `notifications-message-status-aggregate-race`: new (pre-existing; noted in the SA272 (a) commit message, previously untracked).
 - 2026-10-20 — `forms-retention-skips-null-ip-rows`: new (long-standing).
 - 2026-10-20 — all 13 watchlist items: carried (trigger not fired; evidence in the table).
+- 2026-10-23 — `postcss-selector-parser-build-time-advisory`: **accepted** (dev-only build-time
+  advisory in QuickScale's React starter and `bap-web`; production audits clean; owner Track 2;
+  expires 2026-11-22; evidence and recheck rule in § Watchlist and accepted trade-offs).
+- 2026-10-23 — `braces-build-time-advisory`: **withdrawn** (GHSA-vfj7-8cjw-p6xm withdrawn
+  2026-10-23; both full audits no longer report it, so no exception is recorded).
