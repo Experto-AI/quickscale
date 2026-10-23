@@ -17,7 +17,7 @@ categories, tags, and optional RSS feeds.
 - Tenant-scoped through orgs' `TenantModel`; `orgs` is required alongside `blog`.
 
 Dependencies: Django >= 6.0, djangorestframework >= 3.17.2, django-markdownx >= 4.0.11, and
-Pillow >= 12.3.0,<13.0.0.
+Pillow >= 13.0.0,<14.0.0.
 
 ## Configuration
 
