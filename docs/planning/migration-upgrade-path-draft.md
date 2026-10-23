@@ -12,7 +12,9 @@ dependency merges, the design port, and the local verification stack — and emi
 unresolved gap it recorded into the recipient's `MIGRATION_PROMPT.md`, in the prompt's own
 remaining-work form (the action slug, its detail, its paths, and the governing rule). The
 prompt-driven port (`MIGRATION_PROMPT.md`, worked with `CUTOVER.md` for the live step) closes
-what the tool reports it could not. The emitted module list is a divergence triage, not a
+what the tool reports it could not. The emitted prompt names its format version
+(`HANDOFF_PROMPT_VERSION`) from the versioned renderer in QuickScale, so the recipient does
+not rely on a copy only it holds. The emitted module list is a divergence triage, not a
 verdict: classification compares donor module content against the recipient's current modules,
 so the list holds both older copies the current content supersedes and real local edits. The
 [gap ledger](beta-site-migration.md#gap-ledger) is the prompt's input: an iteration's open gaps

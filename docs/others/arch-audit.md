@@ -150,11 +150,12 @@ items:
   checkable via the emission mapping) · **First step:** move `CrmPage.tsx`'s section paths and
   `CrmStats` type into a generated managed hooks file.
 
-**Remaining delivery ownership:** SA277 (a3 → a2), Track 3, owns the supported-version
-migration fixtures, versioned prompt and two-stage upgrade rule; it does not remove resource
-contracts from user-owned pages. SA153 (h → j), Track 1, owns the portal's managed-hook
-boundary and its checks. The finding stays open until the resource-contract mechanism and
-manual-adoption burden above are addressed; completing either ticket alone is not closure.
+**Remaining delivery ownership:** SA277 (a2), Track 3, owns the two-stage upgrade rule;
+(a3) delivered the supported-version migration fixtures and the versioned prompt. The path does
+not remove resource contracts from user-owned pages. SA153 (h → j), Track 1, owns the
+portal's managed-hook boundary and its checks. The finding stays open until the
+resource-contract mechanism and manual-adoption burden above are addressed; completing either
+ticket alone is not closure.
 
 ## Change-cost probe
 

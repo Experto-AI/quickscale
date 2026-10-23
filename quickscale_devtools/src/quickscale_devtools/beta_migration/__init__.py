@@ -352,7 +352,11 @@ from .toml_editing import (  # noqa: F401  (re-exported module surface)
     _validate_fresh_first_path_dependency_targets,
     _write_validated_toml,
 )
-from ..handoff_prompt import HANDOFF_PROMPT_FILENAME, write_handoff_prompt  # noqa: F401  (re-exported module surface)
+from ..handoff_prompt import (  # noqa: F401  (re-exported module surface)
+    HANDOFF_PROMPT_FILENAME,
+    HANDOFF_PROMPT_VERSION,
+    write_handoff_prompt,
+)
 from ..report_rendering import (
     render_report_json,
     render_report_summary,
@@ -439,6 +443,7 @@ __all__ = [
     "FRESH_FIRST_UTILITY_DIRS",
     "FrontendDependencyMerge",
     "HANDOFF_PROMPT_FILENAME",
+    "HANDOFF_PROMPT_VERSION",
     "INSTALLED_APPS_APPEND_SENTINEL",
     "INTENTIONALLY_UNMANAGED",
     "IdentityReconciliationPlan",

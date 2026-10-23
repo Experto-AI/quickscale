@@ -65,12 +65,12 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 |---|---|---|---|---|
 | 1 | SA153 (h) | yes | no: SA191d (production) for (f) | yes: (h/j) |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof) |
-| 3 | SA277 (a3) | yes | no: SA191d (production) for (a2) | yes: (a3) |
+| 3 | SA277 (a2) | no: SA191d (production) | no: SA191d (production) | no: (a2) waits for SA191d |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f) (upstream only); ship
 (h/j) meanwhile. Track 2: the operator's SA191d publication,
 production-switch and retirement approvals. Track 3: SA191d
-(production) clears (a2) (upstream only); ship (a3) first.
+(production) clears (a2) (upstream only).
 
 ### Ownership and merge coordination
 
@@ -187,7 +187,7 @@ defect is fixed in `bap-web`.
   trigger, and decisions say so.
 
   **Slices:**
-  - [ ] (a3) Declare the supported source-version range; generate a test project at each supported
+  - [x] (a3) Declare the supported source-version range; generate a test project at each supported
     version, pass `beta_migration` smoke runs, and version the upgrade prompt in QuickScale
     (Tier 2-full). Fixtures and prompt ship together without changing production projects.
   - [ ] (a2) After (a3) and SA191d (production), record the two-stage boundary and revocation

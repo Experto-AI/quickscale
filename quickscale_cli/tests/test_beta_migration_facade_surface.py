@@ -35,6 +35,7 @@ EXPECTED_MODULE_SURFACE = frozenset(
         "FRESH_FIRST_REQUIRED_RECIPIENT_PACKAGE_FILES",
         "FRESH_FIRST_UTILITY_DIRS",
         "HANDOFF_PROMPT_FILENAME",
+        "HANDOFF_PROMPT_VERSION",
         "INTENTIONALLY_UNMANAGED",
         "IdentityReconciliationPlan",
         "IdentityReplacement",
@@ -327,5 +328,8 @@ def test_facade_reexports_handoff_prompt_surface() -> None:
     """The handoff prompt constants and writer stay importable."""
     assert (
         beta_migration.HANDOFF_PROMPT_FILENAME == handoff_prompt.HANDOFF_PROMPT_FILENAME
+    )
+    assert (
+        beta_migration.HANDOFF_PROMPT_VERSION == handoff_prompt.HANDOFF_PROMPT_VERSION
     )
     assert beta_migration.write_handoff_prompt is handoff_prompt.write_handoff_prompt

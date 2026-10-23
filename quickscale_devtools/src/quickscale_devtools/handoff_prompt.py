@@ -12,6 +12,12 @@ if TYPE_CHECKING:
 
 HANDOFF_PROMPT_FILENAME = "MIGRATION_PROMPT.md"
 
+#: Format version of the rendered handoff prompt (SA277 a3).  Increment it
+#: whenever the prompt's sections, constraints, or remaining-work form change,
+#: and update ``quickscale_cli/tests/fixtures/handoff_prompt.md`` in the same
+#: change; a recipient can then name the exported format it follows.
+HANDOFF_PROMPT_VERSION = "1"
+
 HARD_CONSTRAINTS: tuple[str, ...] = (
     "Keep the donor project read-only; every change lands in the recipient.",
     "Never copy `.git`, `media/`, `.env`, or `poetry.lock` between the two trees.",
@@ -109,6 +115,7 @@ def _render_handoff_header(report: BetaMigrationReport) -> list[str]:
         "",
         f"- Mode: {report.mode}",
         f"- Phase: {report.phase}",
+        f"- Prompt version: {HANDOFF_PROMPT_VERSION}",
         f"- Donor: {report.donor_path}",
         "- Identity reconciliation: "
         + ("performed" if report.identity_reconciliation_required else "not required"),

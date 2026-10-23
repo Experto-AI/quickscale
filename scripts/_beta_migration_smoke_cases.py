@@ -19,6 +19,7 @@ from _beta_migration_smoke_support import (
     _assert_recipient_services_lifecycle,
     _assert_successful_execution,
     _generate_project,
+    _generate_project_at_source_version,
     _probe_generated_runtime,
     _require,
     _run_migration,
@@ -27,6 +28,9 @@ from _beta_migration_smoke_support import (
 )
 
 from quickscale_core.schema.state_schema import StateManager
+from quickscale_devtools.beta_migration.source_versions import (
+    validate_supported_source_versions,
+)
 
 
 def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) -> None:
@@ -212,6 +216,43 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
         "fresh-first execution left the scaffold identity in generated files: "
         f"{stale_identity_paths}",
     )
+
+
+def _case_supported_source_versions(root: Path, environment: dict[str, str], spy_log: Path) -> None:
+    """Generate a donor at every declared source version and migrate it."""
+    for version in validate_supported_source_versions():
+        case_root = root / version.replace(".", "-")
+        spy_log.write_text("")
+        donor = _generate_project_at_source_version(case_root / "donor", "beta-target", version)
+        recipient = _generate_project(case_root / "recipient", "beta-target")
+        donor_before = _snapshot_tree(donor)
+        recipient_before = _snapshot_tree(recipient)
+
+        report, _stdout = _run_migration(
+            donor=donor,
+            recipient=recipient,
+            report_path=case_root / "report.json",
+            environment=environment,
+        )
+        label = f"source-{version}"
+        _assert_successful_execution(
+            report,
+            donor=donor,
+            recipient=recipient,
+            before_donor=donor_before,
+            before_recipient=recipient_before,
+            label=label,
+        )
+        _assert_recipient_services_lifecycle(report, spy_log, label=label)
+        _require(
+            report["donor_file_classification"]["unclassified"] == [],
+            f"{label} left donor files unclassified: "
+            f"{report['donor_file_classification']['unclassified']}",
+        )
+        _require(
+            report["runtime_provenance"]["settings_production"] == "donor",
+            f"{label} did not select the donor production settings: {report['runtime_provenance']}",
+        )
 
 
 def _case_iterate(root: Path, environment: dict[str, str], spy_log: Path) -> None:

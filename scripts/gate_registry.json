@@ -514,7 +514,8 @@
             "hosted": {
                 "order": 12,
                 "display_name": "Beta Migration Smoke Gate (SA152)",
-                "check_step_name": "Run beta migration smoke gate"
+                "check_step_name": "Run beta migration smoke gate",
+                "full_history": true
             },
             "publish": {
                 "order": 9,
