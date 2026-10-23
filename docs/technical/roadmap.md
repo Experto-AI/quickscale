@@ -42,23 +42,22 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA306 | Make the generated `ci.yml` start on GitHub and pass on `bap-web` | 1 | — | Required |
-| SA307 | Make System-org public content reachable for logged-in staff in forms and the admin | 1 | — | Required |
-| SA308 | Refresh dependencies with open advisories in QuickScale and `bap-web` | 1 | — | Required |
+| SA307 | Make System-org public content reachable for logged-in staff in forms and the admin | 3 | — | Required |
+| SA308 | Refresh dependencies with open advisories in QuickScale and `bap-web` | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA306 ∥ SA307 ∥ SA308 ──► SA191d (re-proof ──► production) ──► SA153 (f) ──► SA154 (inventory)
-Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
-     release path:  SA306, SA307, SA308 ──► SA191d ──► operator publish
-     critical path: SA308 ──► SA191d (re-proof) ──► SA191d (production) ──► SA153 (f)
+Track 1: SA306 ──► SA153 (r) ──► SA191d (re-proof ──► production) ──► SA153 (f) ──► SA154
+Track 2: SA308
+Track 3: SA307 ──► SA277 (a3) ──► SA277 (a2)
+     critical path: SA306 ∥ SA307 ∥ SA308 ──► SA191d (re-proof) ──► SA191d (production) ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. Nothing deploys to
-production until SA306, SA307, and SA308 ship and `develop` re-proves the whole acceptance on
-them. SA191d is delegated, with every production write operator-gated; SA153 (r) and SA277 (a3)
-need nothing from it and run now. SA153 (f) and SA277 (a2) wait on SA191d.
+Arrows within a track are queue order; the table holds the dependency edges. SA306, SA307, and
+SA308 merge separately but republish together in SA191d (re-proof); nothing reaches production
+before `develop` re-proves on them. Operator publication of 0.89.0 follows SA191d.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -73,9 +72,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA306; SA307; SA308; SA153 (r) | yes | no | yes | no | yes |
-| 2 | — | yes | yes | yes | yes | no |
-| 3 | SA277 (a3) | yes | no | yes | no | no |
+| 1 | SA306, then SA153 (r) | yes | yes | yes | yes | yes |
+| 2 | SA308 | yes | yes | yes | yes | yes |
+| 3 | SA307, then SA277 (a3) | yes | yes | yes | yes | yes |
 
 ### Ownership and merge coordination
 
@@ -139,111 +138,42 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — cutover and the property portal
 
-**SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway with no
-users, only form submissions and configuration. The regenerated `bap-web` (`~/code/bap-web`,
-formerly `bap-web-new`) already declares every module (`auth`, `listings`, `forms`, `analytics`,
-`notifications`, `orgs`, `storage`), carries
-the `properties` app with `/api/properties/` and `properties_seed_catalog`, and recreates the six
-BAP form definitions (`compradores`, `vendedores`, `alquiler-propietario`,
-`alquiler-inquilino`, `reubicacion`, `consulta-general`) in
-`client_extensions/.../forms_seed_presets.py`.
-The cutover runs **in place** on Railway project `bap-web`, which has two environments, each an
-app service fed by GitHub `VictorRocco/BAP-web` plus a PostgreSQL 17 service: `develop` (branch
-`develop`, `bap-web-develop.up.railway.app`, 14 test submissions) and `production` (branch
-`main`, `buenosairesproperties.com`, 0 submissions). The custom domain and DNS are never touched.
-The new code replaces the old by force-push (the histories are unrelated); the old history stays
-as `legacy-main`, `legacy-develop`, and the `v-legacy` tag. The project targets PostgreSQL 18, so
-each environment gets a **new PostgreSQL 18 service** restored from a locally built database and
-the app's `DATABASE_URL` is repointed to it; the old PostgreSQL 17 service stays untouched as the
-rollback. `develop` is the rehearsal; `production` repeats it. Downtime is accepted.
-
-Measured on 2026-10-22, before the (build) slice: rollback copies (production `pg_dump`, both environments'
-variables) are in `~/bap-cutover/` (mode 700, outside every repository). Old mail goes through
-Resend's SMTP relay (`smtp.resend.com:2587`, the same `re_…` key in both environments as
-`EMAIL_HOST_PASSWORD`); the new project uses the Resend API with that key as `RESEND_API_KEY`,
-plus a webhook signing secret. All ten old forms notify `info@buenosairesproperties.com`; four
-(`contact`, `feedback`, `newsletter`, `support`) are not recreated and have no production
-submissions. Operator decisions: sender, reply-to, and notification address
-`info@buenosairesproperties.com`; analytics stays on with `POSTHOG_API_KEY`, because the shipped
-apply rule refuses switching `analytics` off while `forms` requires it; the `develop` test
-submissions are not carried. The (build) dump is `~/bap-cutover/new-2026-10-22.dump`.
-`railway ssh` needs an operator SSH key (re-registered 2026-10-23 after the incident reset); exports otherwise read the database directly
-(`DATABASE_PUBLIC_URL` of the PostgreSQL service). Secrets staged in `~/bap-cutover/` (mode
-600): `resend-api-key`, `posthog-key`, `resend-webhook-secret-develop`, and
-`resend-webhook-secret-production`; the last three were never stored in Railway.
-
-**Railway security incident (2026-10-21).** Railway disclosed a platform incident, recommends
-revoking every variable stored in Railway, invalidated API tokens and OAuth sessions, and
-re-enabled builds by plan tier (Enterprise, Pro, then Hobby, Free, Trial). Every value in the
-old variables is treated as exposed: the Resend key is rotated before use; the old
-`SECRET_KEY` and `DJANGO_SUPERUSER_*` are not carried; the old PostgreSQL 17 credentials are
-rollback-only (rotate or retire after the cutover). Values generated after the incident (the
-new PostgreSQL 18 service, runtime role, `SECRET_KEY`) are clean.
-
-The (swap) slice made `~/code/bap-web` the new project and `~/code/bap-web-old` the old one. The
-procedure is `bap-web/CUTOVER.md`; the (build) slice rewrote it to this strategy. A QuickScale
-defect follows the release re-entry loop (never patch an embedded module in a project; republish
-and update); a project defect is fixed in `bap-web`, project-specific behavior in its
-`client_extensions`.
+**SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
+`bap-web` with no users and no production submissions. The regenerated `bap-web` (`~/code/bap-web`)
+declares `auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, and `storage`, the
+`properties` app, and the six BAP forms. The cutover runs **in place**: per environment, a new
+PostgreSQL 18 service restored from `~/bap-cutover/new-2026-10-22.dump`, new variables, and a
+force-push over the unrelated history (kept as `legacy-main`, `legacy-develop`, `v-legacy`); the
+old PostgreSQL 17 service stays as the rollback until acceptance, and DNS is never touched.
+`develop` already runs it. The procedure and its run record are `bap-web/CUTOVER.md`. Secrets
+live in `~/bap-cutover/` (mode 600), never printed or committed. After Railway's 2026-10-21
+incident every old variable is exposed: none is carried, and the old PostgreSQL 17 credentials
+are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
+defect is fixed in `bap-web`.
 
 - [ ] **SA306 — Make the generated `ci.yml` start on GitHub and pass on `bap-web`.**
 
   `ci.yml.j2:133` gates `frontend-lint` with a job-level `if: hashFiles(...)`; GitHub rejects the
-  workflow, so every generated project's push shows a 0-second failure with no jobs (seen on
-  `bap-web` `develop`, run 39920079023). Fix the template (step-level guard or an always-run job),
-  add an `actionlint` check over the generated workflows, ship through the release re-entry loop,
-  update `bap-web`, and iterate until its CI is green on `develop` (Tier 2-full).
-
-- [ ] **SA307 — Make System-org public content reachable for logged-in staff in forms and the admin.**
-
-  Public forms and their submissions live in the System org, but a staff session resolves its
-  personal org: on `bap-web` `develop` the public submit returns 404 to a logged-in admin, and the
-  admin lists show no forms or submissions with no visible way to pick an org (only
-  `?organization__id__exact=<id>` works). Public form resolution must not depend on the visitor's
-  session org, and the admin must offer an org selector that includes the System org. Ship
-  through the release re-entry loop and re-prove both on `bap-web` (Tier 2-full).
-
-- [ ] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
-
-  Audited 2026-10-23 (pip-audit, pnpm audit) after the LiteLLM 1.107.0 PyPI compromise of
-  2026-10-21; nothing here depends on `litellm`. Open: Pillow 12.3.0 (35 advisories; the
-  `blog`, `listings`, `storage`, `orgs` manifests cap it below 13), QuickScale's pinned DRF
-  3.17.2, `certifi`, `virtualenv`, and npm `dompurify` 3.4.16 (critical) and three more. Raise
-  the caps, ship through the release re-entry loop, refresh both lockfiles, and pin the runtime
-  floors (Node 24.22.1 LTS, Python 3.14.9, PostgreSQL 18.6). **Acceptance:** both audits report
-  nothing open, and both test suites pass (Tier 2-full).
+  workflow, so every generated project's push fails in 0 seconds with no jobs. Fix the template
+  and add an `actionlint` check over generated workflows (its gate-registry row is Track 2's
+  surface; hand it over at merge). Ships in the joint release (Tier 2-full).
 
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
-  Delegated to an AI assistant, one slice per session, each ending with a handoff note in the
-  project's `docs/`. Every push, every Railway variable or service change, and every restore is
-  an operator gate; the operator runs `createsuperuser` and the admin and inbox reviews. Secrets
-  are read from `~/bap-cutover/` or Railway, never printed or committed.
-
-  **Acceptance:** on `https://buenosairesproperties.com`, `/healthcheck/` prints `OK`, `/` and
-  `/contact` (six forms) render, a submitted form reaches `info@buenosairesproperties.com` through
-  Resend, and `/admin/` shows it; the old PostgreSQL 17 service and the legacy refs exist for
-  rollback.
+  One slice per session, each ending with a handoff note in `bap-web/docs/`. Every push, Railway
+  change, and restore is an operator gate. **Acceptance:** on `https://buenosairesproperties.com`,
+  `/healthcheck/` prints `OK`, `/` and `/contact` render, a form submitted logged in and
+  anonymously reaches `info@buenosairesproperties.com` through Resend, `/admin/` lists it, and
+  the old PostgreSQL 17 service and the legacy refs exist for rollback.
 
   **Slices:**
-  - [x] (build) Local database build.
-  - [x] (swap) Repository swap.
-  - [x] (develop) Rehearsal on Railway `develop` (`bap-web` `CUTOVER.md` § S3 record).
-  - [ ] (re-proof) After SA306, SA307, and SA308: update `bap-web`, push to `develop`, and re-pass
-    the whole acceptance there: CI green, logged-in and anonymous submits, the admin lists forms
-    and submissions without a URL filter, and both audits clean (Tier 2-fast).
-  - [ ] (production) After (re-proof): switch on Railway `production` (Tier 2-full; one-way),
-    following `CUTOVER.md` § S4 as rewritten by (develop): automatic deploys off and an SSH key
-    registered first; restore inside the new service over `railway ssh` (no TCP proxy); delete
-    `DJANGO_SUPERUSER_*`, `EMAIL_*`, and `DEFAULT_FROM_EMAIL` before the new code first boots
-    (`start.sh` creates a superuser from them); `railway variable` flags after the subcommand;
-    `resend-webhook-secret-production`; force-push `main` to `main` with the lease on `782b11c`;
-    acceptance on the domain, with the browser check from a private window (a logged-in admin
-    gets 404 on public forms). After it passes, the operator deletes the develop Resend webhook,
-    the old PostgreSQL 17 service, and, 48 hours later (Railway reserves deleted names), renames
-    the new service and volume to `Postgres` / `postgres-volume`, as on `develop`. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore
-    the variables from `~/bap-cutover/old-variables.json` (their Resend key is revoked), and
-    deploy `legacy-main`.
+  - [ ] (re-proof) After SA306, SA307, and SA308: republish the changed modules once (joint
+    release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
+    green and both dependency audits clean (Tier 2-full).
+  - [ ] (production) Repeat `CUTOVER.md` § S4 on `production` (Tier 2-full; one-way). After
+    acceptance the operator deletes the develop Resend webhook and the old PostgreSQL 17 service,
+    and 48 hours later renames the new service and volume to `Postgres` / `postgres-volume`.
+    Rollback is § Rollback.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -275,11 +205,25 @@ and update); a project defect is fixed in `bap-web`, project-specific behavior i
   on marker-derived enrollment and purge; schema changes ship incremental migrations on the
   frozen history. Close when every item is promoted or dropped with rationale.
 
-### Track 2 — module provenance
+### Track 2 — dependencies
 
-- [x] **SA305 — Detect hand edits to an embedded module before `quickscale update`.**
+- [ ] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
 
-### Track 3 — upgrade path
+  Audited 2026-10-23 (pip-audit, pnpm audit; nothing depends on `litellm`). Open: Pillow 12.3.0
+  (the `blog`, `listings`, `storage`, `orgs` manifests cap it below 13), QuickScale's pinned DRF
+  3.17.2, `certifi`, `virtualenv`, and npm `dompurify` 3.4.16 (critical) with three transitive
+  others. Raise the caps, refresh both lockfiles, and pin Node 24.22.1, Python 3.14.9, and
+  PostgreSQL 18.6. Ships in the joint release. **Acceptance:** both audits clean and both test
+  suites pass (Tier 2-full).
+
+### Track 3 — tenancy and upgrade path
+
+- [ ] **SA307 — Make System-org public content reachable for logged-in staff in forms and the admin.**
+
+  A staff session resolves its personal org, so on `bap-web` the public form submit returns 404
+  to a logged-in admin and the admin lists hide System-org forms and submissions, with no org
+  selector. Public form resolution must not depend on the session org, and the admin must offer
+  a selector that includes the System org. Ships in the joint release (Tier 2-full).
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
