@@ -39,14 +39,14 @@ required; preparation ships separately.
 | SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA308 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA308 | Refresh the project lock and resolve remaining dev-advisory disposition | 2 | — | Required |
+| SA308 | Refresh the project lock; verify and document two dev-only advisory exceptions | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA153 (r → h → j) ──► SA191d (re-proof → production → retire) ──► SA153 (f) ──► SA154
-Track 2: SA308 (A → B)
+Track 2: SA308 (A → B → C)
 Track 3: SA277 (a3) ──► SA277 (a2)
      critical path: SA308 ──► SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
@@ -65,13 +65,12 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA153 (r) | yes | no: SA308, then SA191d operator gates | yes: independent slices |
-| 2 | SA308 (A) | yes | no: SA308 (B) audit-scope decision | yes: independent slices |
+| 2 | SA308 (A) | yes | yes | yes |
 | 3 | SA277 (a3) | yes | no: SA191d (production) evidence for (a2) | yes: (a3) |
 
-**Clearing blockers.** Track 2: the maintainer decides SA308 (B)'s audit scope; prepare the lock
-in (A) meanwhile. Track 1: SA308 completion is upstream work; finish SA153's local slices first,
-then obtain the operator's publication, production-switch, and retirement approvals in SA191d.
-Track 3: upstream SA191d (production) clears (a2); ship (a3) first. No track waits to start.
+**Clearing blockers.** Track 1: upstream SA308 completion, then SA191d's operator publication,
+production-switch and retirement approvals; finish SA153's local slices meanwhile. Track 3: upstream
+SA191d (production) clears (a2); ship (a3) first. No track waits to start.
 
 ### Ownership and merge coordination
 
@@ -124,7 +123,7 @@ defect is fixed in `bap-web`.
   **Slices:**
   - [ ] (re-proof) After SA308: republish the changed modules once
     (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
-    green and both dependency audits meeting SA308 (B)'s approved criterion (Tier 2-full).
+    green and both dependency audits meeting SA308's acceptance below (Tier 2-full).
   - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
@@ -167,18 +166,19 @@ defect is fixed in `bap-web`.
 
 - [ ] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
 
-  QuickScale's dependency update is merged; remaining scope is the project lock and two
-  dev-only npm advisories. No repeated runtime-pin or package-floor work.
+  **Acceptance:** Python/production npm audits are clean in QuickScale and `bap-web`; full npm
+  audits show only verified dev-only `braces`/`postcss-selector-parser` exceptions. No blanket
+  ignores or Tailwind migration; fix production/build-output exposure or other findings first.
 
-  **Slices (Tier 2-full each):**
-  - [ ] (A) Refresh `bap-web`'s lock for the merged floors without publishing/deploying; commit
-    the lock and pass its backend/frontend suites using local build artifacts.
-  - [ ] (B) After (A), audit both trees, trace `braces` and `postcss-selector-parser` reachability,
-    and record advisory disposition. Accept when both audits meet the maintainer-approved scope.
-    **Blocking decision:** retain zero findings (wait for a `braces` fix and migrate Tailwind for
-    parser 7), or require clean production dependencies and explicitly document dev-only
-    exceptions with review triggers. Prefer the latter to keep this release bounded; it accepts
-    residual toolchain risk. No exception or broader frontend migration is authorized here.
+  **Ordered slices (Track 2):**
+  - [ ] (A) Refresh `bap-web`'s lock for the merged floors using local build artifacts; commit
+    the lock and pass backend/frontend suites, without publishing/deploying (Tier 2-full).
+  - [ ] (B) After (A), capture Python plus full/production npm audits in both trees; trace each
+    advisory's version, dependency chain, build use and shipped output. Prove the two findings
+    are dev-only and production audits clean; fix any production exposure (Tier 2-full).
+  - [ ] (C) After (B), document exact advisory IDs/versions/paths, evidence, toolchain risk, Track 2
+    owner and expiry within 30 days in the technical audit. Recheck on fixes, dependency/exposure
+    changes; remove fixed/expired exceptions. Unmatched audit findings block release (Tier 2-fast).
 
 ### Track 3 — upgrade path
 
