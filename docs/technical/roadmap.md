@@ -4,12 +4,10 @@
 
 ## Goal and finish line
 
-The immediate goal is one convention across all modules, as recorded in
-[module_conventions.md](module_conventions.md#module-conventions). `bap-web` is then ported
-once, onto the standardized names: the regenerated `bap-web`, already at visual parity, is
-cut over (SA191d) and then carries the first property portal in a project-owned extension
-(SA153). Capabilities are generalized only after that project proves
-their value.
+Cut over the regenerated `bap-web` at visual parity (SA191d), then deliver the first
+property portal in a project-owned extension (SA153), following
+[module conventions](module_conventions.md#module-conventions). Generalize capabilities only
+after that project proves their value.
 
 **Release status.** 0.89.0 fixes 0.88.0's S1 billing defects; a live 0.88.0 install moves to
 0.89.0 on a fresh database. The local `0.89.0` tag is validated; SA191d's cutover is the proof
@@ -29,8 +27,8 @@ history.
 (Adaptive `docs/guides/operator-guide.md` § Planning and implementation):
 Tier 1 is one bounded low-risk concern within direct context fit; Tier 2-fast is a specified
 change with known targets, acceptance, and checks; Tier 2-full is one whose callers, mechanism,
-or environment still need discovery. No slice is Tier 3: work that would be is split so that its
-one-way or high-risk step stands alone behind the slices that prove it.
+or environment still need discovery. High-risk transitions stay Tier 3 with plan review
+required; preparation ships separately.
 
 ## Schedule and parallel execution
 
@@ -41,88 +39,52 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA308 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA308 | Refresh dependencies with open advisories in QuickScale and `bap-web` | 2 | — | Required |
+| SA308 | Refresh the project lock and resolve remaining dev-advisory disposition | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (r) ──► SA191d (re-proof ──► production) ──► SA153 (f) ──► SA154
-Track 2: SA308
+Track 1: SA153 (r → h → j) ──► SA191d (re-proof → production → retire) ──► SA153 (f) ──► SA154
+Track 2: SA308 (A → B)
 Track 3: SA277 (a3) ──► SA277 (a2)
-     critical path: SA308 ──► SA191d (re-proof) ──► SA191d (production) ──► SA153 (f)
+     critical path: SA308 ──► SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA308 merges
-separately; with SA306 and SA307 landed, all three republish together in SA191d (re-proof), and
-nothing reaches production before `develop` re-proves on them. Operator publication of 0.89.0
-follows SA191d.
-
-**Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
-named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
-its last slice lands; slices are not scheduled.
+Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
+SA153 (r/h/j) and SA277 (a3) can ship before their ticket dependencies; SA153 (f) and SA277 (a2) wait for
+SA191d (production). SA191d (retire) closes the ticket. SA308 (A) prepares the lock on Track 2;
+SA191d (re-proof) owns publication, `develop` deployment, and their integration checks.
+Operator publication of 0.89.0 follows SA191d. Each slice ships with its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change ships as a new
 migration. SA153's own tables live in the project-owned extension as `0002+` migrations.
 
 ### Track states
 
-A track is **truly green** only when all three states are yes.
+| Track | Next ticket / slice | Can start | Can finish | Can merge |
+|---|---|---|---|---|
+| 1 | SA153 (r) | yes | no: SA308, then SA191d operator gates | yes: independent slices |
+| 2 | SA308 (A) | yes | no: SA308 (B) audit-scope decision | yes: independent slices |
+| 3 | SA277 (a3) | yes | no: SA191d (production) evidence for (a2) | yes: (a3) |
 
-| Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
-|---|---|---|---|---|---|---|
-| 1 | SA153 (r) | yes | yes | yes | yes | yes |
-| 2 | SA308 | yes | yes | yes | yes | yes |
-| 3 | SA277 (a3) | yes | yes | yes | yes | yes |
+**Clearing blockers.** Track 2: the maintainer decides SA308 (B)'s audit scope; prepare the lock
+in (A) meanwhile. Track 1: SA308 completion is upstream work; finish SA153's local slices first,
+then obtain the operator's publication, production-switch, and retirement approvals in SA191d.
+Track 3: upstream SA191d (production) clears (a2); ship (a3) first. No track waits to start.
 
 ### Ownership and merge coordination
 
-- Track 1 owns the generated `urls.py.j2` and the theme's social seam pages, the parity oracles,
-  the hosted workflow triggers (including `e2e.yml`'s tag pattern), the `bap-web` cutover,
-  the property extension, public templates, and the portal's
-  extension documentation, the `bap-web` forms import, the design-system
-  extraction and the visual-parity harness, the managed CI-environment and operations-guide
-  includes, and, for the conventions, module identities, models and their `0001_initial`,
-  module READMEs, and module templates, static files, and template tags, with the module page templates and the generated
-  `base.html`, cross-module imports and settings reads, and the `services.py` public surface.
-- Track 2 owns the gate registry and everything generated from it (`scripts/gate_registry.json`,
-  `check_quality.sh`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`, `check_ci_locally.sh`'s
-  gate arms, the Makefile gate help, the gate documentation table), `.github/workflows/`,
-  `scripts/publish_module.py`, the `[build-system]` blocks of every package, the core build
-  target, the bundled-manifest build step and the publish-artifact check, `ruff.toml`, the
-  test-settings base, stubs and conftest plugin, `scripts/security_suppressions.json`, the
-  gate-script parity families, the CLI apply/deploy/update commands, `utils/_dependency_write.py`,
-  and `contract_vintage.py`, the module manifests' `contract_vintage` blocks, `throttle_scopes`
-  and `project_contract.yml`, `contracts/module_options.py` and the `.env.example` template,
-  `quickscale_core/dr_engine/`, and the billing module (`billing/services.py`,
-  `billing/views.py`, `billing/adapter.py`, `_customers.py`, `_stripe_client.py`, its commands,
-  and its docs), the split facades of the CLI commands, `dr_engine`, and billing with the tests
-  that patch them, the blog and storage upload-path builders and the storage Markdownx upload,
-  and, for the conventions, the manifest option schema and the CLI's `module_config`, module
-  settings names, `is_enabled()`, and the per-module personal-data declarations with the orgs
-  personal-data check, and the `showcase_react` design layer.
-- Track 3 owns the orgs tenancy, purge,
-  removal-obligation, invite-throttle, and boot path (`orgs/apps.py`, `orgs/removal.py`, `orgs/views.py`), the privileged-command and runtime-role
-  stations, `is_platform_operator` and `operator_access`, the `quickscale_core.runtime`
-  settings facade and its scheduled-off refusal helper, the generated settings templates
-  (`base.py.j2`, `production.py.j2`, `local.py.j2`) with the generated `REST_FRAMEWORK`
-  defaults, the generator's Jinja environment, `auth/views.py`, the blog rate limiter, the
-  generated `pyproject.toml.j2` `[build-system]` block, orgs' `quickscale_orgs_create_site_org`
-  command, the notifications webhook (`_webhooks.py`), the CRM list API and the theme's CRM
-  page, the CLI help, the generated
-  theme seam types and the theme hooks that read them, and the frontend decisions in
-  `frontend.md`, and, for the conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`, core's `CAPABILITIES`, the adapter hook signature,
-  write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
-  theme's React API client, module settings snapshots and the module split facades' loggers and
-  re-exports, the conformance harness with its registry row, parity families and
-  `module-extension.md`'s authoring checklist, the five `_anonymization.py` handlers with
-  core's redaction helpers, and the migration-history freeze gate, its hash manifest, and
-  `decisions.md` § Clean-Break Migration History, and the maintainer migration tools
-  (`beta_migration/`) with their smoke gate, playbook, gap ledger, and the upgrade prompt.
-- One delivery candidate at a time per track, one serialized merge queue into `v89`.
-- **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
-  `project_contract.yml`, and [decisions.md](decisions.md). Each track resolves the shared set at
-  its own merge, after the previous merge lands, then runs the consistency test.
+- Track 1: `bap-web` cutover, project-owned property extension, React pages and managed seam hooks,
+  crawler views and journey checks; joint publication and deployment in SA191d.
+- Track 2: dependency manifests and locks, runtime pins, and advisory disposition in SA308;
+  prepares `bap-web`'s lock without publishing or deploying it.
+- Track 3: `beta_migration/`, supported-version fixtures, versioned upgrade prompt, and upgrade
+  decision/operator guidance.
+- One delivery candidate per track; serialize merges into `v89`.
+- **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
+  `decisions.md`, and `bap-web`'s dependency lock (Track 2 prepares; Track 1 consumes).
+  Reconcile after each merge and run the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
 ### Resuming a track
@@ -150,24 +112,27 @@ incident every old variable is exposed: none is carried, and the old PostgreSQL 
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
 defect is fixed in `bap-web`.
 
-- [x] **SA306 — Make the generated `ci.yml` start on GitHub and pass on `bap-web`.**
-
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
   One slice per session, each ending with a handoff note in `bap-web/docs/`. Every push, Railway
-  change, and restore is an operator gate. **Acceptance:** on `https://buenosairesproperties.com`,
+  change, and restore is an operator gate. **Production acceptance:** on `https://buenosairesproperties.com`,
   `/healthcheck/` prints `OK`, `/` and `/contact` render, a form submitted logged in and
   anonymously reaches `info@buenosairesproperties.com` through Resend, `/admin/` lists it, and
-  the old PostgreSQL 17 service and the legacy refs exist for rollback.
+  the old PostgreSQL 17 service and legacy refs exist for rollback. Ticket completion also
+  requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) After SA308, with SA306 and SA307 landed: republish the changed modules once
+  - [ ] (re-proof) After SA308: republish the changed modules once
     (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
-    green and both dependency audits clean (Tier 2-full).
-  - [ ] (production) Repeat `CUTOVER.md` § S4 on `production` (Tier 2-full; one-way). After
-    acceptance the operator deletes the develop Resend webhook and the old PostgreSQL 17 service,
-    and 48 hours later renames the new service and volume to `Postgres` / `postgres-volume`.
-    Rollback is § Rollback.
+    green and both dependency audits meeting SA308 (B)'s approved criterion (Tier 2-full).
+  - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
+    pass the production acceptance above, retaining the old database and legacy refs.
+    **Tier 3: plan review required** — the production database/credential switch can lose data
+    or expose credentials; review restore validation and rollback before execution.
+  - [ ] (retire) After production acceptance and a separate operator gate, execute § S4 step 6:
+    delete the develop Resend webhook and old PostgreSQL 17 service, retire exposed credentials,
+    then rename the new service/volume after 48 hours; verify health and the retained dump/refs.
+    **Tier 3: plan review required** — deleting the old database irreversibly removes live rollback.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -175,49 +140,52 @@ defect is fixed in `bap-web`.
   JSON read API under the [extension contract](module-extension.md), building on the React pages
   and `/api/properties/` the port carried over. No public API in `listings`, no generic property
   behavior in generated projects. Module-coupled data on new pages comes through seam-declared
-  hooks in managed files (arch `generated-file-ownership-unmodeled`, Next (b)).
+  hooks in managed files (arch `generated-file-ownership-unmodeled`).
 
   **Acceptance:** the served documents (per-request head and crawler summary), the sitemap and
   robots views, and the search → detail → inquiry journey with organization isolation pass on the
-  deployed site, and the SA208 and SA246 declarations pass in `manage.py check`.
+  deployed site, and the extension/tenant declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Audit the portal work already in `bap-web` (`~/code/bap-web`; the `properties` app, its API, and
-    the React pages) against this acceptance, list what is missing, and close the gaps with
-    tests in the project (Tier 2-full).
-  - [ ] (f) Go-live on `buenosairesproperties.com` after SA191d's cutover; re-prove the journey on
-    the deployed site (Tier 2-full; production deploy, maintainer action).
+  - [ ] (r) Inventory the existing `properties` API and React pages against acceptance; commit a
+    gap list and runnable baseline checks without changing serving behavior (Tier 2-full).
+  - [ ] (h) After (r), close only served-head, crawler-summary, sitemap and robots gaps in the
+    project; request-level crawler tests pass with the existing React build (Tier 2-full).
+  - [ ] (j) After (h), close search → detail → inquiry gaps; test organization isolation and
+    extension declarations, with module data accessed through managed hooks (Tier 2-full).
+  - [ ] (f) After (j) and SA191d (production), deploy and re-prove that journey on the live site
+    with operator approval and a tested deploy-revert path (Tier 2-full).
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
-  Inventory only: generalizing the property API, React pages, or crawler fill into reusable
-  modules or the theme; React read API and pages for the blog, generic listings, and the CRM
-  dashboard; React `auth` and `billing` flows; broader translations; maps/geocoding; saved
-  searches, favorites, and alerts; agent/office profiles; syndication; tours/video; paid
-  placement; blog/listing cross-links; and PostgreSQL full-text search. Promote an item only with
-  a concrete consumer, bounded acceptance, and a fresh dependency and track. Tenant tables build
-  on marker-derived enrollment and purge; schema changes ship incremental migrations on the
-  frozen history. Close when every item is promoted or dropped with rationale.
+  Tier 1 inventory review only: promote reusable property/React pages, translations, maps,
+  saved searches, profiles, syndication, media, paid placement, cross-links or full-text search
+  only for a concrete consumer, with bounded acceptance, dependencies and a track. Otherwise
+  drop the item. Tenant schema changes use incremental migrations on the frozen history.
 
 ### Track 2 — dependencies
 
 - [ ] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
 
-  The QuickScale delta is implemented: Pillow 13.0.0 (the four module caps raised), DRF 3.18.3,
-  certifi 2026.10.19, virtualenv 21.14.13, and the React starter's DOMPurify 3.4.17; the
-  Python audit is clean and the core/CLI and affected module suites pass. Runtime pins are
-  Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6. Remaining before close: `bap-web`'s lock
-  refresh in the joint release, and two dev-only npm advisories with no in-range fix (`braces`
-  3.0.3 has no released fix; `postcss-selector-parser` 7 needs a Tailwind 4 migration).
-  **Acceptance:** both audits clean and both test suites pass (Tier 2-full).
+  QuickScale's dependency update is merged; remaining scope is the project lock and two
+  dev-only npm advisories. No repeated runtime-pin or package-floor work.
 
-### Track 3 — tenancy and upgrade path
+  **Slices (Tier 2-full each):**
+  - [ ] (A) Refresh `bap-web`'s lock for the merged floors without publishing/deploying; commit
+    the lock and pass its backend/frontend suites using local build artifacts.
+  - [ ] (B) After (A), audit both trees, trace `braces` and `postcss-selector-parser` reachability,
+    and record advisory disposition. Accept when both audits meet the maintainer-approved scope.
+    **Blocking decision:** retain zero findings (wait for a `braces` fix and migrate Tailwind for
+    parser 7), or require clean production dependencies and explicitly document dev-only
+    exceptions with review triggers. Prefer the latter to keep this release bounded; it accepts
+    residual toolchain risk. No exception or broader frontend migration is authorized here.
 
-- [x] **SA307 — Make System-org public content reachable for logged-in staff in forms and the admin.**
+### Track 3 — upgrade path
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
-  Closes arch `generated-file-ownership-unmodeled` Next (a). One path in two stages:
+  Addresses the upgrade-path part of arch `generated-file-ownership-unmodeled`; managed
+  resource hooks remain SA153's scope. One path in two stages:
   `beta_migration` does what it can mechanically; the prompt-driven port (`MIGRATION_PROMPT.md`,
   `CUTOVER.md`) handles what it reports it could not.
 
@@ -233,12 +201,12 @@ defect is fixed in `bap-web`.
   trigger, and decisions say so.
 
   **Slices:**
-  - [ ] (a2) After SA191d's cutover: the decision record and boundary rule in decisions, the
-    draft (`docs/planning/migration-upgrade-path-draft.md`) confirmed or amended against the cutover evidence, and the operator docs pruned of
-    steps either stage covers (Tier 2-fast).
-  - [ ] (a3) The supported source-version range, test projects generated at each version in it
-    with `beta_migration` smoke runs against them, and the prompt moved into the QuickScale
-    repository as a versioned artifact (Tier 2-full).
+  - [ ] (a3) Declare the supported source-version range; generate a test project at each supported
+    version, pass `beta_migration` smoke runs, and version the upgrade prompt in QuickScale
+    (Tier 2-full). Fixtures and prompt ship together without changing production projects.
+  - [ ] (a2) After (a3) and SA191d (production), record the two-stage boundary and revocation
+    triggers against the cutover evidence; confirm/amend the existing upgrade-path draft and
+    remove duplicate operator steps (Tier 2-fast). Validate links and smoke instructions.
 
 ## Deferred constraints and references
 
@@ -247,13 +215,11 @@ deferred findings, watch notes, and their growth triggers; items stay there unti
 Standing scope rules, presence contracts, and resource safeguards live in [decisions](decisions.md)
 and [validation policy](validation_policy.md#candidate-review-and-integration).
 
-**Unscheduled — React-theme browser coverage.** The generated Playwright E2E now asserts the
-current dashboard heading against the Django-served origin, and `bap-web` (`~/code/bap-web`) has
-a live-site screenshot harness; the repository still has no full journey suite. Remaining
-order when scheduled: (1) add `pnpm test:e2e` to `ci.yml.j2`;
-(2) the named user journeys; (3) a depth-capped link crawler in `test_e2e_full_workflow.py`;
-(4) full journey E2E against the Docker stack, only if it fits the E2E time budget in
-validation_policy.md.
+**Unscheduled — React-theme browser coverage (Track 1, Tier 2-full per ordered slice).**
+When activated: (A) wire `pnpm test:e2e` into generated CI and prove the existing smoke;
+(B) add named journeys with passing browser checks; (C) add a depth-capped link crawler with
+bounded traversal tests; (D) run the journeys on Docker within the E2E budget. Each consumes
+its predecessor; no open-ended full-site crawl.
 
 Changes to this schedule must pass
 `poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov`.
