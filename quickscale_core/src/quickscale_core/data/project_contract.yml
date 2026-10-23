@@ -379,6 +379,13 @@ steps:
       - "Compare and manually adopt the current pyproject.toml dev dependency virtualenv floor (>=21.14.13,<22.0)."
       - "Update the embedded modules once this release's modules are available (`quickscale update --confirm-contract-adoption`) so blog, listings, storage, and orgs carry the Pillow 13 floor, then refresh poetry.lock and pnpm-lock.yaml and re-run the generated project's test suite."
 
+  - id: sa308b-tailwind-plugin-dev-only
+    minimum: "0.89.0"
+    title: "Adopt the build-only Tailwind animation plugin classification"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/package.json: move `tailwindcss-animate` from `dependencies` to `devDependencies`; the plugin is loaded only by `frontend/design/tailwind.preset.js` at build time, so runtime dependency installs and the production npm audit no longer follow its peer `tailwindcss` into the build chain."
+      - "Regenerate `frontend/pnpm-lock.yaml` so its importer lists `tailwindcss-animate` under devDependencies, then confirm `pnpm install --frozen-lockfile` and `pnpm build` still pass. The full npm audit continues to report the two build-time advisories as dev-only; the production audit is clean."
+
   - id: sa306-generated-ci-frontend-job
     minimum: "0.89.0"
     title: "Adopt the generated CI frontend job without its invalid job-level guard"

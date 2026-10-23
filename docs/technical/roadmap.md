@@ -36,26 +36,28 @@ required; preparation ships separately.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA308 | Required |
+| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA308, SA309 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
+| SA309 | Clear `bap-web`'s pre-existing suite reds before the cutover re-proof | 1 | SA308 | Required |
 | SA308 | Refresh the project lock; verify and document two dev-only advisory exceptions | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (r → h → j) ──► SA191d (re-proof → production → retire) ──► SA153 (f) ──► SA154
+Track 1: SA153 (r → h → j) ∥ SA309 ──► SA191d (re-proof → production → retire) ──► SA153 (f) ──► SA154
 Track 2: SA308 (A → B → C)
 Track 3: SA277 (a3) ──► SA277 (a2)
-     critical path: SA308 ──► SA191d (re-proof → production → retire) ──► SA153 (f)
+     critical path: SA308 ──► SA309 ──► SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
 SA153 (r/h/j) and SA277 (a3) can ship before their ticket dependencies; SA153 (f) and SA277 (a2) wait for
 SA191d (production). SA191d (retire) closes the ticket. SA308 (A) prepares the lock on Track 2;
-SA191d (re-proof) owns publication, `develop` deployment, and their integration checks.
-Operator publication of 0.89.0 follows SA191d. Each slice ships with its own checks and handoff.
+SA309 clears `bap-web`'s pre-existing suite reds; SA191d (re-proof) owns publication, `develop`
+deployment, and their integration checks. Operator publication of 0.89.0 follows SA191d. Each
+slice ships with its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change ships as a new
 migration. SA153's own tables live in the project-owned extension as `0002+` migrations.
@@ -64,12 +66,13 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA153 (r) | yes | no: SA308, then SA191d operator gates | yes: independent slices |
-| 2 | SA308 (A) | yes | no: suite-acceptance decision | yes |
+| 1 | SA153 (r); SA309 | yes | no: SA308, SA309, then SA191d operator gates | yes: independent slices |
+| 2 | SA308 (C) | yes | yes | yes |
 | 3 | SA277 (a3) | yes | no: SA191d (production) evidence for (a2) | yes: (a3) |
 
-**Clearing blockers.** Track 1: upstream SA308 completion, then SA191d's operator publication,
-production-switch and retirement approvals; finish SA153's local slices meanwhile. Track 3: upstream
+**Clearing blockers.** Track 1: upstream SA308 completion and SA309's suite-green baseline, then
+SA191d's operator publication, production-switch and retirement approvals; finish SA153's local
+slices meanwhile. Track 3: upstream
 SA191d (production) clears (a2); ship (a3) first. No track waits to start.
 
 ### Ownership and merge coordination
@@ -121,7 +124,7 @@ defect is fixed in `bap-web`.
   requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) After SA308: republish the changed modules once
+  - [ ] (re-proof) After SA308 and SA309: republish the changed modules once
     (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
     green and both dependency audits meeting SA308's acceptance below (Tier 2-full).
   - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
@@ -162,6 +165,14 @@ defect is fixed in `bap-web`.
   only for a concrete consumer, with bounded acceptance, dependencies and a track. Otherwise
   drop the item. Tenant schema changes use incremental migrations on the frozen history.
 
+- [ ] **SA309 — Clear `bap-web`'s pre-existing suite reds.**
+
+  Base `34e92c7` already fails its suites: 50 backend tests pass at 79.22% coverage under the
+  90% gate, and 22 frontend starter-UI tests fail in `App.test.tsx`, `AppRoutes.test.tsx`, and
+  `RootDispatch.test.tsx`. SA308 (A) proved the lock refresh keeps that baseline; clear the reds
+  so SA191d (re-proof) can pass with CI green, without changing the dependency floors (Tier 2-full).
+  Handoff: `bap-web/docs/sa308-dependency-refresh.md`.
+
 ### Track 2 — dependencies
 
 - [ ] **SA308 — Refresh dependencies with open advisories in QuickScale and `bap-web`.**
@@ -171,19 +182,15 @@ defect is fixed in `bap-web`.
   ignores or Tailwind migration; fix production/build-output exposure or other findings first.
 
   **Ordered slices (Track 2):**
-  - [ ] (A) Refresh `bap-web`'s lock for the merged floors using local build artifacts; commit
+  - [x] (A) Refresh `bap-web`'s lock for the merged floors using local build artifacts; commit
     the lock and pass backend/frontend suites, without publishing/deploying (Tier 2-full).
-    The lock and floors landed in `bap-web` at `3dc2d86`; both suites were run and keep the
-    same pre-existing reds as base `34e92c7` (backend 50 passed at 79.22% coverage under its
-    90% gate; frontend 22 starter-UI failures). (A) stays open until the maintainer accepts
-    that no-regression baseline or the reds are cleared. Handoff:
-    `bap-web/docs/sa308-dependency-refresh.md`.
-  - [ ] (B) After (A), capture Python plus full/production npm audits in both trees; trace each
+  - [x] (B) After (A), capture Python plus full/production npm audits in both trees; trace each
     advisory's version, dependency chain, build use and shipped output. Prove the two findings
     are dev-only and production audits clean; fix any production exposure (Tier 2-full).
   - [ ] (C) After (B), document exact advisory IDs/versions/paths, evidence, toolchain risk, Track 2
     owner and expiry within 30 days in the technical audit. Recheck on fixes, dependency/exposure
     changes; remove fixed/expired exceptions. Unmatched audit findings block release (Tier 2-fast).
+    Evidence: `bap-web/docs/sa308-dependency-refresh.md` § SA308 (B).
 
 ### Track 3 — upgrade path
 
