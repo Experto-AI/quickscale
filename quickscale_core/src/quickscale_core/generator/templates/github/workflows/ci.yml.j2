@@ -130,8 +130,8 @@ jobs:
 
   frontend-lint:
     runs-on: ubuntu-latest
-    if: {% raw %}${{ hashFiles('frontend/package.json') != '' }}{% endraw %}
-
+    # A job-level hashFiles() guard is rejected by GitHub before any job starts:
+    # every showcase_react generation emits frontend/package.json, so this job runs.
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 

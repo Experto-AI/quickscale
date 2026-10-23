@@ -98,3 +98,15 @@ def test_ci_test_and_migration_steps_allow_the_test_database_role() -> None:
 
     assert "QUICKSCALE_ALLOW_BYPASSRLS" not in test_step_without_orgs
     assert "Run migrations" not in output_without_orgs
+
+
+def test_ci_frontend_job_has_no_job_level_guard() -> None:
+    """GitHub rejects hashFiles at job scope, so the job must run unconditionally."""
+    output = _render("github/workflows/ci.yml.j2")
+
+    assert "frontend-lint:" in output
+    assert "if: ${{ hashFiles('frontend/package.json')" not in output
+    job_header = output.split("  frontend-lint:", 1)[1].split("    steps:", 1)[0]
+    assert "if:" not in job_header
+    for command in ("pnpm lint", "pnpm type-check", "pnpm test:coverage"):
+        assert command in output.split("  frontend-lint:", 1)[1]

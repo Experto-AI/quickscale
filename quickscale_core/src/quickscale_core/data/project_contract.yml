@@ -368,3 +368,9 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current frontend/e2e/home.spec.ts and frontend/playwright.config.ts: the starter's home spec asserts the dashboard heading the theme actually renders, and Playwright targets the Django-served document at http://127.0.0.1:8000 (override with PLAYWRIGHT_BASE_URL) instead of the Vite dev server, because the React starter validates window.__QUICKSCALE__, which only the Django-rendered document injects. Start the stack with `quickscale up` before `pnpm test:e2e`. Test-only: no project runtime behavior changes."
       - "Compare and optionally copy the current frontend/README.md E2E note: it names the Django origin and the `quickscale up` prerequisite."
+
+  - id: sa306-generated-ci-frontend-job
+    minimum: "0.89.0"
+    title: "Adopt the generated CI frontend job without its invalid job-level guard"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml: remove the `frontend-lint` job's `if: ${{ hashFiles('frontend/package.json') != '' }}` line, because GitHub only allows `hashFiles()` in step-level expressions and rejects the whole workflow before any job starts. Every fresh `showcase_react` project emits `frontend/package.json`, so the job runs its lint, type-check, and coverage steps unconditionally; a project that removed its frontend deletes the `frontend-lint` job instead."
