@@ -44,14 +44,14 @@ required; preparation ships separately.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (r → h → j) ──► [SA191d (production)] ──► SA153 (f) ──► SA154
+Track 1: SA153 (h → j) ──► [SA191d (production)] ──► SA153 (f) ──► SA154
 Track 2: SA191d (re-proof → production → retire)
 Track 3: SA277 (a3) ──► SA277 (a2)
      critical path: SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA153 (r/h/j) and SA277 (a3) can ship before their ticket dependencies; SA153 (f) and SA277 (a2) wait for
+SA153 (h/j) and SA277 (a3) can ship before their ticket dependencies; SA153 (f) and SA277 (a2) wait for
 SA191d (production). SA191d (retire) closes the ticket; (re-proof) owns publication, `develop`
 deployment, and their integration checks. Operator publication of 0.89.0 follows SA191d. Each
 slice ships with its own checks and handoff.
@@ -63,12 +63,12 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA153 (r) | yes | no: SA191d (production) for (f) | yes: (r/h/j) |
+| 1 | SA153 (h) | yes | no: SA191d (production) for (f) | yes: (h/j) |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof) |
 | 3 | SA277 (a3) | yes | no: SA191d (production) for (a2) | yes: (a3) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f) (upstream only); ship
-(r/h/j) meanwhile. Track 2: the operator's SA191d publication,
+(h/j) meanwhile. Track 2: the operator's SA191d publication,
 production-switch and retirement approvals. Track 3: SA191d
 (production) clears (a2) (upstream only); ship (a3) first.
 
@@ -147,8 +147,7 @@ defect is fixed in `bap-web`.
   deployed site, and the extension/tenant declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (r) Inventory the existing `properties` API and React pages against acceptance; commit a
-    gap list and runnable baseline checks without changing serving behavior (Tier 2-full).
+  - [x] (r)
   - [ ] (h) After (r), close only served-head, crawler-summary, sitemap and robots gaps in the
     project; request-level crawler tests pass with the existing React build (Tier 2-full).
   - [ ] (j) After (h), close search → detail → inquiry gaps; test organization isolation and
