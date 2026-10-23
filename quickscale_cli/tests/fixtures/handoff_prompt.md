@@ -6,6 +6,7 @@ work below, then hand the recipient back to the maintainer.
 
 - Mode: fresh-first
 - Phase: fresh-first-executed
+- Prompt version: 1
 - Donor: <DONOR>
 - Identity reconciliation: not required
 - Runtime provenance: settings/production.py=donor, start.sh=recipient, Dockerfile=recipient

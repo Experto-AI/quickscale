@@ -62,6 +62,9 @@ from _beta_migration_smoke_cases import (
     _case_project_apps as _case_project_apps,
 )
 from _beta_migration_smoke_cases import (
+    _case_supported_source_versions as _case_supported_source_versions,
+)
+from _beta_migration_smoke_cases import (
     _write_project_app as _write_project_app,
 )
 from _beta_migration_smoke_support import (
@@ -113,6 +116,10 @@ from _beta_migration_smoke_support import (
     _write_quickscale_yml as _write_quickscale_yml,
 )
 
+from quickscale_devtools.beta_migration.source_versions import (
+    validate_supported_source_versions,
+)
+
 #: Every name the facade re-exports.  Per decisions.md § Split-Facade Seams a
 #: facade re-exports public names only: incidental imported bindings
 #: (``hashlib``, ``json``, ``Path``, ...) stay module attributes but are
@@ -142,6 +149,15 @@ def main() -> int:
             print("  🔍 fresh-first compatibility, provenance, skew, and execution")
             _case_fresh_first(root / "fresh-first", environment, spy_log)
             print("    ✅ fresh-first covered non-mutation, fail-closed skew, and execution")
+            print(
+                "  🔍 declared source-version matrix "
+                f"({', '.join(validate_supported_source_versions())})"
+            )
+            _case_supported_source_versions(root / "source-versions", environment, spy_log)
+            print(
+                "    ✅ every declared source version generated and migrated "
+                "with its prompt version"
+            )
             print("  🔍 iterate regeneration and execution")
             _case_iterate(root / "iterate", environment, spy_log)
             print("    ✅ iterate covered dry-run planning, staged apply, and execution")

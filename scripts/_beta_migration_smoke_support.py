@@ -10,10 +10,13 @@ module.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -25,10 +28,26 @@ from quickscale_core.schema.state_schema import (
     StateManager,
 )
 from quickscale_core.utils.project_identity import resolve_project_identity
+from quickscale_devtools.beta_migration.source_versions import (
+    tag_generated_source_versions,
+    validate_supported_source_versions,
+)
+from quickscale_devtools.handoff_prompt import HANDOFF_PROMPT_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 BETA_MIGRATE = ROOT / "scripts" / "beta_migrate.py"
 SHIM_NAMES = ("docker", "poetry", "pnpm", "pytest", "quickscale")
+_SOURCE_PACKAGE_PATHS = ("quickscale_core/src/quickscale_core", "quickscale_modules")
+_SOURCE_GENERATOR_SNIPPET = (
+    "import json\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "import quickscale_core\n"
+    "from quickscale_core.generator import ProjectGenerator\n"
+    "slug, destination = sys.argv[1:3]\n"
+    "ProjectGenerator(theme='showcase_react').generate(slug, Path(destination))\n"
+    "print(json.dumps({'package': quickscale_core.__file__}))\n"
+)
 
 
 class SmokeError(RuntimeError):
@@ -53,14 +72,8 @@ def _write_quickscale_yml(project: Path, slug: str) -> None:
     )
 
 
-def _generate_project(root: Path, slug: str) -> Path:
-    _require(
-        os.environ.get("QS_SKIP_POETRY_LOCK") == "1",
-        "smoke fixture generation must disable real Poetry lock execution",
-    )
-    project = root / slug
-    ProjectGenerator(theme="showcase_react").generate(slug, project)
-    _write_quickscale_yml(project, slug)
+def _write_project_state(project: Path, slug: str) -> None:
+    """Write the applied state a generated fixture project carries."""
     package = slug.replace("-", "_")
     managed_paths = (
         f"{package}/settings/modules.py",
@@ -81,11 +94,147 @@ def _generate_project(root: Path, slug: str) -> Path:
                     hash=hashlib.sha256((project / relative_path).read_bytes()).hexdigest(),
                 )
                 for relative_path in managed_paths
+                if (project / relative_path).is_file()
             },
         )
     )
     state_manager.flush_empty_consolidated_sections()
+
+
+def _generate_project(root: Path, slug: str) -> Path:
+    _require(
+        os.environ.get("QS_SKIP_POETRY_LOCK") == "1",
+        "smoke fixture generation must disable real Poetry lock execution",
+    )
+    project = root / slug
+    ProjectGenerator(theme="showcase_react").generate(slug, project)
+    _write_quickscale_yml(project, slug)
+    _write_project_state(project, slug)
     return project
+
+
+def _generate_project_from_source_tag(root: Path, slug: str, version: str) -> Path:
+    """
+    Generate a donor from the generator a released QuickScale version shipped.
+
+    The release tree is archived rather than checked out, so the working tree is
+    never mutated.  The archived package must resolve as the executed
+    ``quickscale_core``: a namespace fallback to the installed copy would prove
+    the wrong generator and pass silently.
+    """
+    _require(
+        os.environ.get("QS_SKIP_POETRY_LOCK") == "1",
+        "smoke fixture generation must disable real Poetry lock execution",
+    )
+    tag_ref = f"refs/tags/{version}"
+    tag_check = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", tag_ref],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    _require(
+        tag_check.returncode == 0,
+        f"source version {version} requires the {version} release tag; "
+        "run `git fetch --tags` and retry",
+    )
+
+    archive_root = root / f".source-{version}"
+    archive_root.mkdir(parents=True)
+    archive = subprocess.run(
+        ["git", "archive", "--format=tar", tag_ref, "--", *_SOURCE_PACKAGE_PATHS],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    _require(
+        archive.returncode == 0,
+        f"cannot archive source version {version}: "
+        f"{archive.stderr.decode(errors='replace').strip()}",
+    )
+    with tarfile.open(fileobj=io.BytesIO(archive.stdout), mode="r:") as tar:
+        tar.extractall(archive_root, filter="data")
+
+    package_src = archive_root / "quickscale_core" / "src"
+    manifests_root = package_src / "quickscale_core" / "data" / "manifests"
+    modules_root = archive_root / "quickscale_modules"
+    if modules_root.is_dir():
+        manifests_root.mkdir(parents=True, exist_ok=True)
+        for module_dir in sorted(modules_root.iterdir()):
+            manifest = module_dir / "module.yml"
+            if not manifest.is_file():
+                continue
+            destination = manifests_root / module_dir.name / "module.yml"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(manifest, destination)
+
+    project = root / slug
+    generation_environment = dict(os.environ)
+    generation_environment["QS_SKIP_POETRY_LOCK"] = "1"
+    generation_environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (str(package_src), generation_environment.get("PYTHONPATH", "")) if part
+    )
+    generated = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _SOURCE_GENERATOR_SNIPPET,
+            slug,
+            str(project),
+        ],
+        cwd=archive_root,
+        env=generation_environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
+    )
+    _require(
+        generated.returncode == 0,
+        f"source version {version} could not generate a project:\n"
+        f"stdout:\n{generated.stdout}\nstderr:\n{generated.stderr}",
+    )
+    try:
+        payload = json.loads(generated.stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError) as error:
+        raise SmokeError(
+            f"source version {version} did not report its generator package: {generated.stdout!r}"
+        ) from error
+    reported_package = payload.get("package") if isinstance(payload, dict) else None
+    _require(
+        isinstance(reported_package, str) and reported_package,
+        f"source version {version} did not report its generator package: {generated.stdout!r}",
+    )
+    resolved_package = Path(reported_package).resolve()
+    _require(
+        resolved_package.is_relative_to(archive_root.resolve()),
+        f"source version {version} resolved quickscale_core outside its release "
+        f"archive: {resolved_package}",
+    )
+
+    _write_quickscale_yml(project, slug)
+    _write_project_state(project, slug)
+    return project
+
+
+def _generate_project_at_source_version(root: Path, slug: str, version: str) -> Path:
+    """
+    Generate a donor as the declared source version's generator would.
+
+    The running release uses the checked-out generator so the release being
+    prepared is proven; every earlier declared release comes from its tag.
+    """
+    versions = validate_supported_source_versions()
+    _require(
+        version in versions,
+        f"source version {version} is outside the declared window {versions!r}",
+    )
+    if version in tag_generated_source_versions():
+        return _generate_project_from_source_tag(root, slug, version)
+    return _generate_project(root, slug)
 
 
 def _snapshot_tree(project: Path) -> dict[str, str]:
@@ -362,6 +511,10 @@ def _assert_successful_execution(
     _require(
         "## Remaining work" in prompt_text and "## Hard constraints" in prompt_text,
         f"{label} handoff prompt is missing its remaining-work or constraints section",
+    )
+    _require(
+        f"- Prompt version: {HANDOFF_PROMPT_VERSION}" in prompt_text,
+        f"{label} handoff prompt does not name its format version",
     )
     _require(
         str(recipient) not in prompt_text,
