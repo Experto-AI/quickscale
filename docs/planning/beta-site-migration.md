@@ -413,9 +413,9 @@ environment first, then repeat on production as a separate step.
 
 ### Acceptance
 
-- Public forms belong to the System org. Submit test forms from a private window: a browser
-  logged into `/admin/` resolves the staff member's org and gets 404 on the submit. In the admin,
-  select the System org (`?organization__id__exact=<id>`) to see forms and submissions.
+- Public forms belong to the System org. Submit test forms from a private window and from a
+  browser logged into `/admin/`; both must reach the same System-org form. In the admin, select
+  the System org in the organization filter to see forms and submissions.
 - Confirm delivery from the database, not only the inbox: the notification delivery row reaches
   `delivered`, with `email.sent` and `email.delivered` webhook events.
 - A GitHub CI run that fails in 0 seconds with no jobs is a workflow GitHub rejected; lint it with

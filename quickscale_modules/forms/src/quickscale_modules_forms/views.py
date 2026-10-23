@@ -2,8 +2,8 @@
 
 Single flat route tree (D1/D5). Route-sniffing and per-org scoping
 via URL kwargs are removed.  Public schema/submit endpoints resolve the
-System org (D2) for anonymous requests; superuser admin views use the
-operator path (``all_objects``) for cross-tenant visibility.
+System org (D2) for every request, signed in or not; superuser admin views
+use the operator path (``all_objects``) for cross-tenant visibility.
 """
 
 from __future__ import annotations
@@ -64,19 +64,17 @@ logger = logging.getLogger(__name__)
 _SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
-def _resolve_subject_org(request: Request) -> Any:
+def _resolve_subject_org() -> Any:
     """Return the org to scope public form queries to.
 
-    Uses the request's active org (set by ``TenantMiddleware``).  Falls back
-    to the System org (D2) when no org context is available — anonymous
-    visitors and solo-mode authenticated users see System-org public content.
+    Public form access is session-independent: the flat public routes carry
+    no org segment, so every schema and submit request resolves the System
+    org (D2).  A signed-in session's active org — a solo-mode personal org or
+    a SaaS organization selection — must not change which public form a URL
+    names.
     """
-    from quickscale_modules_orgs.current_org import get_current_org
     from quickscale_modules_orgs.models import Organization
 
-    org = get_current_org(request)
-    if org is not None:
-        return org
     return Organization.objects.get_system_org()
 
 
@@ -234,8 +232,8 @@ class FormListPagination(PlainListPagination):
 class FormSchemaAPIView(RetrieveAPIView):
     """Return the public schema for an active form by slug.
 
-    Anonymous requests resolve the System org (D2).  Authenticated requests
-    with an active org scope to that org.
+    Public requests resolve the System org (D2) regardless of the session's
+    active org.
     """
 
     authentication_classes = []
@@ -247,13 +245,13 @@ class FormSchemaAPIView(RetrieveAPIView):
         Uses org_scope() which wraps in transaction.atomic() internally and
         handles SET LOCAL — the middleware no longer holds a request-long
         atomic (Phase 3)."""
-        org = _resolve_subject_org(request)
+        org = _resolve_subject_org()
         with org_scope(org):
             return super().retrieve(request, *args, **kwargs)
 
     def get_object(self) -> Form:
         slug = self.kwargs.get("slug")
-        org = _resolve_subject_org(self.request)
+        org = _resolve_subject_org()
         form = Form.all_objects.filter(
             organization=org, slug=slug, is_active=True
         ).first()
@@ -265,7 +263,8 @@ class FormSchemaAPIView(RetrieveAPIView):
 class FormSubmitAPIView(CreateAPIView):
     """Accept and persist a form submission; honeypot spam check; send notification
 
-    Anonymous requests resolve the System org (D2).
+    Public requests resolve the System org (D2) regardless of the session's
+    active org.
     """
 
     authentication_classes = []
@@ -285,7 +284,7 @@ class FormSubmitAPIView(CreateAPIView):
 
     def _get_form(self) -> Form:
         slug = self.kwargs.get("slug")
-        org = _resolve_subject_org(self.request)
+        org = _resolve_subject_org()
         form = Form.all_objects.filter(
             organization=org, slug=slug, is_active=True
         ).first()
@@ -294,7 +293,7 @@ class FormSubmitAPIView(CreateAPIView):
         return form
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        org = _resolve_subject_org(self.request)
+        org = _resolve_subject_org()
         # Phase 3 CR-P3-006: narrow the atomic/org-context window to DB
         # lookup and write work only.  Side effects (notification, analytics)
         # run AFTER the outer atomic commits so they do not hold a DB

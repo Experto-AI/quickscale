@@ -378,3 +378,15 @@ steps:
       - "Compare and manually adopt the current frontend/package.json and frontend/pnpm-lock.yaml: the engine floor is Node 24.22.1 and the lockfile carries DOMPurify 3.4.17 and Vitest 4.1.12."
       - "Compare and manually adopt the current pyproject.toml dev dependency virtualenv floor (>=21.14.13,<22.0)."
       - "Update the embedded modules once this release's modules are available (`quickscale update --confirm-contract-adoption`) so blog, listings, storage, and orgs carry the Pillow 13 floor, then refresh poetry.lock and pnpm-lock.yaml and re-run the generated project's test suite."
+
+  - id: sa306-generated-ci-frontend-job
+    minimum: "0.89.0"
+    title: "Adopt the generated CI frontend job without its invalid job-level guard"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml: remove the `frontend-lint` job's `if: ${{ hashFiles('frontend/package.json') != '' }}` line, because GitHub only allows `hashFiles()` in step-level expressions and rejects the whole workflow before any job starts. Every fresh `showcase_react` project emits `frontend/package.json`, so the job runs its lint, type-check, and coverage steps unconditionally; a project that removed its frontend deletes the `frontend-lint` job instead."
+
+  - id: sa306-sa308-generated-ci-pins
+    minimum: "0.89.0"
+    title: "Adopt the generated CI with both the unguarded frontend job and the refreshed runtime pins"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml: the frontend-lint job has no job-level `hashFiles` guard, the test matrix runs Python 3.14.9, the PostgreSQL service image is 18.6, and the frontend job runs Node 24.22.1 with pnpm 11.18.0. A project that adopted only the `sa306-generated-ci-frontend-job` step still needs the runtime-pin update, and one that adopted only the `sa308-dependency-runtime-refresh` step still needs the frontend guard removal."

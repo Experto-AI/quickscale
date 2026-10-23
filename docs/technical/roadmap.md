@@ -38,26 +38,25 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA306, SA307, SA308 | Required |
+| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | SA308 | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA306 | Make the generated `ci.yml` start on GitHub and pass on `bap-web` | 1 | — | Required |
-| SA307 | Make System-org public content reachable for logged-in staff in forms and the admin | 3 | — | Required |
 | SA308 | Refresh dependencies with open advisories in QuickScale and `bap-web` | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA306 ──► SA153 (r) ──► SA191d (re-proof ──► production) ──► SA153 (f) ──► SA154
+Track 1: SA153 (r) ──► SA191d (re-proof ──► production) ──► SA153 (f) ──► SA154
 Track 2: SA308
-Track 3: SA307 ──► SA277 (a3) ──► SA277 (a2)
-     critical path: SA306 ∥ SA307 ∥ SA308 ──► SA191d (re-proof) ──► SA191d (production) ──► SA153 (f)
+Track 3: SA277 (a3) ──► SA277 (a2)
+     critical path: SA308 ──► SA191d (re-proof) ──► SA191d (production) ──► SA153 (f)
 ```
 
-Arrows within a track are queue order; the table holds the dependency edges. SA306, SA307, and
-SA308 merge separately but republish together in SA191d (re-proof); nothing reaches production
-before `develop` re-proves on them. Operator publication of 0.89.0 follows SA191d.
+Arrows within a track are queue order; the table holds the dependency edges. SA308 merges
+separately; with SA306 and SA307 landed, all three republish together in SA191d (re-proof), and
+nothing reaches production before `develop` re-proves on them. Operator publication of 0.89.0
+follows SA191d.
 
 **Slices.** Each slice is one implementer session with a fresh context, scoped to its text and
 named surfaces, and ends with a short handoff note committed with the work. A ticket closes when
@@ -72,9 +71,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA306, then SA153 (r) | yes | yes | yes | yes | yes |
+| 1 | SA153 (r) | yes | yes | yes | yes | yes |
 | 2 | SA308 | yes | yes | yes | yes | yes |
-| 3 | SA307, then SA277 (a3) | yes | yes | yes | yes | yes |
+| 3 | SA277 (a3) | yes | yes | yes | yes | yes |
 
 ### Ownership and merge coordination
 
@@ -151,12 +150,7 @@ incident every old variable is exposed: none is carried, and the old PostgreSQL 
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
 defect is fixed in `bap-web`.
 
-- [ ] **SA306 — Make the generated `ci.yml` start on GitHub and pass on `bap-web`.**
-
-  `ci.yml.j2:133` gates `frontend-lint` with a job-level `if: hashFiles(...)`; GitHub rejects the
-  workflow, so every generated project's push fails in 0 seconds with no jobs. Fix the template
-  and add an `actionlint` check over generated workflows (its gate-registry row is Track 2's
-  surface; hand it over at merge). Ships in the joint release (Tier 2-full).
+- [x] **SA306 — Make the generated `ci.yml` start on GitHub and pass on `bap-web`.**
 
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
@@ -167,8 +161,8 @@ defect is fixed in `bap-web`.
   the old PostgreSQL 17 service and the legacy refs exist for rollback.
 
   **Slices:**
-  - [ ] (re-proof) After SA306, SA307, and SA308: republish the changed modules once (joint
-    release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
+  - [ ] (re-proof) After SA308, with SA306 and SA307 landed: republish the changed modules once
+    (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
     green and both dependency audits clean (Tier 2-full).
   - [ ] (production) Repeat `CUTOVER.md` § S4 on `production` (Tier 2-full; one-way). After
     acceptance the operator deletes the develop Resend webhook and the old PostgreSQL 17 service,
@@ -219,12 +213,7 @@ defect is fixed in `bap-web`.
 
 ### Track 3 — tenancy and upgrade path
 
-- [ ] **SA307 — Make System-org public content reachable for logged-in staff in forms and the admin.**
-
-  A staff session resolves its personal org, so on `bap-web` the public form submit returns 404
-  to a logged-in admin and the admin lists hide System-org forms and submissions, with no org
-  selector. Public form resolution must not depend on the session org, and the admin must offer
-  a selector that includes the System org. Ships in the joint release (Tier 2-full).
+- [x] **SA307 — Make System-org public content reachable for logged-in staff in forms and the admin.**
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 

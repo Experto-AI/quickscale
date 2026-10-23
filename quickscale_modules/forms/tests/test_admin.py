@@ -7,10 +7,10 @@ from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.db.models import Count
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
 from django.urls import reverse
 
-from quickscale_modules_forms.admin import FormAdmin
+from quickscale_modules_forms.admin import FormAdmin, OrganizationListFilter
 from quickscale_modules_forms.models import (
     Form,
     FormField,
@@ -802,3 +802,104 @@ class TestFormSubmissionAdminOrganizationReadonly:
         )
         readonly = sub_admin_instance.get_readonly_fields(request, obj=None)
         assert "organization" not in readonly, "organization must be editable on add"
+
+
+# ---------------------------------------------------------------------------
+# System-org reachability through the Django admin organization selector
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestAdminSystemOrgSelector:
+    """The admin must offer an organization selector that includes System."""
+
+    @staticmethod
+    def _admin_client(user):
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def test_submission_admin_declares_org_column_and_filter(self):
+        """Submissions expose the org column and list filter the contract requires."""
+        sub_admin = admin.site._registry[FormSubmission]
+        assert "organization" in sub_admin.list_display
+        assert OrganizationListFilter in sub_admin.list_filter
+
+    def test_form_changelist_offers_system_org_selector(self, superuser, form):
+        """The forms changelist lists the System org in its organization filter."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        client = self._admin_client(superuser)
+
+        response = client.get(reverse("admin:quickscale_forms_form_changelist"))
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert f"organization__id__exact={system_org.pk}" in content, (
+            "the forms changelist must offer the System org in its selector"
+        )
+
+    def test_form_changelist_selects_system_org(self, superuser, form, org_form):
+        """Selecting System in the forms changelist shows only System forms."""
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        client = self._admin_client(superuser)
+
+        response = client.get(
+            reverse("admin:quickscale_forms_form_changelist"),
+            {"organization__id__exact": str(system_org.pk)},
+        )
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert form.title in content
+        assert org_form.title not in content
+        assert client.session[ACTIVE_ORG_SESSION_KEY] == str(system_org.pk)
+
+    def test_submission_changelist_offers_system_org_selector(
+        self, superuser, submission
+    ):
+        """The submission changelist lists the System org in its organization filter."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        client = self._admin_client(superuser)
+
+        response = client.get(
+            reverse("admin:quickscale_forms_formsubmission_changelist")
+        )
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert f"organization__id__exact={system_org.pk}" in content, (
+            "the submission changelist must offer the System org in its selector"
+        )
+
+    def test_submission_changelist_selects_system_org(
+        self, superuser, form, submission, org_form
+    ):
+        """Selecting System in the submission changelist shows only System rows."""
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        with org_scope(org_form.organization):
+            org_submission = FormSubmission.all_objects.create(
+                form=org_form,
+                organization=org_form.organization,
+                ip_address="10.9.9.9",
+            )
+        client = self._admin_client(superuser)
+
+        response = client.get(
+            reverse("admin:quickscale_forms_formsubmission_changelist"),
+            {"organization__id__exact": str(system_org.pk)},
+        )
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert submission.ip_address in content
+        assert org_submission.ip_address not in content

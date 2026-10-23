@@ -92,7 +92,8 @@
         ],
         "theme": "showcase_react"
       }
-    }
+    },
+    "sa306": "Regenerated 2026-10-23 \u2014 the generated .github/workflows/ci.yml frontend-lint job no longer carries the job-level hashFiles(...) guard GitHub rejects before any job starts; the job runs unconditionally because every showcase_react generation emits frontend/package.json (SA306). 1 fixture hash updated per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
@@ -117,7 +118,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "6c330a42c1b4da0ff11284608f56d808b96d4cd0b3a2b1f7ff5c2da985d040eb"
+      "sha256": "09f1e0909aa5bfc5600e2b034848e7a3eaf45f5ca582b8fd4ad9f8ac4a50bf10"
     },
     ".gitignore": {
       "mode": "644",
@@ -687,7 +688,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "eaa1cfdea257daa8e6abc0e0084f592249e07d932abe66353cdd485ef55ee67b"
+      "sha256": "d8e2bdfe753a064d03d91dd450e91e3916856fb87270de70bb0a8086929b6734"
     },
     ".gitignore": {
       "mode": "644",
@@ -1257,7 +1258,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "eaa1cfdea257daa8e6abc0e0084f592249e07d932abe66353cdd485ef55ee67b"
+      "sha256": "d8e2bdfe753a064d03d91dd450e91e3916856fb87270de70bb0a8086929b6734"
     },
     ".gitignore": {
       "mode": "644",
