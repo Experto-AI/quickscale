@@ -1687,13 +1687,61 @@ class TestPublicViewsDbOrgScope:
 # ---------------------------------------------------------------------------
 
 
+def _create_shared_public_forms(org):
+    """Create same-slug active forms under the System org and *org*.
+
+    The duplicate slug proves which organization the public route resolved:
+    the System form wins even when the session's active org owns its own form.
+    """
+    from quickscale_modules_forms.models import Form, FormField
+    from quickscale_modules_orgs.current_org import org_scope
+    from quickscale_modules_orgs.models import Organization
+
+    system_org = Organization.objects.get_system_org()
+    with org_scope(system_org):
+        system_form = Form.all_objects.create(
+            organization=system_org,
+            title="System Contact",
+            slug="shared-contact",
+            success_message="Thanks from System!",
+            is_active=True,
+        )
+        FormField.all_objects.create(
+            form=system_form,
+            organization=system_org,
+            name="full_name",
+            label="Full Name",
+            field_type="text",
+            required=True,
+            order=1,
+        )
+        FormField.all_objects.create(
+            form=system_form,
+            organization=system_org,
+            name="email",
+            label="Email",
+            field_type="email",
+            required=True,
+            order=2,
+        )
+    with org_scope(org):
+        session_form = Form.all_objects.create(
+            organization=org,
+            title="Session Contact",
+            slug="shared-contact",
+            success_message="Thanks from the session org!",
+            is_active=True,
+        )
+    return system_form, session_form
+
+
 @pytest.mark.django_db
 class TestFormCallerParity:
     """Exact POST response-field assertions for the public forms endpoints.
 
     CR-P3-004: verifies that tenant_context() + transaction.atomic() work
-    correctly for both authenticated (session org) and anonymous (System org)
-    requests.
+    correctly for both signed-in and anonymous public requests; both resolve
+    the System org (D2) regardless of the session's active org.
     """
 
     def test_anonymous_submit_returns_exact_201_fields(
@@ -1734,141 +1782,120 @@ class TestFormCallerParity:
         )
 
     @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cache")
-    def test_authenticated_submit_uses_session_org(self, api_client):
-        """Authenticated requests with an active session org scope the
-        submission to that org."""
-        from quickscale_modules_orgs.current_org import org_scope
-        from quickscale_modules_orgs.models import (
-            OrganizationMembership,
-            OrgRole,
-            Organization,
-        )
-        from django.contrib.auth import get_user_model
-        from quickscale_modules_forms.models import Form, FormField, FormSubmission
+    def test_authenticated_schema_resolves_system_org(self, api_client, org):
+        """A session org must not change which public form a slug resolves to.
 
-        user = get_user_model().objects.create_user(
-            username="auth-form-user",
-            email="auth-form@example.com",
-            password="secret123",
-        )
-        org = Organization.objects.create(name="AuthFormOrg", slug="auth-form-org")
-        OrganizationMembership.objects.create(
-            user=user,
-            organization=org,
-            role=OrgRole.MEMBER,
-        )
-
-        # Create a form and field under the authenticated user's org
-        with org_scope(org):
-            org_form = Form.all_objects.create(
-                organization=org,
-                title="Auth Contact",
-                slug="auth-contact",
-                success_message="Thanks!",
-                is_active=True,
-            )
-            FormField.all_objects.create(
-                form=org_form,
-                name="full_name",
-                label="Full Name",
-                field_type="text",
-                required=True,
-                order=1,
-                organization=org,
-            )
-            FormField.all_objects.create(
-                form=org_form,
-                name="email",
-                label="Email",
-                field_type="email",
-                required=True,
-                order=2,
-                organization=org,
-            )
-
-        api_client.force_login(user)
-        session = api_client.session
-        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
-
-        session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
-        session.save()
-
-        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "auth-contact"})
-        data = {"full_name": "Bob", "email": "bob@example.com"}
-
-        response = api_client.post(url, data=data, format="json")
-
-        assert response.status_code == 201
-        with org_scope(org):
-            sub = FormSubmission.all_objects.filter(form=org_form).latest(
-                "submitted_at"
-            )
-        assert sub.organization == org, (
-            "Authenticated submission must be scoped to the session org"
-        )
-
-    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cache")
-    def test_authenticated_schema_returns_org_scoped_form(self, api_client):
-        """Authenticated requests get forms scoped to their session org.
-
-        Creates the test form under the target org from the start instead
-        of reassigning the fixture form's org (which composite FKs
-        prevent when child FormField rows already reference the old org).
+        Both orgs own an active form named ``shared-contact``; the signed-in
+        member selects *org* in the session, yet the public route returns the
+        System form.
         """
-        from quickscale_modules_forms.models import Form, FormField
-        from quickscale_modules_orgs.current_org import org_scope
-        from quickscale_modules_orgs.models import (
-            OrganizationMembership,
-            OrgRole,
-            Organization,
-        )
         from django.contrib.auth import get_user_model
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.models import OrganizationMembership, OrgRole
 
         user = get_user_model().objects.create_user(
             username="auth-schema-user",
             email="auth-schema@example.com",
             password="secret123",
         )
-        org = Organization.objects.create(name="SchemaOrg", slug="schema-org")
         OrganizationMembership.objects.create(
             user=user,
             organization=org,
             role=OrgRole.MEMBER,
         )
-
-        # Create form under the target org directly (no reassignment needed).
-        with org_scope(org):
-            new_form = Form.all_objects.create(
-                organization=org,
-                title="Org Contact",
-                slug="org-specific-form",
-                success_message="Thanks!",
-                is_active=True,
-            )
-            FormField.all_objects.create(
-                form=new_form,
-                name="full_name",
-                label="Full Name",
-                field_type="text",
-                required=True,
-                order=1,
-                organization=org,
-            )
+        system_form, session_form = _create_shared_public_forms(org)
 
         api_client.force_login(user)
         session = api_client.session
-        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
-
         session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
         session.save()
 
-        url = reverse(
-            "quickscale_forms:form_schema", kwargs={"slug": "org-specific-form"}
+        response = api_client.get(
+            reverse("quickscale_forms:form_schema", kwargs={"slug": "shared-contact"})
         )
-        response = api_client.get(url)
 
         assert response.status_code == 200
-        assert response.data["slug"] == "org-specific-form"
+        assert response.data["title"] == system_form.title
+        assert response.data["title"] != session_form.title
+
+    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cache")
+    def test_authenticated_submit_resolves_system_org(self, api_client, org):
+        """A session org must not redirect a public submission to that org.
+
+        Both orgs own an active form named ``shared-contact``; the signed-in
+        member selects *org* in the session, yet the submission persists under
+        the System form and the session-org form stays empty.
+        """
+        from django.contrib.auth import get_user_model
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import OrganizationMembership, OrgRole
+
+        user = get_user_model().objects.create_user(
+            username="auth-submit-user",
+            email="auth-submit@example.com",
+            password="secret123",
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.MEMBER,
+        )
+        system_form, session_form = _create_shared_public_forms(org)
+
+        api_client.force_login(user)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
+        session.save()
+
+        response = api_client.post(
+            reverse("quickscale_forms:form_submit", kwargs={"slug": "shared-contact"}),
+            data={"full_name": "Bob", "email": "bob@example.com"},
+            format="json",
+        )
+
+        assert response.status_code == 201
+        with org_scope(system_form.organization):
+            system_submission = FormSubmission.all_objects.get(form=system_form)
+        assert system_submission.organization_id == system_form.organization_id
+        with org_scope(session_form.organization):
+            assert not FormSubmission.all_objects.filter(form=session_form).exists()
+
+    @override_settings(QUICKSCALE_ORGS_MODE="solo")
+    def test_solo_staff_session_resolves_system_org(
+        self, api_client, form, form_field, email_field, staff_user
+    ):
+        """A solo-mode staff personal org must not shadow the System form.
+
+        This is the bap-web shape: the signed-in admin's session resolves a
+        personal org through ``TenantMiddleware``, while the public form lives
+        in the System org.
+        """
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        api_client.force_login(staff_user)
+
+        schema_response = api_client.get(
+            reverse("quickscale_forms:form_schema", kwargs={"slug": "test-contact"})
+        )
+        assert schema_response.status_code == 200
+
+        submit_response = api_client.post(
+            reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"}),
+            data={"full_name": "Alice", "email": "alice@example.com"},
+            format="json",
+        )
+        assert submit_response.status_code == 201
+
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.get(form=form)
+        assert submission.organization_id == form.organization_id
+
+        assert Organization.objects.filter(
+            quickscale_orgs_memberships__user=staff_user,
+            is_personal=True,
+        ).exists(), "solo middleware must have resolved a personal org for the session"
 
     def test_anonymous_submit_preserves_redirect_url_when_set(
         self, api_client, form, form_field, email_field

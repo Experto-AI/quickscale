@@ -99,6 +99,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     the split commit recorded in `.quickscale/state.yml`, stops with the changed paths before
     pulling, and lets `--allow-local-changes` override; `quickscale status` reports the same drift,
     and an existing `quickscale-core` wheel path is left unchanged.
+  - **System-org public forms stay reachable for signed-in staff.** Public form schema and submit
+    requests always resolve the System org regardless of the session's active org, and the forms
+    submission admin exposes an organization column and filter so operators can select System.
   - **Generated CI starts on GitHub.** The generated `ci.yml` no longer gates its `frontend-lint`
     job with a `hashFiles` expression GitHub rejects at job scope, so the workflow starts and the
     frontend lint, type-check, and coverage steps run.
