@@ -125,6 +125,8 @@ defect is fixed in `bap-web`.
   - [ ] (re-proof) Republish the changed modules once
     (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
     green and both dependency audits clean apart from the recorded dev-only exception (Tier 2-full).
+    Modules are republished on `0.89.0` and `bap-web` is updated and validated locally; the
+    `develop` push, hosted CI, and acceptance remain operator gates.
   - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
