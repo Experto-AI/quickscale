@@ -41,12 +41,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 1 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
+| SA306 | Make the generated `ci.yml` start on GitHub and pass on `bap-web` | 1 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191d (build ──► swap ──► develop ──► production) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory)
+Track 1: SA191d (build ──► swap ──► develop ──► production) ∥ SA153 (r) ──► SA153 (f) ──► SA154 (inventory) ∥ SA306
 Track 3: SA277 (a3) ──► SA277 (a2, after SA191d)
      release path:  SA191d ──► operator publish 0.89.0
      critical path: SA191d ──► SA153 (f)
@@ -69,7 +70,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191d (develop); SA153 (r) | yes | no | yes | no | yes |
+| 1 | SA191d (production); SA153 (r); SA306 | yes | no | yes | no | yes |
 | 2 | — | yes | yes | yes | yes | no |
 | 3 | SA277 (a3) | yes | no | yes | no | no |
 
@@ -163,7 +164,7 @@ submissions. Operator decisions: sender, reply-to, and notification address
 `info@buenosairesproperties.com`; analytics stays on with `POSTHOG_API_KEY`, because the shipped
 apply rule refuses switching `analytics` off while `forms` requires it; the `develop` test
 submissions are not carried. The (build) dump is `~/bap-cutover/new-2026-10-22.dump`.
-`railway ssh` has an operator SSH key; exports otherwise read the database directly
+`railway ssh` needs an operator SSH key (re-registered 2026-10-23 after the incident reset); exports otherwise read the database directly
 (`DATABASE_PUBLIC_URL` of the PostgreSQL service). Secrets staged in `~/bap-cutover/` (mode
 600): `resend-api-key`, `posthog-key`, `resend-webhook-secret-develop`, and
 `resend-webhook-secret-production`; the last three were never stored in Railway.
@@ -197,29 +198,27 @@ and update); a project defect is fixed in `bap-web`, project-specific behavior i
   **Slices:**
   - [x] (build) Local database build.
   - [x] (swap) Repository swap.
-  - [ ] (develop) Rehearsal on Railway `develop` (Tier 2-full). Preconditions, each a stop
-    condition: Railway's status page shows builds enabled for the workspace's plan; the operator
-    confirms the Resend key was rotated (`~/bap-cutover/resend-api-key` is newer than
-    `old-variables.json` and differs from its `EMAIL_HOST_PASSWORD`, compared without printing)
-    and the old key deleted in Resend; the operator confirms the service's GitHub source still
-    shows `VictorRocco/BAP-web` (reconnected if Railway's credential reset dropped it) and the
-    GitHub security log shows no anomalous access. Then add a PostgreSQL 18
-    service and restore the (build) dump into it; set the variables (new `SECRET_KEY`, `DEBUG=False`,
-    `DJANGO_SETTINGS_MODULE=bap_web.settings.production`, `ALLOWED_HOSTS`, `DATABASE_URL` to the
-    new service, the runtime-role trio, `RESEND_API_KEY`,
-    `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET`, `POSTHOG_API_KEY`; remove `EMAIL_*` and
-    `DJANGO_SUPERUSER_*`);
-    force-push `main` to `develop`; acceptance as above on `bap-web-develop.up.railway.app`,
-    including a delivered email and the Resend webhook. Webhook secrets are per environment
-    (`resend-webhook-secret-develop` here). Record every deviation in `CUTOVER.md`.
-  - [ ] (production) Switch on Railway `production` (Tier 2-full; the one-way step stands alone): repeat (develop) in
-    `production` with a fresh restore and `resend-webhook-secret-production`, force-push `main`
-    to `main`, and pass the acceptance on the domain. After it passes, the operator deletes the
-    develop Resend webhook (Resend sends every account event to every endpoint, and unmatched
-    events fail on the other site). Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17
-    service, restore the variables from `~/bap-cutover/old-variables.json` (their old Resend key
-    is revoked, so the old site sends no mail until it gets the rotated key), and deploy
-    `legacy-main`.
+  - [x] (develop) Rehearsal on Railway `develop` (`bap-web` `CUTOVER.md` § S3 record).
+  - [ ] (production) Switch on Railway `production` (Tier 2-full; the one-way step stands alone),
+    following `CUTOVER.md` § S4 as rewritten by (develop): automatic deploys off and an SSH key
+    registered first; restore inside the new service over `railway ssh` (no TCP proxy); delete
+    `DJANGO_SUPERUSER_*`, `EMAIL_*`, and `DEFAULT_FROM_EMAIL` before the new code first boots
+    (`start.sh` creates a superuser from them); `railway variable` flags after the subcommand;
+    `resend-webhook-secret-production`; force-push `main` to `main` with the lease on `782b11c`;
+    acceptance on the domain, with the browser check from a private window (a logged-in admin
+    gets 404 on public forms). After it passes, the operator deletes the develop Resend webhook,
+    the old PostgreSQL 17 service, and renames the new service and volume to `Postgres` /
+    `postgres-volume`. Rollback: repoint `DATABASE_URL` to the old PostgreSQL 17 service, restore
+    the variables from `~/bap-cutover/old-variables.json` (their Resend key is revoked), and
+    deploy `legacy-main`.
+
+- [ ] **SA306 — Make the generated `ci.yml` start on GitHub and pass on `bap-web`.**
+
+  `ci.yml.j2:133` gates `frontend-lint` with a job-level `if: hashFiles(...)`; GitHub rejects the
+  workflow, so every generated project's push shows a 0-second failure with no jobs (seen on
+  `bap-web` `develop`, run 39920079023). Fix the template (step-level guard or an always-run job),
+  add an `actionlint` check over the generated workflows, ship through the release re-entry loop,
+  update `bap-web`, and iterate until its CI is green on `develop` (Tier 2-full).
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
