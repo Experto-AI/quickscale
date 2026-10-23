@@ -24,6 +24,33 @@ class FormFieldInline(admin.TabularInline):
     fields = ["field_type", "label", "name", "required", "order", "is_active"]
 
 
+class OrganizationListFilter(admin.SimpleListFilter):
+    """Organization selector that also renders when System is the only org.
+
+    Django's related-field filter hides itself unless the related model has
+    more than one row.  A fresh project has only the System org, which is
+    exactly the public-content owner an operator needs to select, so list the
+    organizations explicitly.  The parameter name is the one
+    ``TenantModelAdmin`` already resolves into its org-scoped queryset.
+    """
+
+    title = "organization"
+    parameter_name = "organization__id__exact"
+
+    def lookups(self, request: HttpRequest, model_admin: Any) -> list[tuple[str, str]]:
+        from quickscale_modules_orgs.models import Organization
+
+        return [
+            (str(organization.pk), organization.name)
+            for organization in Organization.objects.order_by("name")
+        ]
+
+    def queryset(self, request: HttpRequest, queryset: QuerySet) -> QuerySet:
+        # TenantModelAdmin already resolves this request's parameter into its
+        # org-scoped queryset; filtering again would duplicate that lookup.
+        return queryset
+
+
 @admin.register(Form)
 class FormAdmin(TenantModelAdmin):
     """Admin interface for managing form definitions"""
@@ -36,7 +63,7 @@ class FormAdmin(TenantModelAdmin):
         "submission_count",
         "created_at",
     ]
-    list_filter = ["organization", "is_active", "created_at"]
+    list_filter = [OrganizationListFilter, "is_active", "created_at"]
     search_fields = ["title", "slug"]
     prepopulated_fields = {"slug": ("title",)}
     readonly_fields = ["created_at", "updated_at", "created_by"]
@@ -127,8 +154,16 @@ class FormFieldValueInline(admin.TabularInline):
 class FormSubmissionAdmin(TenantModelAdmin):
     """Admin interface for reviewing and managing form submissions"""
 
-    list_display = ["form", "status", "is_spam", "submitted_at", "ip_address"]
-    list_filter = ["status", "is_spam", "form", "submitted_at"]
+    list_display = [
+        "form",
+        "organization",
+        "status",
+        "is_spam",
+        "submitted_at",
+        "ip_address",
+    ]
+    list_filter = [OrganizationListFilter, "status", "is_spam", "form", "submitted_at"]
+    list_select_related = ["form", "organization"]
     search_fields = ["values__value", "ip_address"]
     readonly_fields = ["form", "ip_address", "user_agent", "submitted_at"]
 
