@@ -36,19 +36,18 @@ required; preparation ships separately.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 2 | SA309 | Required |
+| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 2 | — | Required |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA309 | Clear `bap-web`'s pre-existing suite reds before the cutover re-proof | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA153 (r → h → j) ──► [SA191d (production)] ──► SA153 (f) ──► SA154
-Track 2: SA309 ──► SA191d (re-proof → production → retire)
+Track 2: SA191d (re-proof → production → retire)
 Track 3: SA277 (a3) ──► SA277 (a2)
-     critical path: SA309 ──► SA191d (re-proof → production → retire) ──► SA153 (f)
+     critical path: SA191d (re-proof → production → retire) ──► SA153 (f)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
@@ -65,11 +64,11 @@ migration. SA153's own tables live in the project-owned extension as `0002+` mig
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA153 (r) | yes | no: SA191d (production) for (f) | yes: (r/h/j) |
-| 2 | SA309 | yes | no: SA191d operator gates | yes: SA309 |
+| 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof) |
 | 3 | SA277 (a3) | yes | no: SA191d (production) for (a2) | yes: (a3) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f) (upstream only); ship
-(r/h/j) meanwhile. Track 2: SA309 (work), then the operator's SA191d publication,
+(r/h/j) meanwhile. Track 2: the operator's SA191d publication,
 production-switch and retirement approvals. Track 3: SA191d
 (production) clears (a2) (upstream only); ship (a3) first.
 
@@ -77,14 +76,14 @@ production-switch and retirement approvals. Track 3: SA191d
 
 - Track 1: project-owned property extension, React pages and managed seam hooks, crawler views
   and journey checks.
-- Track 2: `bap-web` suite reds (SA309) and cutover (SA191d), with joint publication and
+- Track 2: `bap-web` cutover (SA191d), with joint publication and
   deployment; dependency manifests, locks and advisory disposition.
 - Track 3: `beta_migration/`, supported-version fixtures, versioned upgrade prompt, and upgrade
   decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
   `decisions.md`, `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
-(`App.test.tsx`, `AppRoutes.test.tsx`; SA309 fixes them, SA153 adds pages).
+(`App.test.tsx`, `AppRoutes.test.tsx`; SA153 adds pages).
   Reconcile after each merge and run the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -123,7 +122,7 @@ defect is fixed in `bap-web`.
   requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) After SA309: republish the changed modules once
+  - [ ] (re-proof) Republish the changed modules once
     (joint release), update `bap-web`, push to `develop`, and re-pass the acceptance there with CI
     green and both dependency audits clean apart from the recorded dev-only exception (Tier 2-full).
   - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
@@ -164,13 +163,7 @@ defect is fixed in `bap-web`.
   only for a concrete consumer, with bounded acceptance, dependencies and a track. Otherwise
   drop the item. Tenant schema changes use incremental migrations on the frozen history.
 
-- [ ] **SA309 — Clear `bap-web`'s pre-existing suite reds.**
-
-  Base `34e92c7` already fails its suites: 50 backend tests pass at 79.22% coverage under the
-  90% gate, and 22 frontend starter-UI tests fail in `App.test.tsx`, `AppRoutes.test.tsx`, and
-  `RootDispatch.test.tsx`; the dependency refresh kept that baseline. Clear the reds so SA191d
-  (re-proof) can pass with CI green, without changing the dependency floors (Tier 2-full).
-  Handoff: `bap-web/docs/sa308-dependency-refresh.md`.
+- [x] **SA309 — Clear `bap-web`'s pre-existing suite reds.**
 
 ### Track 3 — upgrade path
 
