@@ -145,6 +145,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     managed-file hashes, and adopted contract steps to `.quickscale/state.yml`; `quickscale remove`
     rejects traversal names, `apply --force` stages and swaps a non-empty target, and
     `--existing-recipient` refuses uncommitted tracked files.
+  - **Module updates verify the sealed release.** `quickscale update` resolves each module's
+    `splits/<module>-module/<version>` tag before pulling, refuses a split branch whose tip no
+    longer carries the seal's tree, and refreshes `poetry.lock` once for the whole updated set;
+    `make check-module-seals` also fails when a published split branch moved away from its seal.
   - **Generated tenant isolation runs under the restricted role.** A project with `orgs` gets a
     `tenant-isolation` CI lane that creates a `NOSUPERUSER/NOBYPASSRLS` test role and runs a
     two-organization isolation template; production settings refuse the

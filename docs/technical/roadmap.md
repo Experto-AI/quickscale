@@ -92,7 +92,7 @@ before SA319.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA319 | yes | no: SA191d (production) for SA277 | yes: SA319 |
+| 3 | SA319 (b) | yes | no: SA191d (production) for SA277 | yes: SA319 (a) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -329,7 +329,7 @@ update; the cutover does not wait for them.
   on SA317's single state owner so the journal is not a third writer.
 
   **Slices:**
-  - [ ] (a) Update resolves and verifies the sealed `splits/<module>/<version>` tag before the
+  - [x] (a) Update resolves and verifies the sealed `splits/<module>/<version>` tag before the
     first pull and refreshes `poetry.lock`; a release gate asserts each split branch tip and sealed
     tag share a tree (Tier 2-full).
   - [ ] (b) After (a), an update journal commits the module set once with one state write; a test

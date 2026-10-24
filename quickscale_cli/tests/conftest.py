@@ -157,6 +157,34 @@ def _skip_generator_poetry_lock(request: pytest.FixtureRequest) -> None:
         os.environ["QS_SKIP_POETRY_LOCK"] = "1"
 
 
+@pytest.fixture(autouse=True)
+def _stub_module_update_seal_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep update suites hermetic and focused on their own mechanism.
+
+    Sealed-tag resolution, the whole-set preflight, and the ``poetry.lock``
+    refresh have focused coverage in ``test_update_seal.py``.  Other update
+    suites would otherwise reach the network for a tag lookup, or run a real
+    ``poetry lock``.  The update command still resolves each module's branch
+    ref through ``resolve_remote_ref``, which those suites patch explicitly.
+    """
+    monkeypatch.setattr(
+        "quickscale_core.utils.git_tags.resolve_remote_tag",
+        lambda remote, tag: "a" * 40,
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands._module_update_seal._remote_trees",
+        lambda remote, first_commit, second_commit: ("sealed-tree", "sealed-tree"),
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands._module_update_seal._preflight_update_seals",
+        lambda state, remote, version: ({}, None),
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands._module_update_io._refresh_update_lockfile",
+        lambda project_path: True,
+    )
+
+
 @pytest.fixture
 def cli_runner() -> CliRunner:
     """Provide a Click CLI test runner for testing CLI commands."""

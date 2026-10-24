@@ -170,7 +170,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 
 **Module Management Commands:**
 - `quickscale status` - Show project and module status.
-- `quickscale update` - Update installed modules; refuse local edits under `modules/<name>/` and unverifiable recorded trees unless `--allow-local-changes` is passed.
+- `quickscale update` - Update installed modules; refuse local edits under `modules/<name>/` and unverifiable recorded trees unless `--allow-local-changes` is passed. It verifies each module's sealed release tag and split-branch tree before the first pull and refreshes `poetry.lock` after the set's dependency entries change.
 - `quickscale remove <module>` - Remove an embedded module.
 - `quickscale push --module <name>` - Contribute module improvements.
 

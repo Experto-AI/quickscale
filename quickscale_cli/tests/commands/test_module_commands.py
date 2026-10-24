@@ -1832,8 +1832,9 @@ class TestUpdateSingleModule:
             version: str,
             *,
             commit_sha: str | None = None,
+            branch: str | None = None,
         ) -> None:
-            del module_name, commit_sha
+            del module_name, commit_sha, branch
             (project_path / ".quickscale" / "state.yml").write_text(
                 original_state.replace('version: "0.71.0"', f'version: "{version}"', 1)
             )
@@ -1858,7 +1859,7 @@ class TestUpdateSingleModule:
             patch(
                 "quickscale_cli.commands._module_update_io._commit_module_update",
                 side_effect=Exception("commit failed after staging"),
-            ),
+            ) as mock_commit,
         ):
             result = _update_single_module(
                 "auth",
@@ -1868,6 +1869,7 @@ class TestUpdateSingleModule:
             )
 
         assert result is False
+        mock_commit.assert_called_once()
         assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
         assert (
             legacy_config_path.read_text()
@@ -3731,7 +3733,9 @@ class TestAF5RecoveryLedgerRegression:
 
     def test_load_update_recovery_handles_af6_era_ledger(self, tmp_path: Path) -> None:
         """An AF6-era ledger (without resume_checkpoint) must load cleanly."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
+        from quickscale_cli.commands._module_update_guard import (
+            _load_update_recovery_ledger,
+        )
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3761,7 +3765,9 @@ class TestAF5RecoveryLedgerRegression:
 
     def test_load_update_recovery_handles_af5_era_ledger(self, tmp_path: Path) -> None:
         """An AF5-era ledger WITH resume_checkpoint must load cleanly."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
+        from quickscale_cli.commands._module_update_guard import (
+            _load_update_recovery_ledger,
+        )
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3796,7 +3802,9 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """Malformed recovery content must fail hard as RuntimeError."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
+        from quickscale_cli.commands._module_update_guard import (
+            _load_update_recovery_ledger,
+        )
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3810,7 +3818,9 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """A malformed resume_checkpoint must fail hard as RuntimeError."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
+        from quickscale_cli.commands._module_update_guard import (
+            _load_update_recovery_ledger,
+        )
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3842,7 +3852,9 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """Absent recovery file must return None."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
+        from quickscale_cli.commands._module_update_guard import (
+            _load_update_recovery_ledger,
+        )
 
         result = _load_update_recovery_ledger(tmp_path)
         assert result is None
@@ -3851,7 +3863,9 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """A pending apply must finish before any module update starts."""
-        from quickscale_cli.commands._module_update import _check_local_pre_pull_guard
+        from quickscale_cli.commands._module_update_guard import (
+            _check_local_pre_pull_guard,
+        )
         from quickscale_core.schema.state_schema import (
             ModuleState,
             ProjectState,

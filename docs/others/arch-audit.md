@@ -69,7 +69,7 @@ test harness now runs under the RLS runtime role.
 | `quickscale_cli apply` → generator emission mapping (144 emitted paths) | call / build | `get_generator_emission_mapping` | template set is source of truth; closed-world test |
 | apply → managed files (`settings/modules.py`, `urls_modules.py`, seam `.d.ts`/`.keys.ts`, CI env, operations page, `quickscale_managed/*`) | shared state / hashes | `project_state_hashes.py` + module manifests | every managed output hash-tracked (SA316) |
 | apply → `.quickscale/state.yml` (applied state) and `.quickscale/apply-recovery.yml` (resume pointer) | shared state | `state.yml` | one applied-state owner; the ledger records progress only |
-| `quickscale update` → split branch head → `git subtree pull` → `pyproject.toml` | call / VCS | CLI + remote branch | branch is mutable; lockfile not refreshed |
+| `quickscale update` → split branch head → `git subtree pull` → `pyproject.toml` | call / VCS | CLI + remote branch | branch tree proven equal to the seal before pull; lock refreshed once; per-module commits remain |
 | generated boot → `start.sh` → superuser migrate → runtime role → gunicorn | call / privilege | `start.sh` + runtime settings | migrations at every boot; no pre-deploy/rollback |
 | generated request → `ClientIdentityMiddleware` → RLS GUC → module views | call / trust boundary | orgs + runtime settings | RLS only under runtime role; generated tests run under it |
 | `pg_dump` → local/remote artifact + sidecars (media inventory) → restore | shared state / external effect | DR engine | DB-only freeze; media/env live at restore |
@@ -134,7 +134,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Contract change carries a new step id | `scripts/check_project_contract_vintage.py` over emitted templates, the generator mapping, and public runtime modules | gated | **strengthened** (SA316: runtime surface watched) |
 | Project adopted declared steps | operator confirmation; `contract_vintage.py` bulk union | convention | steps 53 → 61 |
 | Module version lockstep | manifest assertion + `version_tool.sh` | gated | 40 of 43 version-bearing files checked |
-| Embedded module content identity | tag at embed; provenance drift guard at update | gated | stable; update ref is a branch tip |
+| Embedded module content identity | tag at embed; sealed-tag tree verified at update; provenance drift guard | gated | **strengthened** (SA319 (a): update proves the branch tip tree equals the seal) |
 | Module migrations frozen | migration-content identity in update/restore | gated | stable |
 | Tenant RLS on shipped tables | FORCE RLS migrations, boot guard, restricted-role integration gate | structural in modules | 22/22 enrolled |
 | Generated-project tenant isolation | two-organization isolation lane under the restricted runtime role | gated | **closed** (SA318) |
@@ -151,7 +151,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Rank | ID | Title | Horizon | Conf. | Size | Rev. | Problem |
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. |
-| 2 | `module-upgrade-no-reconciler` | Module update is a mutable multi-commit operation | now | High | M | two-way | Update follows a branch tip and mutates modules without a journal or lockfile refresh. |
+| 2 | `module-upgrade-no-reconciler` | Module update is a mutable multi-commit operation | now | High | M | two-way | Update proves the seal and refreshes the lock, but still mutates modules in separate commits with no journal or crash recovery. |
 | 3 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
 | 4 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
 
@@ -175,9 +175,11 @@ items:
      lenses: [IV, VII, X, XIX], horizon: now, confidence: High, size: M,
      reversibility: two-way door, depends_on: [], amplifies: [],
      anchors: [quickscale_cli/src/quickscale_cli/commands/_module_update.py,
+               quickscale_cli/src/quickscale_cli/commands/_module_update_seal.py,
+               quickscale_cli/src/quickscale_cli/commands/_module_update_io.py,
                quickscale_cli/src/quickscale_cli/commands/_module_embed.py,
                quickscale_core/src/quickscale_core/utils/git_repo.py],
-     first_seen: 2026-10-23, last_verified: 2026-10-23}
+     first_seen: 2026-10-23, last_verified: 2026-10-24}
   - {id: generated-deploy-topology-unmodeled, status: open, rank: 3,
      title: "Generated production topology is prose, not an artifact",
      lenses: [IV, VI, XVI, XIX], horizon: now, confidence: High, size: M,
@@ -308,80 +310,74 @@ items:
   remove resource contracts from user-owned pages. SA153 (j, Track 1) owns the portal's
   managed-hook boundary. Completing either alone is not closure.
 
-### Finding 2: Module update is a mutable multi-commit operation
+### Finding 2: Module update commits a set without a journal
 
 - **ID:** `module-upgrade-no-reconciler`
 - **Rank rationale:** High × High, steep. Every release and every project executes this path; twelve
-  modules mean at least twelve state writes per update; SA308 already forces dependency-floor
-  refreshes. A branch move or an interrupted update is unreconcilable without git surgery.
-- **Horizon & trigger:** `now` — the next `quickscale update`, especially after a split branch has
-  moved independently of its sealed tag.
-- **Confidence:** High — the tag/branch asymmetry, per-module commits, missing lock refresh, and
-  absent journal were read end to end.
+  modules mean at least twelve state writes per update. The seal tree is now proven and the lock
+  refreshed, but an interrupted update is still unreconcilable without git surgery: each pull commits
+  independently and no journal records the set.
+- **Horizon & trigger:** `now` — the next interrupted `quickscale update`, or a crash between module
+  pulls.
+- **Confidence:** High — per-module commits, the absent journal, and the crash window were read end
+  to end; the sealed-tag, branch-tree, and lockfile gaps were re-read as resolved.
 - **Context dependence:** `wrong-for-now` (dimension: project count and release cadence). Lives in
   realities (A) and (B).
-- **Problem:** Embed pins an immutable split tag, but update resolves the mutable split-branch tip;
-  it then mutates N modules and state in separate commits with no journal and does not refresh
-  `poetry.lock`, so a crash or branch move leaves a half-updated project that the next command
-  cannot reconcile.
+- **Problem:** Update verifies the sealed tag and refreshes `poetry.lock`, but it still mutates N
+  modules and state in separate commits with no journal, so a crash between pulls leaves a
+  half-updated project that the next command cannot reconcile without git surgery. State is written
+  once per module rather than once for the set.
 - **Evidence:**
-  - Embed: `_module_embed.py:323-343` selects `splits/<module>/<version>`, checks the tag exists, and
-    peels it. Update: `_module_update.py:312` calls `resolve_remote_ref`; `git_repo.py:104-105` runs
-    `git ls-remote --heads`. No tag check exists in the update path.
-  - Per-module mutation: `_module_update.py:528-541` stops on the first failure; each module is
-    committed independently (`_module_update_io.py:449-498`); rollback only runs in the handled
-    exception path and warns if it fails (`_module_update.py:644-657`). There is no update journal;
-    the only ledger reference is a read-only apply-recovery guard (`_module_update.py:84-107`).
-  - State is loaded before the lock (`_module_update.py:748-768`), then `_run_update_under_lock`
-    acquires it (`:604-614`); a concurrent state change between read and lock is possible.
-  - Dependency graph: update repins `pyproject.toml` (`_module_update.py:402-419`) but never runs
-    `poetry lock`/`poetry install` (embed does, `_module_embed.py:430-468`). The update snapshot
-    includes module tree, config, state, and pyproject, but not `poetry.lock`
-    (`_module_update_io.py:100-105`), so rollback cannot restore it.
+  - Resolved in SA319 (a): update resolves `splits/<module>-module/<version>` and proves the canonical
+    branch tip's tree equals the seal's before the first pull (`_module_update_seal.py`); a missing
+    tag or moved branch aborts without mutation. The release seal check compares the published branch
+    tip with the tag (`scripts/check_module_seals.py`).
+  - Resolved in SA319 (a): the update refreshes `poetry.lock` once after the whole set's dependency
+    entries are final, snapshots the lockfile, and restores or removes it on rollback
+    (`_module_update_io.py`).
+  - Per-module mutation: `_module_update.py` stops on the first failure; each module is committed
+    independently (`_module_update_io.py`); rollback runs only in the handled exception path and
+    warns if it fails. There is no update journal; the only ledger reference is a read-only
+    apply-recovery guard (`_module_update_guard.py`).
+  - State is loaded before the lock (`_module_update.py` `update()`), then `_run_update_under_lock`
+    acquires it; a concurrent state change between read and lock is possible.
   - Legacy copy: `_sync_state_module_version` writes `state.yml` and refreshes `embedded_at` every
-    run (`_module_shared.py:255-281`); `config.update_module_version` has no non-test caller, so
-    `.quickscale/config.yml` never follows.
-- **Counter-evidence:** embed is genuinely tag-pinned; the provenance guard detects local edits; the
+    run (`_module_shared.py`); `config.update_module_version` has no non-test caller, so
+    `.quickscale/config.yml` never follows (the drift warning now says so).
+- **Counter-evidence:** the seal preflight is verified for the whole set before the first pull; the
   migration-content freeze refuses rewritten migrations; maintainer split publication is hardened
-  with lease/fast-forward/tree identity. Searched for a tag check in update, an update journal, a
-  `poetry lock` call, and a non-test `update_module_version` caller — found none. Rollback is real
-  for handled exceptions; it is not a crash recovery mechanism.
+  with lease/fast-forward/tree identity; the lock refresh and rollback are real for handled
+  exceptions. Searched for an update journal, a single module-set commit, and a crash-resume test —
+  found none. Rollback is real for handled exceptions; it is not a crash recovery mechanism.
 - **Why it compounds:** growth variable = **live projects × installed modules × releases**. Every
-  update produces N commits and N state writes; each new module adds a pull, a dependency rewrite,
-  and a legacy-config copy. Update reads a mutable branch, so `(version, commit_sha)` is not a
-  content identity; a moved branch makes two projects with the same recorded version run different
-  code. A crash between pulls leaves a mixed module set; a missing lock refresh can leave the next
-  generated Docker/CI `poetry install` inconsistent.
-- **Detection signal:** `poetry install` failing in Docker/CI after a successful update; `quickscale
-  status` reporting local edits immediately after an update; a project needing `git reset` after an
-  interrupted update; two projects with the same module version producing different page behavior.
-- **Steelman:** update-from-latest is deliberate (`user_manual.md` describes update from the split
-  branch); per-module rollback covers handled failures; a single project can be re-applied or
-  regenerated. Holds while branches move only at releases, `apply` is always run after `update`, and
-  updates never crash mid-set. The branch tip is still not proven equal to the sealed tag, and the
-  lock is still not refreshed.
+  update produces N commits and N state writes; each new module adds a pull and a state write. A
+  crash between pulls leaves a mixed module set, and the next command has no recorded set to resume
+  or roll back to.
+- **Detection signal:** a project needing `git reset` after an interrupted update; two projects with
+  the same module version producing different page behavior; a mixed module set after a killed
+  update.
+- **Steelman:** update-from-latest is deliberate; per-module rollback covers handled failures; a
+  single project can be re-applied or regenerated. Holds while `apply` is always run after `update`
+  and updates never crash mid-set.
 - **Correct shape:** an update is a transaction over a module **set** whose content identity is
-  immutable and recorded; one journal/checkpoint, one state write, a refreshed lock, and rollback
-  on failure.
-- **Do-nothing cost:** every release, each project update carries a manual recovery risk; a single
-  interrupted update costs a git rescue; a stale lockfile can break deployments until someone runs
-  `poetry lock`; a branch move silently changes content under a fixed version label.
+  immutable and recorded; one journal/checkpoint, one state write, and rollback on failure.
+- **Do-nothing cost:** a single interrupted update costs a git rescue; each update leaves N commits
+  and N state writes; a crash between modules leaves a mixed set with no recorded transaction.
 - **Options:**
-  1. **Sealed-tag update + journal.** Resolve the tag for the runtime core version, write an update
-     journal/checkpoint, refresh the lock, and commit the module set once. M, two-way door; removes
-     the mechanism.
-  2. **Keep branch tracking, prove it.** Refuse unless the branch tip tree equals the sealed tag,
-     refresh `poetry.lock`, and add the journal. S/M, two-way; removes the content-identity gap but
-     keeps branch as transport.
-  3. **Accept and document.** Keep branch tracking, document recovery, and require `apply` after
-     update. Containment: a status warning when the branch tip differs from the tag. Revocation: a
-     second live project.
-- **Recommendation:** option 1 with option 2 as the transition guard. **Size:** M · **Reversibility:**
-  two-way door · **Guard:** a release gate that asserts the split branch tip and the sealed tag share
-  a tree, plus an update test that kills the process between pulls and asserts convergence.
-  **Acceptance check:** after an update, `poetry.lock` is consistent, state matches installed content,
-  and a kill between modules resumes to one coherent set. **First step:** make update resolve and
-  verify the sealed tag before the first pull.
+  1. **Update journal + single set commit.** Write an update journal/checkpoint, commit the module
+     set once, write state once, and resume or roll back to one coherent set. M, two-way door;
+     removes the mechanism.
+  2. **Keep per-module commits, prove the set.** Add a journal recording each module's target SHA and
+     a resume that completes or rolls back the recorded set; keep the existing per-module transport
+     commits. S/M, two-way; removes the crash-recovery gap but keeps N commits.
+  3. **Accept and document.** Keep the per-module flow, document recovery, and require `apply` after
+     update. Containment: a status warning when a mixed set is detected. Revocation: a second live
+     project.
+- **Recommendation:** option 1; option 2 remains the transition guard. **Size:** M · **Reversibility:**
+  two-way door · **Guard:** an update test that kills the process between pulls and asserts the next
+  run converges to one coherent set, plus a single state write for the set. **Acceptance check:** a
+  kill between modules resumes to one coherent set, and state matches the installed content after
+  the resume. **First step:** write the journal before the first pull.
 
 ### Finding 3: Generated production topology is prose, not an artifact
 
@@ -718,6 +714,10 @@ watchlist **6**.
 - 2026-10-24 — `apply-state-dual-owner`: resolved by SA317.  The recovery ledger now stores the
   resume pointer and diagnostic progress only; `state.yml` is the single applied-state owner and
   resume reads it.
+- 2026-10-24 — `module-upgrade-no-reconciler`: **partially resolved** by SA319 (a). Update now
+  verifies the sealed tag and canonical branch tree for the whole set before the first pull,
+  refreshes `poetry.lock` once, and restores the lockfile on rollback. The per-module commits, the
+  absent update journal, the per-module state writes, and crash recovery remain open (slice (b)).
 - 2026-10-24 — `generated-file-ownership-unmodeled`: **still-open, slice (a) landed**. SA320 (a)
   generates `frontend/src/quickscaleSeam.hooks.ts` from each active manifest's `frontend_resources`
   section (CRM declares five subpaths and `CrmStats`), moves `CrmPage.tsx` onto it, and extends the

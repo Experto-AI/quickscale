@@ -12,6 +12,9 @@ from typing import Any
 
 import click
 
+import quickscale_core.apply as _apply
+import quickscale_core.schema.config_schema as _config_schema
+import quickscale_cli.commands.module_output as _module_output
 import quickscale_cli.utils.module_provenance as _module_provenance
 
 allow_local_changes_option = click.option(
@@ -22,6 +25,126 @@ allow_local_changes_option = click.option(
         "verified; the subtree pull can overwrite them."
     ),
 )
+
+
+def _load_update_recovery_ledger(project_path: Path) -> Any | None:
+    """Load the optional apply recovery ledger used by update guardrails.
+
+    Returns the :class:`~quickscale_core.apply.RecoveryLedger` when the file
+    exists and is valid, or ``None`` when it does not.  The ledger carries the
+    resume pointer only; applied state stays in ``.quickscale/state.yml``.
+    Malformed content raises :class:`LedgerError`, surfaced as a
+    :class:`RuntimeError`.
+    """
+    mgr = _apply.LedgerManager(project_path)
+    if not mgr.ledger_file.exists():
+        return None
+
+    try:
+        ledger = mgr.load()
+    except _apply.LedgerError as error:
+        raise RuntimeError(
+            "Failed to load .quickscale/apply-recovery.yml: "
+            f"{error}. Fix or clear the recovery snapshot before updating modules."
+        ) from error
+
+    return ledger
+
+
+def _check_local_pre_pull_guard(
+    project_path: Path,
+    module_name: str,
+    applied_state: Any,
+) -> bool:
+    """Block known-local unsafe updates before any subtree pull starts."""
+    if applied_state is not None:
+        module_state = applied_state.modules.get(module_name)
+        if module_state is None:
+            _module_output._report_local_pre_pull_guard_block(
+                module_name,
+                [
+                    "",
+                    ".quickscale/state.yml does not list this module as installed.",
+                    "Reconcile local tracking with 'quickscale apply' before updating.",
+                    "This guard uses only verified local state and does not predict remote compatibility.",
+                ],
+            )
+            return False
+
+        recovery_ledger = _load_update_recovery_ledger(project_path)
+        if recovery_ledger is not None:
+            _module_output._report_local_pre_pull_guard_block(
+                module_name,
+                [
+                    "",
+                    "Pending .quickscale/apply-recovery.yml records an unfinished apply.",
+                    "Finish the interrupted apply or clear the local recovery ledger before running 'quickscale update'.",
+                    "The recovery ledger carries no applied state; .quickscale/state.yml remains authoritative.",
+                ],
+            )
+            return False
+    else:
+        module_state = None
+
+    quickscale_config_path = project_path / "quickscale.yml"
+    if not quickscale_config_path.exists() or module_state is None:
+        return True
+
+    try:
+        desired_config = _config_schema.validate_config(
+            quickscale_config_path.read_text()
+        )
+    except Exception as error:
+        click.secho(
+            "❌ Cannot update: quickscale.yml pre-pull check failed because the local desired state could not be validated.",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        click.echo(f"Reason: {error}", err=True)
+        click.echo(
+            "💡 Fix quickscale.yml or run 'quickscale apply' to reconcile before updating.",
+            err=True,
+        )
+        return False
+
+    desired_module = desired_config.modules.get(module_name)
+    if desired_module is None:
+        _module_output._report_local_pre_pull_guard_block(
+            module_name,
+            [
+                "",
+                "quickscale.yml no longer includes this installed module.",
+                f"Run 'quickscale remove {module_name}' or reconcile desired state with 'quickscale apply' before updating.",
+                "This guard uses only verified local state and does not predict remote compatibility.",
+            ],
+        )
+        return False
+
+    desired_options = desired_module.options or {}
+    applied_options = module_state.options or {}
+    if desired_options == applied_options:
+        return True
+
+    drift_lines = [
+        "",
+        "Local desired state differs from applied module options.",
+        "Run 'quickscale apply' before updating so local module configuration is reconciled first.",
+        "Detected local-only option drift:",
+    ]
+    for option_name in sorted(set(desired_options) | set(applied_options)):
+        old_value = applied_options.get(option_name)
+        new_value = desired_options.get(option_name)
+        if old_value == new_value:
+            continue
+        drift_lines.append(
+            f"  • {module_name}.{option_name}: applied={old_value!r}, desired={new_value!r}"
+        )
+    drift_lines.append(
+        "This guard uses only verified local state and does not predict remote compatibility."
+    )
+    _module_output._report_local_pre_pull_guard_block(module_name, drift_lines)
+    return False
 
 
 def _collect_module_content_drift(
