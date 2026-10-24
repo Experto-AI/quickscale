@@ -92,6 +92,25 @@ dependencies:
   - sqlparse
   - quickscale-core
 
+# Frontend resource contract consumed by the managed theme hook
+# (frontend/src/quickscaleSeam.hooks.ts).  Paths are module-relative API
+# subpaths appended to the module's moduleApiPaths base; the payload type is
+# the response shape those paths return, so a user-owned page imports both
+# instead of restating them.
+frontend_resources:
+  paths:
+    stats: stats/
+    contacts: contacts/
+    companies: companies/
+    deals: deals/
+    tags: tags/
+  payload_types:
+    CrmStats:
+      contacts: number
+      companies: number
+      deals: number
+      tags: number
+
 # Retired option keys are refused by name with the message declared here.
 retired_options:
   default_pipeline_stages: >-
