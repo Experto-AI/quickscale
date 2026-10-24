@@ -13,8 +13,8 @@ with the defects that block publication.
 **Release status.** 0.89.0 fixes 0.88.0's S1 billing defects; a live 0.88.0 install moves to
 0.89.0 on a fresh database. The 2026-10-23 technical audit found a new S1
 (`billing-subscription-checkout-metadata-key-too-long`) and eight S2s in the unpublished tag, so
-0.89.0 re-enters the release loop: SA310–SA313 land, the tag is re-cut and re-validated, and then
-the operator's Phases 5–6 sealing and PyPI publication follow SA191d
+0.89.0 re-enters the release loop: SA310–SA312 land (SA313 has landed), the tag is re-cut and
+re-validated, and then the operator's Phases 5–6 sealing and PyPI publication follow SA191d
 ([publish_procedure.md](publish_procedure.md)).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
@@ -47,7 +47,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA310 | Fix the subscription Checkout S1 and order billing webhooks | 2 | — | Required |
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
 | SA312 | Close the generated-project and release-workflow safety defects | 1 | — | Required |
-| SA313 | Run backup dump and restore under the backup role | 3 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
 | SA316 | Extend the contract-vintage gate to runtime and managed outputs | 3 | — | Optional |
@@ -56,7 +55,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA319 | Update modules as one sealed-tag transaction | 3 | SA317 | Optional |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | SA316 | Optional |
 | SA321 | Make the generated production deployment contract an artifact | 1 | SA312 | Optional |
-| SA322 | Make backup restore safe and its recovery point coherent | 3 | SA313 | Optional |
+| SA322 | Make backup restore safe and its recovery point coherent | 3 | — | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
 | SA325 | Make module settings, defaults, messages and READMEs follow one contract | 3 | — | Optional |
@@ -72,9 +71,9 @@ Track 1: SA312 ─► SA153 (h) ─► SA318 ─► [SA316] SA320 (a) ─► SA1
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA313 ─► SA316 ─► SA317 (a, b) ─► SA319 (a → b) ─► SA322 (a → b → c)
+Track 3: SA316 ─► SA317 (a, b) ─► SA319 (a → b) ─► SA322 (a → b → c)
          ─► SA325 ─► [SA312] SA326 ─► [SA191d (production)] SA277
-     release path: SA310, SA311, SA312, SA313 ─► re-cut 0.89.0 ─► SA191d ─► publication
+     release path: SA310, SA311, SA312 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA316 ─► SA320 (a) ─► SA153 (j); SA191d (production) ─► SA153 (f)
 ```
 
@@ -89,7 +88,7 @@ its own checks and handoff.
 **Order.** Module migration history is frozen, so a module schema change (SA310's optional
 version column, SA314's debit reference) ships as a new migration. SA153's own tables live in the
 project-owned extension as `0002+` migrations. Arch fix order holds: SA316 before SA320, SA317
-before SA319, SA318 before SA153 (j), SA313 before SA322.
+before SA319, SA318 before SA153 (j).
 
 ### Track states
 
@@ -97,7 +96,7 @@ before SA319, SA318 before SA153 (j), SA313 before SA322.
 |---|---|---|---|---|
 | 1 | SA312, then SA153 (h) | yes | no: SA191d (production) for SA153 (f); SA316 for SA320 | yes: SA153 (h), SA312, SA318 |
 | 2 | SA191d (re-proof), then SA310 | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA313 | yes | no: SA191d (production) for SA277 | yes: SA313, SA316, SA317 |
+| 3 | SA316 | yes | no: SA191d (production) for SA277 | yes: SA316, SA317 |
 
 **Clearing blockers.** Track 1: SA316 (Track 3) clears SA320; SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -342,13 +341,7 @@ update; the cutover does not wait for them.
 
 ### Track 3 — upgrade path, generator state and backups
 
-- [ ] **SA313 — Run backup dump and restore under the backup role, not the runtime role.**
-
-  Closes tech `backups-run-under-runtime-role`; land it before SA322 so restore and prune fixes are
-  testable.
-
-  **Acceptance:** a scratch PostgreSQL test with a FORCE-RLS table dumps and restores every row
-  under production settings; the runtime role is never the dump/restore connection (Tier 2-full).
+- [x] **SA313 — Run backup dump and restore under the backup role, not the runtime role.**
 
 - [ ] **SA316 — Extend the contract-vintage gate to the runtime surface and managed outputs.**
 

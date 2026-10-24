@@ -132,6 +132,10 @@ files.
   restore keeps its existing syntax under the same guardrails
 - ✅ Scheduled execution is command-driven only (`manage.py quickscale_backups_create
   --trigger scheduled`, or an equivalent platform cron job)
+- ✅ Dump and restore run under a privileged PostgreSQL connection —
+  `QUICKSCALE_BACKUP_DATABASE_URL` when a dedicated backup role is configured,
+  otherwise `DATABASE_URL` — never the restricted runtime role; the engine refuses
+  a `NOBYPASSRLS` role
 - ✅ Private-remote credentials are referenced by environment-variable **name**
   only
 - ✅ When `modules.backups.local_directory` is repo-relative, `quickscale apply`

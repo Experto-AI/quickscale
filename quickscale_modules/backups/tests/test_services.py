@@ -24,6 +24,7 @@ from django.db import DatabaseError, connections
 from django.test import override_settings
 from django.utils import timezone as django_timezone
 
+import quickscale_core.dr_engine._connection as _connection
 import quickscale_modules_backups.services as backup_services
 from quickscale_modules_backups._settings import build_policy_snapshot_from_settings
 from quickscale_modules_backups.models import (
@@ -2982,6 +2983,9 @@ class TestBackupLifecycle:
         assert (
             result.message == f"Restore executed for {postgresql_artifact_file.name}."
         )
+        backup_settings = _connection._resolve_backup_connection(
+            connections["default"].settings_dict
+        ).settings
         assert runner_calls == [
             (
                 ["pg_restore", "--list", str(postgresql_artifact_file)],
@@ -2996,11 +3000,11 @@ class TestBackupLifecycle:
                     "--host",
                     "localhost",
                     "--port",
-                    connections["default"].settings_dict["PORT"],
+                    backup_settings["PORT"],
                     "--username",
-                    connections["default"].settings_dict["USER"],
+                    backup_settings["USER"],
                     "--dbname",
-                    "quickscale_test",
+                    backup_settings["NAME"],
                     str(postgresql_artifact_file),
                 ],
                 None,

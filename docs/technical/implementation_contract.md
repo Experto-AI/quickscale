@@ -454,7 +454,7 @@ pin the exact tested patch (Python 3.14.9, PostgreSQL 18.6).
 
 **Generated-project dev deps:** pytest, pytest-django, pytest-cov, factory-boy, ruff, mypy, django-stubs, pre-commit, virtualenv (`>=21.14.13,<22.0`; the earlier 20.x line carries open advisories).
 
-**Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode.
+**Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode. Backups and restores connect with `QUICKSCALE_BACKUP_DATABASE_URL` (falling back to the superuser `DATABASE_URL`) for the dump/restore child process, never with the restricted `RUNTIME_DATABASE_URL` role.
 
 ### Runtime Pin Notes
 

@@ -17,6 +17,7 @@ from typing import cast
 import os
 
 
+import quickscale_core.dr_engine._connection as _connection
 import quickscale_core.dr_engine._types as _types
 import quickscale_core.dr_engine.primitives as _primitives
 import django.conf as _conf
@@ -159,11 +160,15 @@ def _create_database_dump(
     now: datetime,
     database_directory: Path,
     operation: str = "backup creation",
+    backup_connection: _connection.ResolvedBackupConnection | None = None,
 ) -> tuple[Path, str, str, str | None, int | None, str | None, int | None]:
     """Create a database dump and return structured dump metadata.
 
     Returns (local_path, backup_format, filename, database_server_version,
     database_server_major, dump_client_version, dump_client_major).
+
+    A PostgreSQL dump runs under the resolved privileged backup connection,
+    never under Django's restricted serving role.
     """
     database_server_version: str | None = None
     database_server_major: int | None = None
@@ -181,6 +186,15 @@ def _create_database_dump(
             executable="pg_dump",
             operation=operation,
         )
+        if backup_connection is None:
+            backup_connection = _connection._resolve_backup_connection(
+                django.db.connections["default"].settings_dict
+            )
+            _connection._ensure_backup_connection_is_privileged(
+                backup_connection,
+                operation="capture",
+            )
+        resolved_connection = backup_connection
         backup_format = "pg_dump_custom"
         filename = _paths.build_backup_filename(
             resolved_policy,
@@ -190,7 +204,7 @@ def _create_database_dump(
         local_path = database_directory / filename
         _primitives._dump_postgresql_database(
             local_path,
-            django.db.connections["default"].settings_dict,
+            resolved_connection.settings,
             shell_runner=shell_runner,
         )
     else:

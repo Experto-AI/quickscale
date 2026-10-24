@@ -108,7 +108,7 @@ the delta (SA253, 2026-10-10); it is not an unreviewed delta change.
   PostgreSQL 18.6 container created and destroyed by the audit proved `pg_dump` fails on a FORCE-RLS
   table as a `NOBYPASSRLS` non-owner (`query would be affected by row-level security policy`) and
   `pg_restore --clean` fails as a non-owner (`must be owner of table`), confirming
-  `backups-run-under-runtime-role`; (2) `get_generator_emission_mapping()` in a read-only Python
+  the backup-role finding (resolved as SA313); (2) `get_generator_emission_mapping()` in a read-only Python
   process proved the generator emits both `.env` and `.env.example`; (3) length checks proved the
   Stripe metadata key is 42 characters; (4) source reads confirmed the S3 overwrite default and the
   allauth email lookup. No repository code was executed except the read-only mapping call in a
@@ -144,13 +144,6 @@ items:
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_settings.py,
                quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout_steps.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-run-under-runtime-role, status: open, severity: S2, category: IV,
-     title: "Backup dump and restore run as the restricted runtime role; RLS dumps and DDL restores fail",
-     effort: Medium, confidence: High, reality: generated-project,
-     anchors: [quickscale_core/src/quickscale_core/dr_engine/primitives.py,
-               quickscale_core/src/quickscale_core/dr_engine/_capture.py,
-               quickscale_core/src/quickscale_core/dr_engine/_restore.py],
-     depends_on: [], chain: [backups-prune-no-keep-last], first_seen: 2026-10-24, last_verified: 2026-10-24}
   - {id: crm-deal-owner-cross-tenant, status: open, severity: S2, category: III,
      title: "Deal owner accepts a foreign-tenant user id and the list serializes that user's name",
      effort: Small, confidence: High, reality: generated-project,
@@ -224,13 +217,13 @@ items:
      effort: Medium, confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_capture.py,
                quickscale_modules/backups/src/quickscale_modules_backups/persistence.py],
-     depends_on: [backups-run-under-runtime-role], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
   - {id: backups-prune-no-keep-last, status: open, severity: S3, category: IX,
      title: "Retention can delete the last remaining recovery point", effort: Trivial, confidence: High,
      reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_prune.py,
                quickscale_modules/backups/src/quickscale_modules_backups/persistence.py],
-     depends_on: [], chain: [backups-run-under-runtime-role], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
   - {id: backups-restore-not-atomic, status: open, severity: S3, category: IV,
      title: "pg_restore --clean has no single-transaction or pre-restore safety dump", effort: Medium,
      confidence: High, reality: generated-project,
@@ -398,7 +391,6 @@ items:
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `billing-subscription-checkout-metadata-key-too-long` | S1 | IX | Subscription Checkout metadata key exceeds Stripe's 40-character limit | Trivial | High | new |
-| `backups-run-under-runtime-role` | S2 | IV | Backup dump and restore run as the restricted runtime role | Medium | High | new |
 | `crm-deal-owner-cross-tenant` | S2 | III | Deal owner accepts a foreign-tenant user id and leaks the name | Small | High | new |
 | `media-s3-fixed-path-overwrite` | S2 | III | Fixed upload paths plus S3 overwrite replace another tenant's media | Small | High | new |
 | `orgs-admin-can-demote-owner` | S2 | III | An org ADMIN can demote or remove an OWNER | Small | High | new |
@@ -492,69 +484,6 @@ Quick wins (Trivial effort, S2/S3): `generated-redis-cache-missing-client`,
   split). **Age:** 3 weeks; a regression introduced by the split, so a rename is safe.
 
 ### S2
-
-#### Finding 2: Backup dump and restore run as the restricted runtime role
-
-- **ID:** `backups-run-under-runtime-role`
-- **Severity:** S2 · **High × Common** (scheduled backup, ordinary production configuration; one
-  verified precondition: the project has any FORCE-RLS tenant table, which is every project with
-  orgs/auth) · deployment reality: generated project on Railway/Docker with the runtime-role split ·
-  oracle: backups are the declared PostgreSQL-18 recovery path; RLS is the declared isolation
-  guarantee · no unverified assumption; reproduced on PostgreSQL 18.6.
-- **Category:** IV (resource/operational failure), secondary IX (data handling).
-- **Confidence:** High — the command construction, the connection source, and the failure were read
-  end to end; reproduced in a scratch PostgreSQL 18.6 container.
-- **Location:** `quickscale_core/src/quickscale_core/dr_engine/_capture.py:510-512`;
-  `primitives.py:329-343` (`pg_dump`), `:345-364` (`pg_restore`); `_restore.py:142-151`.
-- **Defect:** Backup and restore take `django.db.connections["default"].settings_dict`, which in a
-  generated production deployment is the `NOSUPERUSER`/`NOBYPASSRLS` runtime role. `pg_dump` does not
-  pass `--enable-row-security`, so it sets `row_security=off` and PostgreSQL rejects any query
-  against a FORCE-RLS table for a role without BYPASSRLS. `pg_restore --clean` needs to DROP/CREATE
-  objects owned by the migration superuser, which the runtime role does not own and cannot do. The
-  documented scheduled commands use the normal Django settings, so the default path is broken for
-  every project with tenant tables.
-- **Failure scenario:** A generated project with `orgs` and any tenant module (billing, blog, CRM,
-  forms, listings, social) runs `python manage.py quickscale_backups_create --trigger scheduled`.
-  `pg_dump` reaches the first RLS table and exits 1 with
-  `query would be affected by row-level security policy for table "<table>"`; the command raises
-  `BackupError` and no artifact is created. A restore of any artifact fails at the first `DROP
-  POLICY`/`DROP TABLE` with `must be owner of table`. The failure surfaces only in the backup log;
-  the healthcheck is DB-free.
-- **Evidence:** `_build_pg_dump_command` is `["pg_dump", "--format=c", "--file", str(local_path)]`
-  plus host/port/user/dbname; there is no `--enable-row-security` and no separate URL. The empirical
-  check in the scratch PostgreSQL 18.6 container reproduced both errors exactly.
-- **Refutation:** Searched for a privileged-command branch, a `DATABASE_URL` read, a
-  `QUICKSCALE_BACKUPS_*` connection setting, and a `--enable-row-security` flag; none. The
-  `QUICKSCALE_PRIVILEGED_COMMAND` contract only allows `migrate`/`createcachetable`, not backup
-  commands. `start.sh` does not create a backup role with BYPASSRLS. Tests mock `pg_dump` and run
-  the backup module tests without RLS tables, so the success path is never exercised under the
-  production role. `--enable-row-security` alone would not fix it: without an org GUC the policy
-  returns no rows, so it would produce a silently empty dump.
-- **Fix:** Give backup/restore an explicit privileged connection: read the superuser `DATABASE_URL`
-  for a one-shot backup/restore (add a `backup` privileged-command mode and pass the URL through the
-  existing `resolve_runtime_database_url` seam), or create a dedicated backup role with BYPASSRLS
-  and table ownership and document it. Build `connection_settings` from that URL rather than
-  `connections["default"]`. Add a startup check that refuses to run the backup engine on a
-  `NOBYPASSRLS` role against tenant tables. **Effort:** Medium.
-- **Fix files:** `quickscale_core/dr_engine/primitives.py`, `_capture.py`, `_restore.py`,
-  `quickscale_core/runtime/settings.py`,
-  `quickscale_core/generator/templates/project_name/settings/production.py.j2`, `start.sh.j2`,
-  `backups` docs/tests.
-- **Depends on:** none.
-- **Verification:** A test that creates a scratch role/table with FORCE RLS and asserts
-  `pg_dump` succeeds only when the configured backup URL has BYPASSRLS; a restore test against a
-  non-owner role.
-- **Fix risk:** Medium — using the superuser for backups contradicts the "no BYPASSRLS serving"
-  posture if the URL leaks into the serving process. The fix must scope the connection to the
-  one-shot command and not export it. Existing backup artifacts are unaffected; a bad URL fails
-  closed.
-- **Detection signal:** `BackupError: pg_dump: error: query would be affected by row-level security
-  policy` in the backup log; zero artifacts in `BackupArtifact`; `quickscale_backups_validate`
-  never has a file to read.
-- **Deliberate?** No suppression; the DR engine extraction (`de81fe37`, 2026-06-21) inherited the
-  default connection. **Age:** long-standing; every generated project with RLS is affected.
-- **Chain:** `backups-prune-no-keep-last` (S3) turns this outage into deletion of the last recovery
-  point after `retention_days`; rank the pair as S2.
 
 #### Finding 3: Deal owner accepts a foreign-tenant user id and leaks that user's name
 
@@ -858,15 +787,12 @@ Quick wins (Trivial effort, S2/S3): `generated-redis-cache-missing-client`,
   authoritative dump, and a later prune can delete its root. Fix: create/relink the artifact row after
   restore (or create it before the dump with placeholders and update it), and fail the restore
   metadata step visibly instead of a success warning. Effort Medium. Confidence High. `depends_on:
-  backups-run-under-runtime-role` (otherwise restore fails earlier). **Chain:** with the runtime-role
-  fix; rank the pair.
+  none`.
 - `backups-prune-no-keep-last` · **S3 (High × Rare)** · `_prune.py:63-140`;
   `persistence.py:404-410` · Retention deletes every expired snapshot/artifact with no keep-last
-  floor. If backup creation fails for `retention_days` (see `backups-run-under-runtime-role`), the
-  scheduled prune deletes the only remaining recovery point. Fix: always retain the newest valid
-  snapshot (and skip its artifacts), or refuse to prune the last one. Effort Trivial. Confidence
-  High. `depends_on: none`. **Chain:** the runtime-role finding makes the precondition live; rank the
-  pair S2.
+  floor. If backup creation fails for `retention_days`, the scheduled prune deletes the only
+  remaining recovery point. Fix: always retain the newest valid snapshot (and skip its artifacts),
+  or refuse to prune the last one. Effort Trivial. Confidence High. `depends_on: none`.
 - `backups-restore-not-atomic` · **S3 (High × Rare)** · `primitives.py:345-364`;
   `recovery.py:786-791` · `pg_restore --clean --if-exists` has no `--single-transaction` and no
   pre-restore dump; a mid-restore failure leaves the live DB partially dropped/restored. Fix: add
@@ -1005,13 +931,13 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 
 | Population | Authentication | Authorization / scope | Input & limits | Durability / atomicity | Notes |
 |---|---|---|---|---|---|
-| Generated boot (`start.sh`, Dockerfile) | n/a | non-root image, `SECRET_KEY` guard, runtime-role split | healthcheck is liveness only | migrations at every boot (watchlist) | `backups-run-under-runtime-role`; compose debug |
+| Generated boot (`start.sh`, Dockerfile) | n/a | non-root image, `SECRET_KEY` guard, runtime-role split | healthcheck is liveness only | migrations at every boot (watchlist) | compose debug |
 | Generated HTTP (base/production settings) | Django session | `ALLOWED_HOSTS`, CSRF, secure cookies, HSTS, conditional proxy trust | no request-size tuning | n/a | verified; no readiness probe |
 | Module content APIs (CRM/blog/listings/forms/orgs) | session + allauth | org role + RLS + object filters | DRF serializers, throttles | transactions on writes | `crm-deal-owner-cross-tenant`; `orgs-admin-can-demote-owner` |
 | Public endpoints (forms submit, blog/listing public, social) | anonymous by design | System-org scope / published filter | forms 5/hour, blog/listing 5/hour | atomic submission | `forms-null-optional-field-500`; `forms-option-values-not-validated` |
 | Webhooks (Stripe, Svix) | signature over raw body | event-type allowlist | no throttle on Svix | event-id dedup + advisory lock | `billing-webhook-status-applied-out-of-order`; `notifications-pre-signature-db-read` |
 | Admin surfaces | staff + model perms | superuser policy for org data | n/a | restore CAS | `backups-validate-action-view-permission`; `tenant-admin-org-selector` |
-| Management commands | operator | `--confirm`/env gate, scheduled-off | dry-run on prune/restore | command-owned transactions | `backups-run-under-runtime-role`; `backups-restore-not-atomic` |
+| Management commands | operator | `--confirm`/env gate, scheduled-off | dry-run on prune/restore | command-owned transactions | `backups-restore-not-atomic` |
 | CLI | local operator | confirmation + advisory lock | n/a | apply backup/rollback | `cli-remove-accepts-path-traversal`; `cli-apply-force-never-forces` |
 | Uploads (blog/listings/storage) | session + member | org-scoped rows; public media by design | size/format/dimension, bomb error | object storage | `media-s3-fixed-path-overwrite`; `media-image-decode-before-dimension-cap` |
 | Tenant ORM/RLS | n/a | `TenantManager` + FORCE RLS | n/a | GUC per scope | `billing-credit-services-missing-org-scope`; `orgs-contextvar-leak-on-db-error` |
@@ -1025,17 +951,14 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 **Land first (S1/S2, independent):**
 
 1. `billing-subscription-checkout-metadata-key-too-long` — one-line rename, no dependency.
-2. `backups-run-under-runtime-role` — the connection/launcher fix; land before the restore-metadata
-   and prune fixes so those can be tested. This also unblocks `backups-restore-drops-own-artifact-row`
-   and `backups-prune-no-keep-last`.
-3. `crm-deal-owner-cross-tenant` — serializer validation + read filter; independent.
-4. `media-s3-fixed-path-overwrite` — storage option + test; independent.
-5. `orgs-admin-can-demote-owner` — actor-rank check in form + API; independent.
-6. `generated-compose-called-production-runs-debug` — docs correction first; production profile can
+2. `crm-deal-owner-cross-tenant` — serializer validation + read filter; independent.
+3. `media-s3-fixed-path-overwrite` — storage option + test; independent.
+4. `orgs-admin-can-demote-owner` — actor-rank check in form + API; independent.
+5. `generated-compose-called-production-runs-debug` — docs correction first; production profile can
    follow.
-7. `generated-redis-cache-missing-client` — dependency + startup check.
-8. `forms-null-optional-field-500` — normalize/reject; independent.
-9. `billing-webhook-status-applied-out-of-order` — provider re-fetch or version column; needs a
+6. `generated-redis-cache-missing-client` — dependency + startup check.
+7. `forms-null-optional-field-500` — normalize/reject; independent.
+8. `billing-webhook-status-applied-out-of-order` — provider re-fetch or version column; needs a
    migration if the version approach is chosen.
 
 **Then (S3), in three batches:**
@@ -1047,8 +970,8 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
   migration for the reference constraint.
 - **Backups batch:** `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
-  These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; land the runtime-role fix first
-  and the restore-metadata fix before the prune change.
+  These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
+  and the restore-metadata fix still lands before the prune change.
 - **Generator/CLI/release batch:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`,
   `dockerignore-bakes-local-backups`, `e2e-generated-ci-contract-stale-grep`,
   `publish-pypi-no-skip-existing`, `generated-readme-examples-invalid`,
@@ -1057,12 +980,12 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
   generator release.
 
 **S4 tail:** batch by file (orgs receivers, backups admin/perms, forms export/options, auth logging,
-three prior S4s). No ordering constraint beyond “backup runtime-role first”.
+three prior S4s). No ordering constraint beyond “restore-metadata before prune”.
 
 Parallelizable: the billing, orgs, CRM, media, generator-docs, and release-workflow batches touch
 disjoint files. The backup batch and the generator batch both touch `quickscale_core` but different
 subtrees; run them in parallel if the branch strategy allows. Conflicts: `_settings.py` (billing key
-+ RLS), `_capture.py` (runtime role + artifact row + perms), and `README.md.j2` (compose + YAML +
++ RLS), `_capture.py` (artifact row + perms), and `README.md.j2` (compose + YAML +
 .env) are the shared-file hotspots; coordinate reviewers.
 
 ## Per-subsystem verdicts
@@ -1076,8 +999,9 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
 - **Orgs:** findings `orgs-admin-can-demote-owner`, `orgs-bulk-delete-leaves-zero-owners`, two S4s,
   and four watchlist items; RLS predicate, purge atomicity, `TenantManager`, invitation throttle, and
   content-route roles verified.
-- **Backups/DR:** findings 2 and five human-scale S3/S4s; checksum/migration identity, admin upload
-  trusted match, and the environment gate verified. The RLS/runtime-role path was reproduced.
+- **Backups/DR:** five human-scale S3/S4s; checksum/migration identity, admin upload trusted
+  match, and the environment gate verified. The RLS/runtime-role path was reproduced (resolved as
+  SA313).
 - **Auth:** `auth-profile-email-change-desync` and `auth-deletion-logs-pii`; allauth config,
   account-deletion guard, session rotation, and email-verification default (watchlist) verified.
 - **CRM:** `crm-deal-owner-cross-tenant`; org-scoped reads, contact/stage/tag validation, bulk stage
@@ -1088,8 +1012,8 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
   retention (prior S4) verified.
 - **CLI:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`; argv-list subprocess,
   advisory locks, theme preflight, and apply checkpoint/rollback verified.
-- **Core generator/DR:** findings 2, the restore/prune/lock items, and the S4 README/ignore items;
-  emission mapping, Jinja autoescape rationale, and runtime settings fail-closed paths verified.
+- **Core generator/DR:** the restore/prune/lock items and the S4 README/ignore items; emission
+  mapping, Jinja autoescape rationale, and runtime settings fail-closed paths verified.
 - **Scripts/CI/publish:** `e2e-generated-ci-contract-stale-grep`, `publish-pypi-no-skip-existing`;
   action SHA pins, least-privilege permissions, and the gate registry verified. The manual/unwired
   gates are in the Tooling gaps section.
@@ -1165,7 +1089,8 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
   is safe only while every rendered value is validated; a future project-name/module field rendered
   into HTML would be an injection sink. No live injection found.
 - **`start.sh` carries a second database-connection constructor** (prior arch observation); the
-  runtime-role split is sound, but the backup path now needs a third mode.
+  runtime-role split is sound, and the backup path resolves its own privileged connection without a
+  third launcher mode.
 - **`TenantModelAdmin` uses a request-supplied org selector** while content routes use the session
   authority (prior arch/coherence watchlist); the documented superuser-only staff policy is the only
   guard.
@@ -1178,8 +1103,6 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
   `NOSUPERUSER`/`NOBYPASSRLS`; it would have caught the backup and CRM-scope regressions.
 - **No Stripe test-mode contract test**: the fake client cannot enforce provider key limits (BILL-01)
   or event ordering. Add one test-mode smoke test for subscription create and a signed-event replay.
-- **No backup drill under the production role**: the backup tests mock `pg_dump`; a scratch
-  PostgreSQL test with a FORCE-RLS table would have caught `backups-run-under-runtime-role`.
 - **No S3 overwrite test**: the storage tests use `FileSystemStorage`, which auto-renames; add a
   fake S3 backend test asserting distinct keys, and a cross-org upload test.
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
@@ -1330,5 +1253,8 @@ release.
   `media-storage-orphans`, `media-sync-manifest-traversal`, `backups-artifact-path-trust`,
   `social-cache-bulk-invalidation`.
 - 2026-10-24 — reconciliation counts: prior still-open **3**; carried watchlist **13**; accepted
-  **1**; resolved **0**; regressed **0**; withdrawn **0**; superseded **0**; new open **35**; new
-  watchlist **16**. Total open **38** (S1 1 · S2 8 · S3 16 · S4 13).
+  **1**; resolved **1**; regressed **0**; withdrawn **0**; superseded **0**; new open **35**; new
+  watchlist **16**. Total open **37** (S1 1 · S2 7 · S3 16 · S4 13).
+- 2026-10-24 — `backups-run-under-runtime-role`: **resolved** (SA313: dump and restore resolve
+  `QUICKSCALE_BACKUP_DATABASE_URL` or `DATABASE_URL` for the one command, refuse a `NOBYPASSRLS`
+  role against FORCE-RLS tables, and a scratch PostgreSQL test dumps and restores every row).
