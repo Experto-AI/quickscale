@@ -23,6 +23,12 @@
 # unused by every other declaration: adopted ids share one namespace in
 # applied state, so a colliding id would make an adopted project pass a
 # different step.
+# The runtime watch (SA316) is not retroactive: it applies from the commit
+# that introduces this boundary onward, and commits before it predate the
+# rule and stay exempt.  The gate keys on the boundary's presence; the value
+# documents the release that ships the rule.
+runtime_watch_since: "0.89.0"
+
 steps:
   - id: sa192-shared-design
     minimum: "0.89.0"

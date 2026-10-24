@@ -1515,6 +1515,10 @@ class TestApplyDriftDetection:
         (project / "frontend" / "src" / "quickscaleSeam.keys.ts").write_text(
             "// keys\n"
         )
+        managed_root = project / "myapp" / "quickscale_managed"
+        managed_root.mkdir(parents=True)
+        (managed_root / "__init__.py").write_text("")
+        (managed_root / "social_urls.py").write_text("urlpatterns = []\n")
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
         state = QuickScaleState(
@@ -1530,9 +1534,43 @@ class TestApplyDriftDetection:
         assert "myapp/urls_modules.py" in state.managed_files
         assert "frontend/src/quickscaleSeam.d.ts" in state.managed_files
         assert "frontend/src/quickscaleSeam.keys.ts" in state.managed_files
+        assert "myapp/quickscale_managed/__init__.py" in state.managed_files
+        assert "myapp/quickscale_managed/social_urls.py" in state.managed_files
 
         captured = capsys.readouterr().out
         assert "Tracked managed file hashes" in captured
+
+    def test_capture_prunes_records_for_removed_module_outputs(self, tmp_path):
+        """A module removal must not leave permanent drift for its old outputs."""
+        from quickscale_cli.commands._state import (
+            _capture_managed_file_hashes_after_apply,
+        )
+        from quickscale_core.schema.state_schema import (
+            ManagedFileRecord,
+            ProjectState,
+            QuickScaleState,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+        (project / "myapp" / "settings").mkdir(parents=True)
+        (project / "myapp" / "settings" / "modules.py").write_text("A = 1\n")
+        (project / "myapp" / "urls_modules.py").write_text("URLS = []\n")
+        config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
+        )
+        state.managed_files["myapp/quickscale_managed/social_urls.py"] = (
+            ManagedFileRecord(
+                path="myapp/quickscale_managed/social_urls.py", hash="old"
+            )
+        )
+
+        _capture_managed_file_hashes_after_apply(project, config, state)
+
+        assert "myapp/quickscale_managed/social_urls.py" not in state.managed_files
+        assert "myapp/settings/modules.py" in state.managed_files
 
     def test_resolve_managed_wiring_paths_uses_package(self, tmp_path):
         """The default managed wiring paths are anchored at the package dir."""
@@ -1540,7 +1578,7 @@ class TestApplyDriftDetection:
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
 
-        paths = _resolve_managed_wiring_paths(config)
+        paths = _resolve_managed_wiring_paths(config, tmp_path)
         assert "myapp/settings/modules.py" in paths
         assert "myapp/urls_modules.py" in paths
         assert "frontend/src/quickscaleSeam.d.ts" in paths

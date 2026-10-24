@@ -49,11 +49,10 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
-| SA316 | Extend the contract-vintage gate to runtime and managed outputs | 3 | — | Optional |
 | SA317 | Give apply state one owner; close CLI command defects | 3 | — | Optional |
 | SA318 | Run generated tenant-isolation tests under the runtime role | 1 | — | Optional |
 | SA319 | Update modules as one sealed-tag transaction | 3 | SA317 | Optional |
-| SA320 | Deliver module resource contracts through managed hooks | 1 | SA316 | Optional |
+| SA320 | Deliver module resource contracts through managed hooks | 1 | — | Optional |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA322 | Make backup restore safe and its recovery point coherent | 3 | — | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
@@ -94,11 +93,11 @@ before SA319, SA318 before SA153 (j).
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA153 (h) | yes | no: SA191d (production) for SA153 (f); SA316 for SA320 | yes: SA153 (h), SA318 |
+| 1 | SA153 (h) | yes | no: SA191d (production) for SA153 (f) | yes: SA153 (h), SA318 |
 | 2 | SA327, then SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA327, SA191d (re-proof), SA310, SA311 |
-| 3 | SA316 | yes | no: SA191d (production) for SA277 | yes: SA316, SA317 |
+| 3 | SA317 | yes | no: SA191d (production) for SA277 | yes: SA317 |
 
-**Clearing blockers.** Track 1: SA316 (Track 3) clears SA320; SA191d (production) clears SA153 (f).
+**Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
 SA191d (production) clears SA277.
 
@@ -150,7 +149,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Closes arch `generated-file-ownership-unmodeled` (options 1 + 2) and coherence
   `generated-module-branches` and `notifications-anymail-wiring-split` (proposals 1–2, gaps 22 and
-  26). Waits for SA316 so every new managed output is watched from its first release.
+  26). SA316 landed the watch that covers every new managed output from its first release.
 
   **Slices:**
   - [ ] (a) Generate `quickscaleSeam.hooks` plus payload types per installed module from its
@@ -347,14 +346,7 @@ update; the cutover does not wait for them.
 
 - [x] **SA313 — Run backup dump and restore under the backup role, not the runtime role.**
 
-- [ ] **SA316 — Extend the contract-vintage gate to the runtime surface and managed outputs.**
-
-  Closes arch `contract-vintage-boundary-blind` (option 1, with option 2 deciding what counts as a
-  step). The watched set derives from the emission mapping plus `quickscale_core.runtime`'s public
-  modules, and every `quickscale_managed` output is hashed or declared unmanaged.
-
-  **Acceptance:** a change shaped like `936b8d0b` fails without a step; an internal refactor
-  passes; a local edit under `quickscale_managed/` appears in `status` (Tier 2-full).
+- [x] **SA316 — Extend the contract-vintage gate to the runtime surface and managed outputs.**
 
 - [ ] **SA317 — Give apply state one owner and close the CLI command defects.**
 

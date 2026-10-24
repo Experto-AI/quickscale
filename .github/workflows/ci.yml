@@ -334,7 +334,7 @@ jobs:
       run: |
         poetry install --with dev
 
-    - name: Verify generated-template and module-manifest contract changes declare a new step id
+    - name: Verify generated-template, runtime-public-module, and module-manifest contract changes declare a new step id
       run: |
         make check-project-contract-vintage
 

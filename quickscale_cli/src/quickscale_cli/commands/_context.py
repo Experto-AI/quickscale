@@ -523,13 +523,9 @@ def _record_regenerated_wiring_hashes(ctx: ApplyContext) -> None:
     state = state_manager.load_state()
     if state is None:
         return
-    managed_paths = _state._resolve_managed_wiring_paths(ctx.qs_config)
-    for path_str, digest in _project_state_hashes.compute_file_hashes(
-        ctx.output_path, managed_paths
-    ).items():
-        state.managed_files[path_str] = _state_schema.ManagedFileRecord(
-            path=path_str, hash=digest
-        )
+    _project_state_hashes.record_managed_file_hashes(
+        state.managed_files, ctx.output_path, ctx.qs_config.project.package
+    )
     state_manager.save_state(state)
 
 

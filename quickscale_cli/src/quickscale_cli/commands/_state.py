@@ -50,18 +50,20 @@ import quickscale_cli.commands.contract_vintage as _contract_vintage
 
 def _resolve_managed_wiring_paths(
     qs_config: QuickScaleConfig,
+    project_path: Path,
 ) -> list[str]:
     """Return the managed file paths that apply should track.
 
     Paths are repo-relative (forward slashes) so they match the keys
     written by :func:`compute_file_hashes`. The returned list always
-    includes the default managed wiring files and the managed project files
-    outside the package; module-specific managed files inside
-    ``<package>/quickscale_managed/`` are not enumerated here because they
-    are owned by individual modules and may be introduced or removed
-    without breaking the drift signal.
+    includes the default managed wiring files, the managed project files
+    outside the package, and every file a module wrote under
+    ``<package>/quickscale_managed/`` — that directory is regenerated
+    wholesale, so a local edit is drift, not an unmanaged extra.
     """
-    return _project_state_hashes.resolve_managed_file_paths(qs_config.project.package)
+    return _project_state_hashes.resolve_managed_file_paths(
+        qs_config.project.package, project_path
+    )
 
 
 def _warn_version_drift_for_apply(
@@ -120,7 +122,7 @@ def _capture_managed_file_hashes_after_apply(
     """
 
     def _resolve_paths() -> list[str]:
-        return _resolve_managed_wiring_paths(qs_config)
+        return _resolve_managed_wiring_paths(qs_config, project_path)
 
     def _compute_hashes(path: Path, paths: list[str]) -> dict[str, str]:
         return _project_state_hashes.compute_file_hashes(path, paths)
@@ -141,12 +143,20 @@ def _capture_managed_file_hashes_after_apply(
         qs_config=qs_config,
         reporter=_reporter,
     )
-    return _steps.step_capture_hashes(
+    outcome = _steps.step_capture_hashes(
         step_ctx,
         compute_file_hashes_fn=_compute_hashes,
         resolve_managed_wiring_paths_fn=_resolve_paths,
         record_hash_fn=_record_hash,
     )
+    if outcome.success:
+        # The wiring step regenerated ``quickscale_managed/`` before this
+        # capture, so a record whose file is gone belongs to an output this
+        # project no longer carries; keep it out of drift detection.
+        _project_state_hashes.prune_stale_managed_output_records(
+            state.managed_files, project_path, qs_config.project.package
+        )
+    return outcome
 
 
 def _populate_consolidated_tracking_from_legacy(

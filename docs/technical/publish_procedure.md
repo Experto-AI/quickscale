@@ -47,14 +47,18 @@ lives in the module `pyproject.toml` — so `make check-core-compat` covers that
 
 `contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for
 module-specific contracts; leave it alone, and give a genuinely new manual adoption step its own
-id instead. Template contract changes are declared once in
-`quickscale_core/src/quickscale_core/data/project_contract.yml` (SA207): every change to a
+id instead. Contract changes are declared once in
+`quickscale_core/src/quickscale_core/data/project_contract.yml` (SA207, SA316): every change to a
 template the generator emits, every generator change that alters the emitted file set — the gate
 derives its watched set from the generator's emission mapping and evaluates a generator-touching
-revision with its own code — must add its adoption step there under a new step id in the same
-commit, and a module manifest's `contract_vintage` step whose text changes needs a new id in the
-same manifest. A new id must be unused by every other declaration; adopted ids share one
-namespace in applied state. `make check-project-contract-vintage` fails when either does not. A changed contract gets a new id so already-adopted projects are flagged again. Existing-project `update`, `apply`, and Railway deploy enforce the project-level steps
+revision with its own code — and every change to a public module of `quickscale_core.runtime` must
+add its adoption step there under a new step id in the same commit; a private runtime module is an
+internal refactor and stays outside the rule. The runtime watch applies from the commit that
+introduces the declaration's `runtime_watch_since` boundary onward, so historical runtime changes
+in a release range stay exempt. A module manifest's `contract_vintage` step whose
+text changes needs a new id in the same manifest. A new id must be unused by every other
+declaration; adopted ids share one namespace in applied state. `make check-project-contract-vintage`
+fails when any does not. A changed contract gets a new id so already-adopted projects are flagged again. Existing-project `update`, `apply`, and Railway deploy enforce the project-level steps
 and the module declarations before mutation; `--confirm-contract-adoption` records the adopted
 vintage in `.quickscale/state.yml`, and `--acknowledge-contract-vintage` is a one-invocation
 assertion that the operator completed the steps, not permission to omit the declaration.

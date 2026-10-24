@@ -56,6 +56,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Generated-project contract adoption is recorded.** Contract changes carry a step id and
     `quickscale apply --confirm-contract-adoption` records adoption; module updates regenerate the
     managed wiring and keep each applied migration's content identity.
+  - **The contract gate watches runtime behavior and module-managed outputs.** A change to a public
+    `quickscale_core.runtime` module requires a declared adoption step, and every file under
+    `<package>/quickscale_managed/` is hash-tracked, so a local edit appears as managed-file drift
+    in `quickscale status`.
   - **Railway deploys preserve live configuration** and reuse a pre-linked directory; the settings
     module comes from project state.
   - **Disaster recovery streams large objects** and restores check migration content instead of

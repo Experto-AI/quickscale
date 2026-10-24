@@ -12,6 +12,7 @@ module.
 from __future__ import annotations
 
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,6 +33,9 @@ MODULE_MANIFEST_ROOTS = (
 )
 MODULE_MANIFEST_FILENAME = "module.yml"
 DECLARATION_PATH = "quickscale_core/src/quickscale_core/data/project_contract.yml"
+#: Declaration key that activates the runtime watch (SA316).
+RUNTIME_WATCH_FIELD = "runtime_watch_since"
+_RUNTIME_WATCH_BASELINES: dict[str, str | None] = {}
 
 _MANIFEST_VINTAGES_AT: dict[tuple[str, str], ModuleVintage | None] = {}
 _MANIFEST_PATHS_AT: dict[str, tuple[str, ...]] = {}
@@ -44,7 +48,7 @@ _MODULE_DECLARED_IDS_AT: dict[tuple[str, str], frozenset[str]] = {}
 class Violation:
     commit: str
     subject: str
-    template_paths: tuple[str, ...]
+    paths: tuple[str, ...]
     reason: str = ""
 
 
@@ -437,6 +441,51 @@ def _introduction_commit(head: str) -> str | None:
     return lines[0] if lines else None
 
 
+def _declares_runtime_watch(commit: str) -> bool:
+    """Return whether the declaration at ``commit`` activates the runtime watch."""
+    content = _file_at_commit(commit, DECLARATION_PATH)
+    if not content:
+        return False
+    try:
+        data = yaml.safe_load(content)
+    except yaml.YAMLError as error:
+        raise VintageError(f"cannot parse {DECLARATION_PATH} at {commit[:12]}: {error}") from None
+    if not isinstance(data, dict):
+        raise VintageError(f"{DECLARATION_PATH} at {commit[:12]} must be a mapping")
+    return RUNTIME_WATCH_FIELD in data
+
+
+def _runtime_watch_introduction(head: str) -> str | None:
+    """
+    Earliest commit reachable from ``head`` whose declaration carries the boundary.
+
+    The runtime watch applies from this commit onward: commits before it were
+    reviewed under the template-only rule and stay exempt, so a release pull
+    request that carries historical runtime changes still passes.  The field is
+    read from the declaration bytes, not a revision list, so a later deletion
+    cannot move the boundary forward and silence enforcement.
+    """
+    cached = _RUNTIME_WATCH_BASELINES.get(head)
+    if cached is not None or head in _RUNTIME_WATCH_BASELINES:
+        return cached
+    output = _git(
+        "log",
+        "--reverse",
+        "--full-history",
+        "--format=%H",
+        head,
+        "--",
+        DECLARATION_PATH,
+    )
+    baseline: str | None = None
+    for sha in output.splitlines():
+        if sha and _declares_runtime_watch(sha):
+            baseline = sha
+            break
+    _RUNTIME_WATCH_BASELINES[head] = baseline
+    return baseline
+
+
 def _declaration_id_collision(commit: str) -> set[str]:
     """Return new declaration ids that another source has already declared."""
     parent = _first_parent(commit)
@@ -504,3 +553,25 @@ def _merge_declaration_id_collision(commit: str, parents: tuple[str, ...]) -> se
         historical |= _historical_step_ids(parent)
         foreign |= set(_foreign_declared_step_ids(parent, DECLARATION_PATH))
     return (_declared_step_ids_at(commit) - historical) & foreign
+
+
+def _report(violations: tuple[Violation, ...]) -> None:
+    print(
+        "ERROR: [PROJECT_CONTRACT_VINTAGE] generated-project contract changes "
+        "without a new adoption step id:",
+        file=sys.stderr,
+    )
+    for violation in violations:
+        reason = f" ({violation.reason})" if violation.reason else ""
+        print(
+            f"  {violation.commit[:12]} {violation.subject}{reason}",
+            file=sys.stderr,
+        )
+        for path in violation.paths:
+            print(f"    {path}", file=sys.stderr)
+    print(
+        f"\nDeclare the change in {DECLARATION_PATH} under a new adoption step id "
+        "in the same commit, or give the changed module manifest step a new id "
+        "(see the SA207/SA211 declaration blocks).",
+        file=sys.stderr,
+    )

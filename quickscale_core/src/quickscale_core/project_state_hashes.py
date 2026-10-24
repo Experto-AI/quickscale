@@ -21,10 +21,10 @@ from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
 )
-from quickscale_core.schema.state_schema import StateError
+from quickscale_core.schema.state_schema import ManagedFileRecord, StateError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, MutableMapping
 
 # File name for the separate managed-file hash ledger.
 # Lives under .quickscale/ alongside state.yml and config.yml.
@@ -42,6 +42,14 @@ DEFAULT_MANAGED_WIRING_PATHS: tuple[str, ...] = (
     "urls_modules.py",
 )
 
+#: Package-relative directory holding module-declared managed outputs.
+#: ``write_managed_wiring`` regenerates the whole directory, so every file in
+#: it is QuickScale-managed: a local edit is drift, never an unmanaged extra.
+MANAGED_OUTPUT_DIRECTORY = "quickscale_managed"
+
+#: Byte-compiled caches are interpreter artifacts, not managed outputs.
+_PYCACHE_DIRECTORY = "__pycache__"
+
 # Default managed project files that ``quickscale apply`` regenerates outside
 # the Python package, so they resolve against the project root rather than the
 # package directory.  The theme's seam declaration and its key manifest render
@@ -56,15 +64,81 @@ DEFAULT_MANAGED_PROJECT_PATHS: tuple[str, ...] = (
 )
 
 
-def resolve_managed_file_paths(package_name: str) -> list[str]:
+def _is_managed_output_file(path: Path, managed_root: Path) -> bool:
+    """Return whether a file under the managed root is a generated output."""
+    relative = path.relative_to(managed_root)
+    if any(
+        part == _PYCACHE_DIRECTORY or part.startswith(".") for part in relative.parts
+    ):
+        return False
+    return path.suffix not in {".pyc", ".pyo"}
+
+
+def resolve_managed_file_paths(package_name: str, project_path: Path) -> list[str]:
     """Return the repo-relative managed file paths of a generated project.
 
     The managed wiring files are package-relative; the managed project files
-    are rooted at the project itself.
+    are rooted at the project itself.  Every file a module wrote under
+    ``<package>/quickscale_managed/`` is also resolved here: that directory is
+    regenerated wholesale by ``write_managed_wiring``, so a file left in it is
+    a QuickScale-managed output and a local edit must surface as drift.
+    Byte-compiled caches and dot files are interpreter/tooling artifacts, not
+    generated outputs.
     """
-    return [
+    paths = [
         f"{package_name}/{relative}" for relative in DEFAULT_MANAGED_WIRING_PATHS
     ] + list(DEFAULT_MANAGED_PROJECT_PATHS)
+    managed_root = Path(project_path) / package_name / MANAGED_OUTPUT_DIRECTORY
+    if managed_root.is_dir():
+        paths.extend(
+            path.relative_to(project_path).as_posix()
+            for path in sorted(managed_root.rglob("*"))
+            if path.is_file() and _is_managed_output_file(path, managed_root)
+        )
+    return list(dict.fromkeys(paths))
+
+
+def prune_stale_managed_output_records(
+    managed_files: MutableMapping[str, ManagedFileRecord],
+    project_path: Path,
+    package_name: str,
+) -> None:
+    """Drop records for module outputs the regenerated directory no longer holds.
+
+    ``quickscale_managed/`` is rewritten wholesale, so a removed module leaves
+    hash records for files that are gone.  A missing recorded file would read
+    as drift forever; the capture sites run this only after regeneration, when
+    every remaining output is on disk.
+    """
+    prefix = f"{package_name}/{MANAGED_OUTPUT_DIRECTORY}/"
+    for path in [
+        recorded
+        for recorded in managed_files
+        if recorded.startswith(prefix) and not (Path(project_path) / recorded).is_file()
+    ]:
+        del managed_files[path]
+
+
+def record_managed_file_hashes(
+    managed_files: MutableMapping[str, ManagedFileRecord],
+    project_path: Path,
+    package_name: str,
+) -> dict[str, str]:
+    """Record the current managed-file hashes in applied state.
+
+    Apply, update, remove, and contract adoption all funnel through this
+    function, so every path that rewrites the managed files refreshes the same
+    record set under the same rules.  Stale module outputs are pruned before
+    the new records land, so a removal does not leave a permanent drift
+    warning for a file the regeneration just deleted.
+    """
+    hashes = compute_file_hashes(
+        project_path, resolve_managed_file_paths(package_name, project_path)
+    )
+    prune_stale_managed_output_records(managed_files, project_path, package_name)
+    for path, digest in hashes.items():
+        managed_files[path] = ManagedFileRecord(path=path, hash=digest)
+    return hashes
 
 
 def hash_managed_file(file_path: Path) -> str:

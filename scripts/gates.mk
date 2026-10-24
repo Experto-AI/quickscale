@@ -45,10 +45,13 @@ check-commit-testimony:
 # Inspect every non-merge commit in the selected base-to-head range.  A change
 # to any template the generator emits (the watched set derives from the
 # generator's emission mapping), a generator change that alters the emitted
-# file set, or a module manifest step whose text changes without a new id
-# requires a fresh adoption step id in the same commit (the project
-# declaration or the module manifest), so a generated-project contract change
-# cannot ship without its adoption steps.
+# file set, a change to a public module of quickscale_core.runtime (the runtime
+# surface every generated project imports), or a module manifest step whose
+# text changes without a new id requires a fresh adoption step id in the same
+# commit (the project declaration or the module manifest), so a generated-project
+# contract change cannot ship without its adoption steps.  A private
+# (underscore-prefixed) runtime module is an internal refactor and stays
+# outside the rule.
 check-project-contract-vintage:
 	@$(PYTHON) scripts/check_project_contract_vintage.py
 

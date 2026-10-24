@@ -18,7 +18,6 @@ from quickscale_core.schema.config_schema import (
     validate_config,
 )
 from quickscale_core.schema.state_schema import (
-    ManagedFileRecord,
     QuickScaleState,
     StateManager,
 )
@@ -504,14 +503,9 @@ def _record_regenerated_managed_hashes(
     if state is None:
         return
 
-    managed_paths = _project_state_hashes.resolve_managed_file_paths(project_package)
-    for path_str, digest in _project_state_hashes.compute_file_hashes(
-        project_path, managed_paths
-    ).items():
-        state.managed_files[path_str] = ManagedFileRecord(
-            path=path_str,
-            hash=digest,
-        )
+    _project_state_hashes.record_managed_file_hashes(
+        state.managed_files, project_path, project_package
+    )
     project_state_manager.save_state(state)
 
 

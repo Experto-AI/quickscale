@@ -14,7 +14,6 @@ import click
 
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 
-import quickscale_core.schema.state_schema as _state_schema
 import quickscale_core.project_state_hashes as _project_state_hashes
 import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.utils.git_errors as _git_errors
@@ -243,14 +242,9 @@ def _record_managed_wiring_hashes(
     if state is None:
         return
 
-    managed_paths = _project_state_hashes.resolve_managed_file_paths(project_package)
-    for path_str, digest in _project_state_hashes.compute_file_hashes(
-        project_path, managed_paths
-    ).items():
-        state.managed_files[path_str] = _state_schema.ManagedFileRecord(
-            path=path_str,
-            hash=digest,
-        )
+    _project_state_hashes.record_managed_file_hashes(
+        state.managed_files, project_path, project_package
+    )
     state_manager.save_state(state)
 
 

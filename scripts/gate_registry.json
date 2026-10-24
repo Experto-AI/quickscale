@@ -1,6 +1,6 @@
 {
     "schema_version": 1,
-    "description": "QuickScale gate registry \u2014 declares every gating checkpoint across all execution contexts (local serial/parallel, hosted CI, publish, e2e-trigger). The legacy trigger_inputs field is the ordered, bidirectional partition of e2e.yml's pull-request path allowlist; it never controls whether a gate runs. Any future skip based on trigger_inputs promotes the field for rename or redesign. Source of truth for gate-parity diagnostics.",
+    "description": "QuickScale gate registry — declares every gating checkpoint across all execution contexts (local serial/parallel, hosted CI, publish, e2e-trigger). The legacy trigger_inputs field is the ordered, bidirectional partition of e2e.yml's pull-request path allowlist; it never controls whether a gate runs. Any future skip based on trigger_inputs promotes the field for rename or redesign. Source of truth for gate-parity diagnostics.",
     "contexts": {
         "local-serial": "scripts/check_ci_locally.sh serial mode (QS_CI_PARALLEL=0)",
         "local-parallel": "scripts/check_ci_locally.sh parallel mode (default)",
@@ -37,7 +37,7 @@
             "local": {
                 "order": 1,
                 "description": "Running module-vs-core compatibility check...",
-                "success": "\u2713 Module-to-core compatibility passed",
+                "success": "✓ Module-to-core compatibility passed",
                 "failure_label": "Module-Core Compatibility"
             },
             "makefile_help": {
@@ -80,7 +80,7 @@
             "local": {
                 "order": 2,
                 "description": "Running module-core import linter...",
-                "success": "\u2713 Module-core import linter passed",
+                "success": "✓ Module-core import linter passed",
                 "failure_label": "Module-Core Import Linter"
             },
             "makefile_help": {
@@ -124,7 +124,7 @@
             "local": {
                 "order": 4,
                 "description": "Running module app declaration gate...",
-                "success": "\u2713 Evidence-bearing module app declarations are valid",
+                "success": "✓ Evidence-bearing module app declarations are valid",
                 "failure_label": "Module App Declaration Gate"
             },
             "makefile_help": {
@@ -161,11 +161,11 @@
                 "order": 4,
                 "step_name": "Run org context primitives gate"
             },
-            "help": "Hard-fail lint gate for direct external use of the three privatized\norg-context primitives.  Exits 1 on any violation \u2014 all SA13.2/SA13.3\nmigrations are complete.  AF9 None-path hardening deferred;\ncompatibility aliases remain but trigger the gate.",
+            "help": "Hard-fail lint gate for direct external use of the three privatized\norg-context primitives.  Exits 1 on any violation — all SA13.2/SA13.3\nmigrations are complete.  AF9 None-path hardening deferred;\ncompatibility aliases remain but trigger the gate.",
             "local": {
                 "order": 5,
                 "description": "Running org-context primitives gate...",
-                "success": "\u2713 No direct external use of privatized org-context primitives",
+                "success": "✓ No direct external use of privatized org-context primitives",
                 "failure_label": "Org-Context Primitives Gate"
             },
             "makefile_help": {
@@ -209,7 +209,7 @@
             "local": {
                 "order": 6,
                 "description": "Running CSRF-exempt gate...",
-                "success": "\u2713 All csrf_exempt callsites are protected",
+                "success": "✓ All csrf_exempt callsites are protected",
                 "failure_label": "CSRF-Exempt Gate"
             },
             "makefile_help": {
@@ -253,7 +253,7 @@
             "local": {
                 "order": 7,
                 "description": "Running behavioural commit testimony gate...",
-                "success": "\u2713 Behavioural commits carry required testimony",
+                "success": "✓ Behavioural commits carry required testimony",
                 "failure_label": "Commit Testimony Gate"
             },
             "makefile_help": {
@@ -268,7 +268,7 @@
         },
         {
             "id": "check-project-contract-vintage",
-            "description": "Generated-template and module-manifest contract changes declare a new step id",
+            "description": "Generated-template, runtime-public-module, and module-manifest contract changes declare a new step id",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",
@@ -283,7 +283,7 @@
             "hosted": {
                 "order": 8,
                 "display_name": "Project Contract Vintage Gate (SA207)",
-                "check_step_name": "Verify generated-template and module-manifest contract changes declare a new step id",
+                "check_step_name": "Verify generated-template, runtime-public-module, and module-manifest contract changes declare a new step id",
                 "full_history": true
             },
             "publish": {
@@ -291,11 +291,11 @@
                 "step_name": "Run project contract vintage gate",
                 "command_prefix": "PROJECT_VINTAGE_BASE_REF=\"$(git describe --tags --abbrev=0 'HEAD^' 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)\""
             },
-            "help": "Inspect every non-merge commit in the selected base-to-head range.  A change\nto any template the generator emits (the watched set derives from the\ngenerator's emission mapping), a generator change that alters the emitted\nfile set, or a module manifest step whose text changes without a new id\nrequires a fresh adoption step id in the same commit (the project\ndeclaration or the module manifest), so a generated-project contract change\ncannot ship without its adoption steps.",
+            "help": "Inspect every non-merge commit in the selected base-to-head range.  A change\nto any template the generator emits (the watched set derives from the\ngenerator's emission mapping), a generator change that alters the emitted\nfile set, a change to a public module of quickscale_core.runtime (the runtime\nsurface every generated project imports), or a module manifest step whose\ntext changes without a new id requires a fresh adoption step id in the same\ncommit (the project declaration or the module manifest), so a generated-project\ncontract change cannot ship without its adoption steps.  A private\n(underscore-prefixed) runtime module is an internal refactor and stays\noutside the rule.",
             "local": {
                 "order": 8,
                 "description": "Running project contract vintage gate...",
-                "success": "\u2713 Generated-project contract changes declare an adoption step id",
+                "success": "✓ Generated-project contract changes declare an adoption step id",
                 "failure_label": "Project Contract Vintage Gate"
             },
             "makefile_help": {
@@ -391,7 +391,7 @@
             "local": {
                 "order": 11,
                 "description": "Running registered scripts test suites...",
-                "success": "\u2713 Registered scripts test suites passed",
+                "success": "✓ Registered scripts test suites passed",
                 "failure_label": "Registered Script Test Suites"
             },
             "makefile_help": {
@@ -429,7 +429,7 @@
             "local": {
                 "order": 9,
                 "description": "Running dependency vulnerability gate...",
-                "success": "\u2713 Dependency vulnerability gate passed",
+                "success": "✓ Dependency vulnerability gate passed",
                 "failure_label": "Dependency Vulnerability Gate"
             },
             "makefile_help": {
@@ -474,7 +474,7 @@
             "local": {
                 "order": 10,
                 "description": "Running security static-analysis gate...",
-                "success": "\u2713 Security static-analysis gate passed",
+                "success": "✓ Security static-analysis gate passed",
                 "failure_label": "Security Static-Analysis Gate"
             },
             "makefile_help": {
@@ -581,7 +581,7 @@
             "local": {
                 "order": 12,
                 "description": "Running generated-project automation gate...",
-                "success": "\u2713 Generated-project CI test, migrate, and healthcheck executed cleanly",
+                "success": "✓ Generated-project CI test, migrate, and healthcheck executed cleanly",
                 "failure_label": "Generated-Project Automation Gate"
             },
             "make_recipe": [
@@ -617,7 +617,7 @@
             "local": {
                 "order": 13,
                 "description": "Running workflow security gate...",
-                "success": "\u2713 Workflow actions are pinned and permissions are declared",
+                "success": "✓ Workflow actions are pinned and permissions are declared",
                 "failure_label": "Workflow Security Gate"
             },
             "makefile_help": {
@@ -657,7 +657,7 @@
             "local": {
                 "order": 14,
                 "description": "Running secret scanning gate...",
-                "success": "\u2713 No committed secrets found",
+                "success": "✓ No committed secrets found",
                 "failure_label": "Secret Scanning Gate"
             },
             "makefile_help": {
@@ -697,7 +697,7 @@
             "local": {
                 "order": 15,
                 "description": "Running module conventions conformance check...",
-                "success": "\u2713 Every covered Module Conventions rule passes",
+                "success": "✓ Every covered Module Conventions rule passes",
                 "failure_label": "Module Conventions Gate"
             },
             "makefile_help": {
@@ -737,7 +737,7 @@
             "local": {
                 "order": 16,
                 "description": "Running split-facade import gate...",
-                "success": "\u2713 No private module imports its package's facade",
+                "success": "✓ No private module imports its package's facade",
                 "failure_label": "Split-Facade Import Gate"
             },
             "makefile_help": {
@@ -752,7 +752,7 @@
         },
         {
             "id": "quality",
-            "description": "Quality thresholds: fixed fail/warn lines (no baseline or waiver) \u2014 a function at CC >= 21, a Python file at or above 800 lines, a duplication block of >= 20 similar lines, or a 100%-confidence dead-code finding fails make quality; the 11-20 CC, 500-799 line, 6-19 similar-line, and 80-99% confidence bands warn only",
+            "description": "Quality thresholds: fixed fail/warn lines (no baseline or waiver) — a function at CC >= 21, a Python file at or above 800 lines, a duplication block of >= 20 similar lines, or a 100%-confidence dead-code finding fails make quality; the 11-20 CC, 500-799 line, 6-19 similar-line, and 80-99% confidence bands warn only",
             "required_contexts": [
                 "local-serial",
                 "local-parallel"
@@ -766,7 +766,7 @@
             "local": {
                 "order": 17,
                 "description": "Running quality thresholds gate...",
-                "success": "\u2713 Quality thresholds gate passed",
+                "success": "✓ Quality thresholds gate passed",
                 "failure_label": "Quality Thresholds Gate"
             },
             "make_recipe": [
@@ -802,7 +802,7 @@
             "local": {
                 "order": 18,
                 "description": "Running migration freeze gate...",
-                "success": "\u2713 Frozen module migrations match their recorded content identity",
+                "success": "✓ Frozen module migrations match their recorded content identity",
                 "failure_label": "Migration Freeze Gate"
             },
             "makefile_help": {

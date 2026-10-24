@@ -1,12 +1,16 @@
 """
-Emission-mapping and watched-template derivation for the SA267(d) split.
+Emission-mapping, watched-template, and runtime-surface derivation for SA267(d).
 
 The watched template set is derived from the generator's authoritative emission
 mapping, and each compared revision's own generator package is evaluated to
 decide whether a commit started, stopped, or rerouted an emitted file.  The
-facade imports these names from this defining sibling, never through the facade
-(decisions.md, Split-Facade Seams).  Behavior is unchanged from the pre-split
-module.
+watched runtime set is derived from ``quickscale_core.runtime``'s public module
+tree at each compared revision, so a behavior change in a public runtime module
+is a generated-project contract change while a private (``_``-prefixed) module
+refactor is not.  The facade imports these names from this defining sibling,
+never through the facade (decisions.md, Split-Facade Seams).  Behavior is
+unchanged from the pre-split module except for the runtime derivation added by
+SA316.
 """
 
 from __future__ import annotations
@@ -25,13 +29,16 @@ from _vintage_git import (
     REPO_ROOT,
     VintageError,
     _first_parent,
+    _git,
     _git_bytes,
+    _path_exists_in_index,
     _tree_entry_exists,
 )
 
 TEMPLATE_ROOT = "quickscale_core/src/quickscale_core/generator/templates/"
 GENERATOR_PACKAGE_ROOT = "quickscale_core/src/quickscale_core/generator/"
 PACKAGE_ROOT = "quickscale_core/src/quickscale_core"
+RUNTIME_PACKAGE_ROOT = f"{PACKAGE_ROOT}/runtime/"
 _EMIT_SOURCES_SNIPPET = (
     "import json, sys\n"
     "from pathlib import Path\n"
@@ -43,6 +50,7 @@ _EMIT_SOURCES_SNIPPET = (
 _WATCHED_TEMPLATE_PATHS: frozenset[str] | None = None
 _EMITTED_TEMPLATE_SOURCES_AT: dict[str, frozenset[str]] = {}
 _REVISION_EMISSION_MAPPINGS: dict[str, dict[str, str] | None] = {}
+_RUNTIME_PUBLIC_PATHS_AT: dict[str, frozenset[str]] = {}
 
 
 def _emitted_sources_from_mapping(mapping: dict[str, str]) -> frozenset[str]:
@@ -266,4 +274,116 @@ def _generator_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
         path
         for path in paths
         if path.startswith(GENERATOR_PACKAGE_ROOT) and not path.startswith(TEMPLATE_ROOT)
+    )
+
+
+def _is_public_runtime_module(path: str) -> bool:
+    """
+    Return whether a repo path is a public module of ``quickscale_core.runtime``.
+
+    Public means a Python module below the runtime package whose path carries
+    no private segment: a private module starts with ``_`` (the package's
+    ``__init__.py`` is the one exception), and a private package directory
+    makes everything below it private.  Nothing here is a hand-listed module
+    set: the runtime tree at the compared revision decides membership.
+    """
+    if not path.startswith(RUNTIME_PACKAGE_ROOT):
+        return False
+    parts = path[len(RUNTIME_PACKAGE_ROOT) :].split("/")
+    if not parts or parts[-1] == "" or not parts[-1].endswith(".py"):
+        return False
+    if any(not part or part.startswith("_") for part in parts[:-1]):
+        return False
+    return parts[-1] == "__init__.py" or not parts[-1].startswith("_")
+
+
+def _runtime_public_paths_at(commit: str) -> frozenset[str]:
+    """
+    Repo-relative public runtime modules present in ``commit``'s tree.
+
+    Derived from the revision's own tree, so a module added, deleted, or
+    renamed in the compared range is watched on the side that carried it
+    instead of relying on the checked-out package layout.  A Git failure
+    raises :class:`VintageError`: a gate input error is never a pass.
+    """
+    cached = _RUNTIME_PUBLIC_PATHS_AT.get(commit)
+    if cached is not None:
+        return cached
+    output = _git("ls-tree", "-r", "--name-only", commit, "--", RUNTIME_PACKAGE_ROOT)
+    sources = frozenset(path for path in output.splitlines() if _is_public_runtime_module(path))
+    _RUNTIME_PUBLIC_PATHS_AT[commit] = sources
+    return sources
+
+
+def _emitted_in_revisions(path: str, revisions: tuple[str | None, ...]) -> bool:
+    """Return whether any compared revision's generator emitted ``path``."""
+    return any(
+        path in _revision_emitted_sources(revision)
+        for revision in revisions
+        if revision is not None
+    )
+
+
+def _runtime_contract_paths_between(
+    paths: tuple[str, ...],
+    *,
+    before: tuple[str, ...],
+    after: str,
+) -> tuple[str, ...]:
+    """
+    Watched public runtime modules changed between ``before`` and ``after``.
+
+    ``before`` names the compared parent revisions (empty for a root commit)
+    and ``after`` the revision whose tree the change produces.  The reduction
+    keeps the ordinary and merge walkers one call wide; the staged walkers
+    pass their own before/after predicates because the index is not a revision.
+    """
+    return _runtime_contract_paths(
+        paths,
+        present_before=lambda path: any(
+            path in _runtime_public_paths_at(revision) for revision in before
+        ),
+        present_after=lambda path: path in _runtime_public_paths_at(after),
+    )
+
+
+def _runtime_contract_paths_staged(
+    paths: tuple[str, ...],
+    revisions: tuple[str, ...],
+) -> tuple[str, ...]:
+    """
+    Watched public runtime modules in a staged change.
+
+    The before side is the worked parents' trees; the after side is the index,
+    which carries a newly staged module even though no revision does yet.
+    """
+    return _runtime_contract_paths(
+        paths,
+        present_before=lambda path: any(
+            path in _runtime_public_paths_at(revision) for revision in revisions
+        ),
+        present_after=_path_exists_in_index,
+    )
+
+
+def _runtime_contract_paths(
+    paths: tuple[str, ...],
+    *,
+    present_before: Callable[[str], bool],
+    present_after: Callable[[str], bool],
+) -> tuple[str, ...]:
+    """
+    Watched runtime public modules among ``paths``.
+
+    A path counts when it names a public runtime module on either side of the
+    compared change: a change to an existing module is watched, an addition is
+    watched because the after side carries it, and a deletion is watched
+    because the before side did.  Whole-tree edits are not enough: a module
+    that was private on both sides stays outside the contract boundary, which
+    is the internal-refactor control.
+    """
+    return tuple(
+        path
+        for path in paths
+        if _is_public_runtime_module(path) and (present_before(path) or present_after(path))
     )

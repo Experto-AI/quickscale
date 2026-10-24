@@ -21,7 +21,15 @@ SPLIT_SIBLINGS = {
     "_vintage_emission": "check_project_contract_vintage",
     "_vintage_git": "check_project_contract_vintage",
     "_vintage_manifest": "check_project_contract_vintage",
+    "_vintage_staged": "check_project_contract_vintage",
 }
+
+
+def test_every_private_sibling_is_covered() -> None:
+    """A new ``_vintage_*`` sibling joins the structural control automatically."""
+    scripts = Path(vintage.__file__).parent
+    siblings = {path.stem for path in scripts.glob("_vintage_*.py")}
+    assert siblings == set(SPLIT_SIBLINGS)
 
 
 def test_split_siblings_never_import_their_facade() -> None:

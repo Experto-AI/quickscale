@@ -468,6 +468,56 @@ class TestStatusFileHashDrift:
             assert "Managed file drift" in result.output
             assert "testapp/settings/modules.py" in result.output
 
+    def test_status_detects_modified_module_managed_output(self):
+        """A local edit under quickscale_managed/ is managed-file drift (SA316)."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            import os
+            import quickscale_core  # noqa: F401  (import for sys.path)
+            from quickscale_core.project_state import ProjectStateManager
+
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_react",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "social": {
+                                "version": "0.89.0",
+                                "commit_sha": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            managed_dir = Path("testapp") / "quickscale_managed"
+            managed_dir.mkdir(parents=True)
+            managed_file = managed_dir / "social_urls.py"
+            managed_file.write_text("urlpatterns = []\n")
+
+            manager = ProjectStateManager(Path(os.getcwd()))
+            manager.capture_managed_file_hashes(
+                ["testapp/quickscale_managed/social_urls.py"]
+            )
+
+            managed_file.write_text("urlpatterns = ['edited']\n")
+
+            result = runner.invoke(status, [])
+
+            assert result.exit_code == 0
+            assert "Managed file drift" in result.output
+            assert "testapp/quickscale_managed/social_urls.py" in result.output
+
 
 class TestStatusVersionDrift:
     """Tests for module version drift warnings between state and config."""

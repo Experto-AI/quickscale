@@ -154,6 +154,20 @@ _CLEAN_MERGE_MANIFEST = (
 )
 _CLEAN_MERGE_MANIFEST_OTHER_ID = _CLEAN_MERGE_MANIFEST.replace("shared-merge-id", "other-merge-id")
 _GADGET_TEMPLATE = "quickscale_core/src/quickscale_core/generator/templates/common/gadget.html.j2"
+RUNTIME_SETTINGS = "quickscale_core/src/quickscale_core/runtime/settings.py"
+RUNTIME_PRIVATE = "quickscale_core/src/quickscale_core/runtime/_error_shape.py"
+_RUNTIME_DEFAULTS_BEFORE = "COMPOSED_DEFAULTS = {}\n"
+_RUNTIME_DEFAULTS_AFTER = (
+    "COMPOSED_DEFAULTS = {\n"
+    "    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],\n"
+    "}\n"
+)
+_RUNTIME_DEFAULTS_MAIN = "COMPOSED_DEFAULTS = {'main': True}\n"
+_RUNTIME_DEFAULTS_FEATURE = "COMPOSED_DEFAULTS = {'feature': True}\n"
+_RUNTIME_DEFAULTS_RESOLVED = "COMPOSED_DEFAULTS = {'resolved': True}\n"
+_RUNTIME_STEP_DECLARATION = "steps:\n  - id: sa316-runtime-defaults\n    minimum: '0.89.0'\n"
+_RUNTIME_WATCH_FIELD = "runtime_watch_since: '0.89.0'\n"
+_DECLARATION_WITH_RUNTIME_WATCH = _RUNTIME_WATCH_FIELD + "steps: []\n"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -188,6 +202,22 @@ def _stage(repo: Path, files: dict[str, str]) -> None:
 @pytest.fixture
 def repository(tmp_path: Path) -> tuple[Path, str]:
     """Build a repository whose starting tree already carries the declaration."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    base = _commit(
+        repo,
+        "initial",
+        {"README.md": "initial\n", DECLARATION: _DECLARATION_WITH_RUNTIME_WATCH},
+    )
+    return repo, base
+
+
+@pytest.fixture
+def unwatched_runtime_repository(tmp_path: Path) -> tuple[Path, str]:
+    """Build a repository whose declaration predates the runtime watch."""
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-q")
@@ -541,6 +571,250 @@ def test_template_added_while_the_generator_emits_nothing_passes(
     assert result.returncode == 0, result.stderr
 
 
+def test_runtime_public_module_change_without_step_fails(
+    repository: tuple[Path, str],
+) -> None:
+    """A change shaped like 936b8d0b needs an adoption step (SA316)."""
+    repo, _ = repository
+    base = _commit(
+        repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE}
+    )
+    commit = _commit(
+        repo,
+        "make the composed DRF defaults JSON-only",
+        {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER},
+    )
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 1
+    assert commit[:12] in result.stderr
+    assert RUNTIME_SETTINGS in result.stderr
+    assert DECLARATION in result.stderr
+
+
+def test_runtime_public_module_change_with_new_step_passes(
+    repository: tuple[Path, str],
+) -> None:
+    """A runtime behavior change ships with its declared adoption step."""
+    repo, _ = repository
+    base = _commit(
+        repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE}
+    )
+    _commit(
+        repo,
+        "declare the runtime contract change",
+        {
+            RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER,
+            DECLARATION: _RUNTIME_STEP_DECLARATION,
+        },
+    )
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_runtime_change_before_the_watch_boundary_passes(
+    unwatched_runtime_repository: tuple[Path, str],
+) -> None:
+    """The runtime watch is not retroactive: pre-boundary history stays exempt."""
+    repo, base = unwatched_runtime_repository
+    _commit(repo, "historical runtime change", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _commit(repo, "later historical runtime change", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER})
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_staged_runtime_change_before_the_watch_boundary_passes(
+    unwatched_runtime_repository: tuple[Path, str],
+) -> None:
+    """A pre-boundary checkout stays exempt on the pre-commit path too."""
+    repo, _ = unwatched_runtime_repository
+    _commit(repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _stage(repo, {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER})
+
+    result = _run(repo, "--staged")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_pre_boundary_runtime_merge_resolution_passes(
+    unwatched_runtime_repository: tuple[Path, str],
+) -> None:
+    """A historical runtime merge resolution stays exempt in a release range."""
+    repo, base = unwatched_runtime_repository
+    _commit(repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "feature rewrites the defaults", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_FEATURE})
+    _git(repo, "checkout", "-q", "-")
+    _commit(repo, "main rewrites the defaults", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_MAIN})
+    conflict = subprocess.run(
+        ["git", "merge", "feature"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert conflict.returncode != 0, "the branches must conflict for a resolution"
+    (repo / RUNTIME_SETTINGS).write_text(_RUNTIME_DEFAULTS_RESOLVED, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "historical merge with a resolved runtime module")
+    _commit(repo, "activate the runtime watch", {DECLARATION: _DECLARATION_WITH_RUNTIME_WATCH})
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_runtime_change_after_the_watch_boundary_fails(
+    unwatched_runtime_repository: tuple[Path, str],
+) -> None:
+    """Once the boundary lands, a runtime change needs its own step."""
+    repo, base = unwatched_runtime_repository
+    _commit(repo, "activate the runtime watch", {DECLARATION: _RUNTIME_WATCH_FIELD + "steps: []\n"})
+    commit = _commit(
+        repo, "runtime change without a step", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER}
+    )
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 1
+    assert commit[:12] in result.stderr
+    assert RUNTIME_SETTINGS in result.stderr
+
+
+def test_release_range_with_historical_runtime_change_passes(
+    unwatched_runtime_repository: tuple[Path, str],
+) -> None:
+    """A release range carrying pre-SA316 runtime commits still passes (SA316)."""
+    repo, base = unwatched_runtime_repository
+    _commit(repo, "historical runtime change", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _commit(repo, "activate the runtime watch", {DECLARATION: _DECLARATION_WITH_RUNTIME_WATCH})
+    _commit(
+        repo,
+        "declare a post-boundary runtime change",
+        {
+            RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER,
+            DECLARATION: _DECLARATION_WITH_RUNTIME_WATCH
+            + "steps:\n  - id: sa316-runtime-defaults\n    minimum: '0.89.0'\n",
+        },
+    )
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_runtime_private_module_refactor_passes(
+    repository: tuple[Path, str],
+) -> None:
+    """An internal refactor stays outside the contract boundary (SA316)."""
+    repo, _ = repository
+    base = _commit(
+        repo,
+        "add the private runtime module",
+        {RUNTIME_PRIVATE: "def error_shape():\n    return {'code': 'x'}\n"},
+    )
+    _commit(
+        repo,
+        "refactor the private helper",
+        {RUNTIME_PRIVATE: "def error_shape():\n    return {'code': 'y'}\n"},
+    )
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_deleted_runtime_public_module_still_fails(
+    repository: tuple[Path, str],
+) -> None:
+    """Removing a public runtime module is also a contract change."""
+    repo, _ = repository
+    base = _commit(
+        repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE}
+    )
+    _git(repo, "rm", "-q", RUNTIME_SETTINGS)
+    _git(repo, "commit", "-qm", "delete the public runtime module")
+    commit = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    result = _run(repo, "--base-ref", base)
+
+    assert result.returncode == 1
+    assert commit[:12] in result.stderr
+    assert RUNTIME_SETTINGS in result.stderr
+
+
+def test_staged_runtime_change_without_step_fails(
+    repository: tuple[Path, str],
+) -> None:
+    """The pre-commit path watches public runtime modules too (SA316)."""
+    repo, _ = repository
+    _commit(repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _stage(repo, {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER})
+
+    result = _run(repo, "--staged")
+
+    assert result.returncode == 1
+    assert "staged changes" in result.stderr
+    assert RUNTIME_SETTINGS in result.stderr
+
+
+def test_staged_runtime_change_with_new_step_passes(
+    repository: tuple[Path, str],
+) -> None:
+    """A staged runtime change and its new step pass the authorship check."""
+    repo, _ = repository
+    _commit(repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _stage(
+        repo,
+        {
+            RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_AFTER,
+            DECLARATION: _RUNTIME_STEP_DECLARATION,
+        },
+    )
+
+    result = _run(repo, "--staged")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_merge_resolution_runtime_change_without_step_fails(
+    repository: tuple[Path, str],
+) -> None:
+    """A merge resolution that authors a runtime change needs its own step."""
+    repo, _ = repository
+    _commit(repo, "add the runtime settings module", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_BEFORE})
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "feature rewrites the defaults", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_FEATURE})
+    _git(repo, "checkout", "-q", "-")
+    _commit(repo, "main rewrites the defaults", {RUNTIME_SETTINGS: _RUNTIME_DEFAULTS_MAIN})
+    conflict = subprocess.run(
+        ["git", "merge", "feature"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert conflict.returncode != 0, "the branches must conflict for a resolution"
+    (repo / RUNTIME_SETTINGS).write_text(_RUNTIME_DEFAULTS_RESOLVED, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "merge with a resolved runtime module")
+    commit = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    result = _run(repo, "--base-ref", "HEAD^1")
+
+    assert result.returncode == 1
+    assert commit[:12] in result.stderr
+    assert RUNTIME_SETTINGS in result.stderr
+    assert "merge resolution with no new adoption step id" in result.stderr
+
+
 def test_module_manifest_id_colliding_with_another_declaration_fails(
     repository: tuple[Path, str],
 ) -> None:
@@ -808,6 +1082,7 @@ def test_pre_commit_hook_selects_the_expanded_watched_paths() -> None:
         PYPROJECT_TEMPLATE,
         _EMITTED_NEW_TEMPLATE,
         "quickscale_core/src/quickscale_core/generator/generator.py",
+        RUNTIME_SETTINGS,
         DECLARATION,
         SOURCE_MANIFEST,
         BUNDLED_MANIFEST,

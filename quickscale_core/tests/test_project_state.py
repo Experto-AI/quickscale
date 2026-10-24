@@ -551,13 +551,65 @@ class TestDefaultManagedProjectPaths:
             assert "\\" not in path
             assert not path.startswith("/")
 
-    def test_resolve_managed_file_paths_combines_both_sets(self) -> None:
-        paths = resolve_managed_file_paths("myapp")
+    def test_resolve_managed_file_paths_combines_both_sets(
+        self, tmp_path: Path
+    ) -> None:
+        paths = resolve_managed_file_paths("myapp", tmp_path)
 
         assert "myapp/settings/modules.py" in paths
         assert "myapp/urls_modules.py" in paths
         for relative in DEFAULT_MANAGED_PROJECT_PATHS:
             assert relative in paths
+
+    def test_resolve_managed_file_paths_includes_module_outputs(
+        self, tmp_path: Path
+    ) -> None:
+        """Every module output under quickscale_managed/ is hash-tracked (SA316)."""
+        managed_root = tmp_path / "myapp" / "quickscale_managed"
+        managed_root.mkdir(parents=True)
+        (managed_root / "__init__.py").write_text("")
+        (managed_root / "social_urls.py").write_text("urlpatterns = []\n")
+        nested = managed_root / "social"
+        nested.mkdir()
+        (nested / "link_tree.html").write_text("<html></html>\n")
+
+        paths = resolve_managed_file_paths("myapp", tmp_path)
+
+        assert "myapp/quickscale_managed/__init__.py" in paths
+        assert "myapp/quickscale_managed/social_urls.py" in paths
+        assert "myapp/quickscale_managed/social/link_tree.html" in paths
+
+    def test_resolve_managed_file_paths_skips_bytecode_caches(
+        self, tmp_path: Path
+    ) -> None:
+        """Importing the managed package must not turn __pycache__ into drift."""
+        cache = tmp_path / "myapp" / "quickscale_managed" / "__pycache__"
+        cache.mkdir(parents=True)
+        (cache / "social_urls.cpython-314.pyc").write_bytes(b"bytecode")
+        managed_root = tmp_path / "myapp" / "quickscale_managed"
+        (managed_root / "social_urls.py").write_text("x = 1\n")
+
+        paths = resolve_managed_file_paths("myapp", tmp_path)
+
+        assert "myapp/quickscale_managed/social_urls.py" in paths
+        assert not any("__pycache__" in path for path in paths)
+
+    def test_every_manifest_output_falls_under_the_managed_root(self) -> None:
+        """A module's declared outputs are all inside the hashed directory (SA316)."""
+        from quickscale_core.contracts.module_discovery import (
+            discover_shipped_module_names,
+        )
+        from quickscale_core.contracts.resolvers import (
+            load_module_manifest_with_fallback,
+        )
+        from quickscale_core.manifest.schema import MANAGED_FILE_ROOT_PREFIX
+
+        for module_name in discover_shipped_module_names():
+            manifest = load_module_manifest_with_fallback(module_name)
+            for declaration in manifest.managed_files.values():
+                assert declaration.output_path.startswith(MANAGED_FILE_ROOT_PREFIX), (
+                    f"{module_name} writes outside the hashed managed root"
+                )
 
 
 # ---------------------------------------------------------------------------

@@ -86,6 +86,7 @@ myapp/
 Notes:
 - Embedded modules are runtime dependencies that land in `modules/`.
 - `quickscale apply` owns the managed backend and runtime wiring for installed modules.
+- Module-declared managed outputs land in `<package>/quickscale_managed/`. The directory is regenerated wholesale and its files are hash-tracked with the other managed files, so a local edit appears as managed-file drift in `quickscale status`.
 - `myapp/settings/base.py` imports the first-position `ClientIdentityMiddleware` from the versioned `quickscale_core.runtime.settings` facade, establishing the fail-closed client-identity boundary shared by canonical module consumers and ordinary DRF throttles before module middleware or views run. The generated settings keep only user configuration; the contract itself ships with `quickscale-core` under the lockstep pin.
 - The managed social backend transport remains theme-agnostic, but only fresh `showcase_react` starters auto-scaffold the public `/social` and `/social/embeds` pages.
 - Existing projects keep ownership of user-edited theme routes, navigation, and page files unless documentation for a specific release explicitly says otherwise.

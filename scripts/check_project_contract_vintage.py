@@ -10,15 +10,27 @@ generated project — settings templates, ``pyproject.toml.j2``,
 the rule without a second edit here.  A deleted emitted template stays watched
 while it is gone, because removing a generated file is also a contract change.
 
-Every non-merge commit in the selected range that changes a watched template
-must also change the project contract declaration
+The watched runtime set is the public module tree of
+``quickscale_core.runtime``, read from each compared revision's own tree.  A
+change to a public runtime module changes behavior that every generated project
+imports through the versioned lockstep pin, so it joins the emitted-template
+rule: a change shaped like the JSON-only DRF defaults in ``runtime/settings.py``
+cannot ship without its adoption step.  A private (``_``-prefixed) runtime
+module's refactor stays outside the contract boundary, because generated
+projects do not import it.  The runtime watch is not retroactive: it applies
+from the commit that introduces ``runtime_watch_since`` in the declaration
+onward, so a release pull request carrying historical runtime changes still
+passes under the rule those commits were reviewed against.
+
+Every non-merge commit in the selected range that changes a watched template or
+public runtime module must also change the project contract declaration
 ``quickscale_core/src/quickscale_core/data/project_contract.yml`` and declare a
-step id the parent did not declare, so a template contract change can never
-ship without a fresh adoption step (editing existing prose, or the declaration
-alone, would leave already-adopted projects passing enforcement).  A commit
-that changes the generator package is evaluated with that revision's own
-generator code, so a code change that starts, stops, or reroutes an emitted
-file is a watched contract change even when no template path changed.
+step id the parent did not declare, so a contract change can never ship without
+a fresh adoption step (editing existing prose, or the declaration alone, would
+leave already-adopted projects passing enforcement).  A commit that changes the
+generator package is evaluated with that revision's own generator code, so a
+code change that starts, stops, or reroutes an emitted file is a watched
+contract change even when no template path changed.
 
 A commit that changes a module manifest's ``contract_vintage`` block must give
 the changed step a new id: the same id with changed text (or a removed id) is a
@@ -44,23 +56,25 @@ The range base is selected, in order, from ``--base-ref``,
 ``PROJECT_VINTAGE_BASE_REF``, the GitHub event payload, ``GITHUB_BASE_REF``, or
 ``HEAD^`` for a local one-commit check.  ``--head-ref`` defaults to ``HEAD``.
 ``--staged`` checks the index instead of a commit range, for pre-commit; it
-covers the same template and manifest rules but does not compare the emission
-mapping (a staged tree has no revision to execute), so the range check is the
-binding one for generator-code changes.
+covers the same template, runtime, and manifest rules but does not compare the
+emission mapping (a staged tree has no revision to execute), so the range check
+is the binding one for generator-code changes.
 
 Exit codes:
     0 - every relevant commit declares a fresh adoption step id where required
     1 - a generated-project contract change lacks a fresh step id (the project
-        declaration for emitted templates and emission-mapping changes, or the
-        changed module manifest for a module step)
+        declaration for emitted templates, public runtime modules, and
+        emission-mapping changes, or the changed module manifest for a module
+        step)
     2 - Git or input failure; the gate fails closed
 """
 
 # The implementation lives in private ``_vintage_*`` siblings (SA267):
 # ``_vintage_git`` (git plumbing, ref selection, and ancestry),
-# ``_vintage_emission`` (the emission mapping and watched-template
-# derivation), and ``_vintage_manifest`` (manifest vintages, declaration ids,
-# and the identity rules).  This module owns the violation walkers, the
+# ``_vintage_emission`` (the emission mapping, watched-template, and runtime
+# derivations), ``_vintage_manifest`` (manifest vintages, declaration ids, the
+# identity rules, and the report), and ``_vintage_staged`` (the staged-index
+# walkers).  This module owns the violation walkers, the
 # staged-index walkers, the report, and the CLI, and re-exports the pre-split
 # surface for unchanged import paths, so a test's seam is the sibling that
 # defines the name (decisions.md, Split-Facade Seams).
@@ -110,7 +124,13 @@ from _vintage_emission import (
     PACKAGE_ROOT as PACKAGE_ROOT,
 )
 from _vintage_emission import (
+    RUNTIME_PACKAGE_ROOT as RUNTIME_PACKAGE_ROOT,
+)
+from _vintage_emission import (
     TEMPLATE_ROOT as TEMPLATE_ROOT,
+)
+from _vintage_emission import (
+    _emitted_in_revisions as _emitted_in_revisions,
 )
 from _vintage_emission import (
     _emitted_sources_from_mapping as _emitted_sources_from_mapping,
@@ -135,6 +155,18 @@ from _vintage_emission import (
 )
 from _vintage_emission import (
     _revision_mappings_available as _revision_mappings_available,
+)
+from _vintage_emission import (
+    _runtime_contract_paths as _runtime_contract_paths,
+)
+from _vintage_emission import (
+    _runtime_contract_paths_between as _runtime_contract_paths_between,
+)
+from _vintage_emission import (
+    _runtime_contract_paths_staged as _runtime_contract_paths_staged,
+)
+from _vintage_emission import (
+    _runtime_public_paths_at as _runtime_public_paths_at,
 )
 from _vintage_emission import (
     _template_contract_paths as _template_contract_paths,
@@ -317,10 +349,28 @@ from _vintage_manifest import (
     _module_vintage as _module_vintage,
 )
 from _vintage_manifest import (
+    _report as _report,
+)
+from _vintage_manifest import (
+    _runtime_watch_introduction as _runtime_watch_introduction,
+)
+from _vintage_manifest import (
     _source_reference_path as _source_reference_path,
 )
 from _vintage_manifest import (
     _tree_declared_module_ids_at as _tree_declared_module_ids_at,
+)
+from _vintage_staged import (
+    _staged_manifest_violation as _staged_manifest_violation,
+)
+from _vintage_staged import (
+    _staged_merge_violations as _staged_merge_violations,
+)
+from _vintage_staged import (
+    _staged_ordinary_violations as _staged_ordinary_violations,
+)
+from _vintage_staged import (
+    _staged_violation as _staged_violation,
 )
 
 #: Every name the facade re-exports.  Per decisions.md § Split-Facade Seams a
@@ -335,6 +385,7 @@ __all__ = [
     "ModuleVintage",
     "PACKAGE_ROOT",
     "REPO_ROOT",
+    "RUNTIME_PACKAGE_ROOT",
     "TEMPLATE_ROOT",
     "VintageError",
     "Violation",
@@ -344,7 +395,10 @@ __all__ = [
 
 
 def _merge_commit_violations(
-    commit: str, parents: tuple[str, ...], pre_baseline: bool
+    commit: str,
+    parents: tuple[str, ...],
+    pre_baseline: bool,
+    runtime_watched: bool,
 ) -> list[Violation]:
     """Violations for one merge commit, against every parent."""
     violations: list[Violation] = []
@@ -364,8 +418,14 @@ def _merge_commit_violations(
     mapping_changed = bool(_generator_paths(resolution_paths)) and (
         _revision_emission_mapping_changed(commit)
     )
+    runtime_paths = (
+        _runtime_contract_paths_between(resolution_paths, before=parents, after=commit)
+        if runtime_watched
+        else ()
+    )
+    contract_paths = template_paths + runtime_paths
     if (
-        (template_paths or mapping_changed)
+        (contract_paths or mapping_changed)
         and not _merge_declares_new_step(commit, parents)
         and not pre_baseline
     ):
@@ -374,7 +434,7 @@ def _merge_commit_violations(
             Violation(
                 commit,
                 subject,
-                template_paths or _generator_paths(resolution_paths),
+                contract_paths or _generator_paths(resolution_paths),
                 reason="merge resolution with no new adoption step id",
             )
         )
@@ -404,12 +464,12 @@ def _merge_commit_violations(
 def _contract_change_violation(
     commit: str,
     paths: tuple[str, ...],
-    template_paths: tuple[str, ...],
+    contract_paths: tuple[str, ...],
     mapping_changed: bool,
     pre_baseline: bool,
 ) -> Violation | None:
     """Return the missing-adoption-step violation for one changed contract commit."""
-    if not (template_paths or mapping_changed):
+    if not (contract_paths or mapping_changed):
         return None
     declared = _declares_vintage(commit, paths)
     if declared and _declares_new_step(commit):
@@ -419,10 +479,10 @@ def _contract_change_violation(
     # Editing the declaration is not enough: a changed contract must declare a
     # new step id, or projects that already recorded the old ids would keep
     # passing enforcement.
-    reported = template_paths or _generator_paths(paths)
+    reported = contract_paths or _generator_paths(paths)
     if declared:
         reason = "no new adoption step id"
-    elif mapping_changed and not template_paths:
+    elif mapping_changed and not contract_paths:
         reason = "generator emission mapping changed without a new adoption step id"
     else:
         reason = ""
@@ -463,7 +523,10 @@ def _manifest_path_violations(
 
 
 def _ordinary_commit_violations(
-    commit: str, parent: str | None, pre_baseline: bool
+    commit: str,
+    parent: str | None,
+    pre_baseline: bool,
+    runtime_watched: bool,
 ) -> list[Violation]:
     """Violations for one non-merge commit, against its first parent."""
     violations: list[Violation] = []
@@ -478,9 +541,22 @@ def _ordinary_commit_violations(
         checked_out_fallback=template_candidates
         and not _revision_mappings_available((parent, commit)),
     )
+    runtime_paths = (
+        _runtime_contract_paths_between(
+            paths,
+            before=() if parent is None else (parent,),
+            after=commit,
+        )
+        if runtime_watched
+        else ()
+    )
     mapping_changed = bool(_generator_paths(paths)) and _revision_emission_mapping_changed(commit)
     contract_violation = _contract_change_violation(
-        commit, paths, template_paths, mapping_changed, pre_baseline
+        commit,
+        paths,
+        template_paths + runtime_paths,
+        mapping_changed,
+        pre_baseline,
     )
     if contract_violation is not None:
         violations.append(contract_violation)
@@ -496,241 +572,32 @@ def _violations(base: str, head: str) -> tuple[Violation, ...]:
         line for line in _git("rev-list", "--reverse", f"{base}..{head}").splitlines() if line
     )
     baseline = _introduction_commit(head)
+    runtime_baseline = _runtime_watch_introduction(head)
     violations: list[Violation] = []
     for commit in commits:
         pre_baseline = baseline is None or _is_ancestor(commit, baseline)
+        runtime_watched = runtime_baseline is not None and not _is_ancestor(
+            commit, runtime_baseline
+        )
         parents = _parents(commit)
         if len(parents) > 1:
-            violations.extend(_merge_commit_violations(commit, parents, pre_baseline))
+            violations.extend(
+                _merge_commit_violations(commit, parents, pre_baseline, runtime_watched)
+            )
         else:
             parent = _first_parent(commit)
-            violations.extend(_ordinary_commit_violations(commit, parent, pre_baseline))
+            violations.extend(
+                _ordinary_commit_violations(commit, parent, pre_baseline, runtime_watched)
+            )
     return tuple(violations)
-
-
-def _staged_manifest_violation(
-    path: str,
-    *,
-    revisions: tuple[str, ...],
-    foreign_extra: frozenset[str] = frozenset(),
-) -> Violation | None:
-    """Fail a staged manifest edit that does not give a changed step a new identity."""
-    if not _path_exists_in_index(path):
-        return None
-    parents = [_manifest_vintage_at(revision, path) for revision in revisions]
-    current = _module_vintage(_file_in_index(path), f"{path} in the index")
-    if all(parent == current for parent in parents):
-        return None
-    historical: set[str] = set()
-    foreign: frozenset[str] = frozenset()
-    foreign |= foreign_extra
-    for revision in revisions:
-        historical |= _historical_manifest_ids(revision, path)
-        foreign |= _foreign_declared_step_ids(revision, path)
-    return _manifest_identity_violation(
-        parents=parents,
-        current=current,
-        historical=historical,
-        foreign=foreign,
-        commit="index",
-        subject="staged changes",
-        paths=(path,),
-    )
-
-
-def _staged_merge_violations(
-    paths: tuple[str, ...], merge_head_sha: str, revisions: tuple[str, ...]
-) -> list[Violation]:
-    """Violations for a staged merge resolution, against both parents."""
-    violations: list[Violation] = []
-
-    def emitted_in_a_compared_revision(path: str) -> bool:
-        return any(
-            path in _revision_emitted_sources(revision)
-            for revision in revisions
-            if revision is not None
-        )
-
-    # Only resolution edits matter: a path that differs from both parents.
-    # A change inherited from one side is not this author's edit to declare.
-    changed_vs_merge = set(_git("diff", "--cached", "--name-only", merge_head_sha).splitlines())
-    resolution_paths = tuple(path for path in paths if path in changed_vs_merge)
-    template_paths = _template_contract_paths(
-        resolution_paths,
-        emitted_before=emitted_in_a_compared_revision,
-        emitted_after=lambda path: path in _watched_template_paths(),
-        checked_out_fallback=any(path.startswith(TEMPLATE_ROOT) for path in resolution_paths)
-        and not _revision_mappings_available(revisions),
-    )
-    if template_paths:
-        if not _path_exists_in_index(DECLARATION_PATH):
-            violations.append(
-                Violation(
-                    "index",
-                    "staged changes",
-                    template_paths,
-                    reason="the declaration is absent from the merge resolution",
-                )
-            )
-        else:
-            historical = _historical_step_ids("HEAD") | _historical_step_ids(merge_head_sha)
-            if not _index_declared_step_ids() - historical:
-                violations.append(
-                    Violation(
-                        "index",
-                        "staged changes",
-                        template_paths,
-                        reason="no new adoption step id",
-                    )
-                )
-    if DECLARATION_PATH in resolution_paths and _path_exists_in_index(DECLARATION_PATH):
-        historical = set()
-        foreign = set(_index_declared_module_ids())
-        for revision in revisions:
-            historical |= _historical_step_ids(revision)
-            foreign |= set(_foreign_declared_step_ids(revision, DECLARATION_PATH))
-        if (_index_declared_step_ids() - historical) & foreign:
-            violations.append(
-                Violation(
-                    "index",
-                    "staged changes",
-                    (DECLARATION_PATH,),
-                    reason="step id collides with another declaration",
-                )
-            )
-    for path in resolution_paths:
-        if _is_module_manifest_path(path):
-            violation = _staged_manifest_violation(
-                path,
-                revisions=revisions,
-                foreign_extra=frozenset(_index_declared_step_ids())
-                | _index_declared_module_ids(exclude_module=_manifest_module_name(path)),
-            )
-            if violation is not None:
-                violations.append(violation)
-    return violations
-
-
-def _staged_ordinary_violations(
-    paths: tuple[str, ...], revisions: tuple[str, ...]
-) -> list[Violation]:
-    """Violations for a staged index change against the working parents."""
-    violations: list[Violation] = []
-
-    def emitted_in_a_compared_revision(path: str) -> bool:
-        return any(
-            path in _revision_emitted_sources(revision)
-            for revision in revisions
-            if revision is not None
-        )
-
-    template_paths = _template_contract_paths(
-        paths,
-        emitted_before=emitted_in_a_compared_revision,
-        emitted_after=lambda path: path in _watched_template_paths(),
-        checked_out_fallback=any(path.startswith(TEMPLATE_ROOT) for path in paths)
-        and not _revision_mappings_available(revisions),
-    )
-    if template_paths:
-        if DECLARATION_PATH in paths:
-            if not _path_exists_in_index(DECLARATION_PATH):
-                violations.append(
-                    Violation(
-                        "index",
-                        "staged changes",
-                        template_paths,
-                        reason="the declaration is staged for deletion",
-                    )
-                )
-            elif not _index_declared_step_ids() - _historical_step_ids("HEAD"):
-                violations.append(
-                    Violation(
-                        "index",
-                        "staged changes",
-                        template_paths,
-                        reason="no new adoption step id",
-                    )
-                )
-        else:
-            violations.append(Violation("index", "staged changes", template_paths))
-
-    if DECLARATION_PATH in paths and _path_exists_in_index(DECLARATION_PATH):
-        collision = (_index_declared_step_ids() - _historical_step_ids("HEAD")) & (
-            set(_foreign_declared_step_ids("HEAD", DECLARATION_PATH))
-            | set(_index_declared_module_ids())
-        )
-        if collision:
-            violations.append(
-                Violation(
-                    "index",
-                    "staged changes",
-                    (DECLARATION_PATH,),
-                    reason="step id collides with another declaration",
-                )
-            )
-
-    for path in paths:
-        if _is_module_manifest_path(path):
-            violation = _staged_manifest_violation(
-                path,
-                revisions=revisions,
-                foreign_extra=frozenset(_index_declared_step_ids())
-                | _index_declared_module_ids(exclude_module=_manifest_module_name(path)),
-            )
-            if violation is not None:
-                violations.append(violation)
-    return violations
-
-
-def _staged_violation() -> tuple[Violation, ...]:
-    merge_head = subprocess.run(
-        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
-    merge_head_sha = merge_head.stdout.strip() if merge_head.returncode == 0 else None
-
-    if _introduction_commit("HEAD") is None:
-        # The history predates the declaration; the rule does not apply yet.
-        return ()
-
-    paths = _staged_paths()
-    revisions = ("HEAD", merge_head_sha) if merge_head_sha is not None else ("HEAD",)
-
-    if merge_head_sha is not None:
-        return tuple(_staged_merge_violations(paths, merge_head_sha, revisions))
-    return tuple(_staged_ordinary_violations(paths, revisions))
-
-
-def _report(violations: tuple[Violation, ...]) -> None:
-    print(
-        "ERROR: [PROJECT_CONTRACT_VINTAGE] generated-project contract changes "
-        "without a new adoption step id:",
-        file=sys.stderr,
-    )
-    for violation in violations:
-        reason = f" ({violation.reason})" if violation.reason else ""
-        print(
-            f"  {violation.commit[:12]} {violation.subject}{reason}",
-            file=sys.stderr,
-        )
-        for path in violation.template_paths:
-            print(f"    {path}", file=sys.stderr)
-    print(
-        f"\nDeclare the change in {DECLARATION_PATH} under a new adoption step id "
-        "in the same commit, or give the changed module manifest step a new id "
-        "(see the SA207/SA211 declaration blocks).",
-        file=sys.stderr,
-    )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Fail when a generated-project contract template or a module "
-            "manifest adoption step changes without a new step id."
+            "Fail when a generated-project contract template, a public "
+            "runtime module, or a module manifest adoption step changes "
+            "without a new step id."
         )
     )
     parser.add_argument("--base-ref", help="Commit or ref to diff from")
