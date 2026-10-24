@@ -10,12 +10,9 @@ property portal in a project-owned extension (SA153), following
 after that project proves their value. Alongside, close the 2026-10-23 audits' findings, starting
 with the defects that block publication.
 
-**Release status.** 0.89.0 fixes 0.88.0's S1 billing defects; a live 0.88.0 install moves to
-0.89.0 on a fresh database. The 2026-10-23 technical audit found a new S1
-(`billing-subscription-checkout-metadata-key-too-long`) and eight S2s in the unpublished tag, so
-0.89.0 re-enters the release loop: SA310 and SA311 land, the tag is re-cut and
-re-validated, and then the operator's Phases 5–6 sealing and PyPI publication follow SA191d
-([publish_procedure.md](publish_procedure.md)).
+**Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
+database. SA310 (S1) and SA311 (S2s) land, the tag is re-cut and re-validated, and the operator's
+Phases 5–6 sealing and PyPI publication follow SA191d ([publish_procedure.md](publish_procedure.md)).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence and fix
@@ -63,19 +60,18 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
+Track 1: SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA316 ─► SA319 (a → b) ─► SA322 (a → b → c)
+Track 3: SA319 (b) ─► SA322 (a → b → c)
          ─► SA325 ─► SA326 ─► [SA191d (production)] SA277
      release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
-     portal path:  SA316 ─► SA320 (a) ─► SA153 (j); SA191d (production) ─► SA153 (f)
+     portal path:  SA153 (j); SA191d (production) ─► SA153 (f)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA153 (j) needs SA320 (a) only, and (f) needs
-SA191d (production); SA320 (b/c) may finish after SA153 (j). SA277 waits for SA191d (production).
+SA153 (f) needs SA191d (production); SA320 (b/c) do not gate SA153. SA277 waits for SA191d (production).
 SA191d's operator gates are idle time on Track 2, filled with SA310/SA311 and then the Optional
 module tickets. SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its
 checks. Operator publication of 0.89.0 follows SA191d and the re-cut tag. Each slice ships with
@@ -83,8 +79,7 @@ its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change (SA310's optional
 version column, SA314's debit reference) ships as a new migration. SA153's own tables live in the
-project-owned extension as `0002+` migrations. Arch fix order holds: SA316 before SA320, SA317
-before SA319.
+project-owned extension as `0002+` migrations.
 
 ### Track states
 
@@ -92,7 +87,7 @@ before SA319.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA319 (b) | yes | no: SA191d (production) for SA277 | yes: SA319 (a) |
+| 3 | SA319 (b) (in progress) | yes | no: SA191d (production) for SA277 | yes: — |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -130,19 +125,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — generated project and property portal
 
-- [x] **SA312 — Close the generated-project and release-workflow safety defects before publication.**
-
-- [x] **SA318 — Run generated tenant-isolation tests under the restricted runtime role.**
-
 - [ ] **SA320 — Deliver module resource contracts to user-owned pages through managed hooks.**
 
   Closes arch `generated-file-ownership-unmodeled` (options 1 + 2) and coherence
   `generated-module-branches` and `notifications-anymail-wiring-split` (proposals 1–2, gaps 22 and
-  26). SA316 landed the watch that covers every new managed output from its first release.
+  26).
 
   **Slices:**
-  - [x] (a)
-  - [ ] (b) After (a), move the remaining theme pages' module paths and types onto the generated
+  - [ ] (b) Move the remaining theme pages' module paths and types onto the generated
     hooks; the closed-world check passes over the full theme (Tier 2-full).
   - [ ] (c) Move the per-module branches in core templates (admin index, CI/Makefile, Compose,
     base settings, the notifications `ANYMAIL` block) into module-declared manifest blocks or a
@@ -166,8 +156,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Target `buenosairesproperties.com` with one React public property surface over a project-owned
   JSON read API under the [extension contract](module-extension.md), building on the React pages
   and `/api/properties/` the port carried over. No public API in `listings`, no generic property
-  behavior in generated projects. Module-coupled data on new pages comes through the managed hooks
-  SA320 (a) generates (arch `generated-file-ownership-unmodeled`), and project-owned tenant views
+  behavior in generated projects. Module-coupled data on new pages comes through the generated managed
+  hooks (arch `generated-file-ownership-unmodeled`), and project-owned tenant views
   run in the generated isolation lane.
 
   **Acceptance:** the served documents (per-request head and crawler summary), the sitemap and
@@ -175,10 +165,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   deployed site, and the extension/tenant declarations pass in `manage.py check`.
 
   **Slices:**
-  - [x] (h)
-  - [ ] (j) After SA320 (a), close search → detail → inquiry gaps; test organization isolation
+  - [ ] (j) Close search → detail → inquiry gaps; test organization isolation
     under the restricted role and the extension declarations, with module data accessed through
-    managed hooks (Tier 2-full).
+    the managed hooks (Tier 2-full).
   - [ ] (f) After (j) and SA191d (production), deploy and re-prove that journey on the live site
     with operator approval and a tested deploy-revert path (Tier 2-full).
 
@@ -204,8 +193,6 @@ incident every old variable is exposed: none is carried, and the old PostgreSQL 
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
 defect is fixed in `bap-web`. The module fixes below reach `bap-web` through its next ordinary
 update; the cutover does not wait for them.
-
-- [x] **SA327 — Raise module dependency floors past open Dependabot advisories.**
 
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
@@ -313,22 +300,13 @@ update; the cutover does not wait for them.
 
 ### Track 3 — upgrade path, generator state and backups
 
-- [x] **SA313 — Run backup dump and restore under the backup role, not the runtime role.**
-
-- [x] **SA316 — Extend the contract-vintage gate to the runtime surface and managed outputs.**
-
-- [x] **SA317 — Give apply state one owner and close the CLI command defects.**
-
 - [ ] **SA319 — Update modules as one sealed-tag transaction.**
 
-  Closes arch `module-upgrade-no-reconciler` (option 1, option 2 as the transition guard). Builds
-  on SA317's single state owner so the journal is not a third writer.
+  Closes arch `module-upgrade-no-reconciler` (option 1, option 2 as the transition guard); the
+  journal writes through apply state's single owner.
 
   **Slices:**
-  - [x] (a) Update resolves and verifies the sealed `splits/<module>/<version>` tag before the
-    first pull and refreshes `poetry.lock`; a release gate asserts each split branch tip and sealed
-    tag share a tree (Tier 2-full).
-  - [ ] (b) After (a), an update journal commits the module set once with one state write; a test
+  - [ ] (b) An update journal commits the module set once with one state write; a test
     that kills between modules resumes to one coherent set (Tier 2-full).
 
 - [ ] **SA322 — Make backup restore safe and its recovery point coherent.**
