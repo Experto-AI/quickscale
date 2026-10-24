@@ -1244,7 +1244,7 @@ docker:
 """
                 )
 
-            with open("testapp/.quickscale/apply-recovery.yml", "w") as f:
+            with open("testapp/.quickscale/state.yml", "w") as f:
                 f.write(
                     """
 version: "1"
@@ -1260,6 +1260,14 @@ modules:
     commit_sha:
     embedded_at: "2025-01-01T00:00:00"
     options: {}
+"""
+                )
+
+            with open("testapp/.quickscale/apply-recovery.yml", "w") as f:
+                f.write(
+                    """
+resume_checkpoint:
+  resume_step_id: managed module wiring generation
 git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
 """
                 )
@@ -1600,26 +1608,10 @@ class TestApplyAF5ResumeCheckpointPreserved:
     ) -> None:
         """When a recovery ledger already has resume_checkpoint, saving a new
         recover state must preserve it."""
-        from quickscale_core.schema.state_schema import (
-            ProjectState,
-            QuickScaleState,
-        )
         from quickscale_cli.commands._state import _save_apply_recovery_state
 
         project = tmp_path / "myapp"
         project.mkdir()
-
-        # Create a minimal QuickScaleState for the project
-        state = QuickScaleState(
-            version="1",
-            project=ProjectState(
-                slug="myapp",
-                package="myapp",
-                theme="showcase_react",
-                created_at="2025-01-01T00:00:00",
-                last_applied="2025-06-01T00:00:00",
-            ),
-        )
 
         # Write an initial recovery ledger with a resume_checkpoint
         ledger_path = project / ".quickscale" / "apply-recovery.yml"
@@ -1647,33 +1639,11 @@ class TestApplyAF5ResumeCheckpointPreserved:
             )
         )
 
-        # Create a config-like namespace for _save_apply_recovery_state
-        from types import SimpleNamespace
-
-        config = SimpleNamespace(
-            project=SimpleNamespace(
-                slug="myapp",
-                package="myapp",
-                theme="showcase_react",
-            ),
-            modules={},
-        )
-
-        # Save a recovery state via _save_apply_recovery_state.
+        # Save a recovery pointer via _save_apply_recovery_state.
         # This should preserve the existing resume_checkpoint.
         result = _save_apply_recovery_state(
             project,
-            config,
-            existing_state=None,
-            embedded_modules=[],
-            delta=SimpleNamespace(
-                has_changes=False,
-                modules_to_remove=[],
-                theme_changed=False,
-                config_deltas={},
-            ),
             checkpoint_tree_id="deadbeefcafebabedeadbeefcafebabedeadbeef",
-            state_snapshot=state,
         )
 
         assert result is True
@@ -1690,25 +1660,10 @@ class TestApplyAF5ResumeCheckpointPreserved:
     ) -> None:
         """An AF6-era ledger (no resume_checkpoint) must round-trip without
         introducing one."""
-        from quickscale_core.schema.state_schema import (
-            ProjectState,
-            QuickScaleState,
-        )
         from quickscale_cli.commands._state import _save_apply_recovery_state
 
         project = tmp_path / "myapp"
         project.mkdir()
-
-        state = QuickScaleState(
-            version="1",
-            project=ProjectState(
-                slug="myapp",
-                package="myapp",
-                theme="showcase_react",
-                created_at="2025-01-01T00:00:00",
-                last_applied="2025-06-01T00:00:00",
-            ),
-        )
 
         # Write an AF6-era recovery ledger (without resume_checkpoint).
         ledger_path = project / ".quickscale" / "apply-recovery.yml"
@@ -1732,30 +1687,9 @@ class TestApplyAF5ResumeCheckpointPreserved:
             )
         )
 
-        from types import SimpleNamespace
-
-        config = SimpleNamespace(
-            project=SimpleNamespace(
-                slug="myapp",
-                package="myapp",
-                theme="showcase_react",
-            ),
-            modules={},
-        )
-
         result = _save_apply_recovery_state(
             project,
-            config,
-            existing_state=None,
-            embedded_modules=[],
-            delta=SimpleNamespace(
-                has_changes=False,
-                modules_to_remove=[],
-                theme_changed=False,
-                config_deltas={},
-            ),
             checkpoint_tree_id="deadbeefcafebabedeadbeefcafebabedeadbeef",
-            state_snapshot=state,
         )
 
         assert result is True

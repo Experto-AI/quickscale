@@ -185,6 +185,48 @@ class TestIsGitRepo:
         assert mock_run.call_args[1]["cwd"] == custom_path
 
 
+class TestHasGitRepository:
+    """Strict repository probe for mutating callers."""
+
+    @patch("subprocess.run")
+    def test_confirmed_repository_returns_true(self, mock_run: MagicMock) -> None:
+        from quickscale_core.utils.git_repo import has_git_repository
+
+        mock_run.return_value = MagicMock(stdout=".git\n", returncode=0)
+        assert has_git_repository() is True
+
+    @patch("subprocess.run")
+    def test_confirmed_non_repository_returns_false(self, mock_run: MagicMock) -> None:
+        from quickscale_core.utils.git_repo import has_git_repository
+
+        mock_run.side_effect = subprocess.CalledProcessError(
+            128,
+            "git",
+            stderr="fatal: not a git repository (or any parent directory)",
+        )
+        assert has_git_repository() is False
+
+    @patch("subprocess.run")
+    def test_missing_git_raises(self, mock_run: MagicMock) -> None:
+        from quickscale_core.utils.git_repo import has_git_repository
+
+        mock_run.side_effect = FileNotFoundError("git")
+        with pytest.raises(GitError, match="git executable not found"):
+            has_git_repository()
+
+    @patch("subprocess.run")
+    def test_unexpected_probe_failure_raises(self, mock_run: MagicMock) -> None:
+        from quickscale_core.utils.git_repo import has_git_repository
+
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1,
+            "git",
+            stderr="fatal: detected dubious ownership",
+        )
+        with pytest.raises(GitError, match="Failed to inspect git repository"):
+            has_git_repository()
+
+
 class TestIsWorkingDirectoryClean:
     """Tests for is_working_directory_clean function"""
 
@@ -213,6 +255,72 @@ class TestIsWorkingDirectoryClean:
         mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="error")
         with pytest.raises(GitError, match="Failed to check git status"):
             is_working_directory_clean()
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestIsWorkingDirectoryCleanTrackedOnly:
+    """Real-Git coverage for the tracked-only dirty test."""
+
+    @staticmethod
+    def _init_repo(path: Path) -> None:
+        path.mkdir()
+        subprocess.run(["git", "init", str(path)], check=True, capture_output=True)
+        for key, value in (
+            ("user.name", "Test User"),
+            ("user.email", "test@example.invalid"),
+        ):
+            subprocess.run(
+                ["git", "-C", str(path), "config", key, value],
+                check=True,
+                capture_output=True,
+            )
+        (path / "tracked.txt").write_text("base\n")
+        subprocess.run(
+            ["git", "-C", str(path), "add", "tracked.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(path), "commit", "-m", "base"],
+            check=True,
+            capture_output=True,
+        )
+
+    def test_clean_tracked_tree_passes(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        self._init_repo(repo)
+
+        assert is_working_directory_clean(repo, include_untracked=False) is True
+
+    @pytest.mark.parametrize("mutation", ["modified", "staged", "deleted"])
+    def test_dirty_tracked_tree_blocks(self, tmp_path: Path, mutation: str) -> None:
+        repo = tmp_path / "repo"
+        self._init_repo(repo)
+        tracked = repo / "tracked.txt"
+        if mutation == "modified":
+            tracked.write_text("changed\n")
+        elif mutation == "staged":
+            tracked.write_text("changed\n")
+            subprocess.run(
+                ["git", "-C", str(repo), "add", "tracked.txt"],
+                check=True,
+                capture_output=True,
+            )
+        else:
+            tracked.unlink()
+
+        assert is_working_directory_clean(repo, include_untracked=False) is False
+        assert is_working_directory_clean(repo) is False
+
+    def test_untracked_file_is_allowed_only_by_tracked_only_check(
+        self, tmp_path: Path
+    ) -> None:
+        repo = tmp_path / "repo"
+        self._init_repo(repo)
+        (repo / "untracked.txt").write_text("new\n")
+
+        assert is_working_directory_clean(repo, include_untracked=False) is True
+        assert is_working_directory_clean(repo) is False
 
 
 class TestCheckRemoteBranchExists:

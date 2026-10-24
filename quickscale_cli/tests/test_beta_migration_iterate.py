@@ -122,12 +122,15 @@ def _install_subprocess_stub(
     template: Path | None = None,
     apply_returncode: int = 0,
     recorded_configs: list[str] | None = None,
+    git_repo: bool = True,
+    git_clean: bool = True,
+    git_available: bool = True,
 ) -> list[dict[str, object]]:
-    """Stub subprocess.run, simulating apply and the verification stack."""
+    """Stub subprocess.run, simulating apply, git probes, and verification."""
     calls: list[dict[str, object]] = []
     configs = recorded_configs if recorded_configs is not None else []
 
-    def fake_run(argv: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(argv: object, **kwargs: object) -> subprocess.CompletedProcess:
         command = tuple(argv)  # type: ignore[arg-type]
         calls.append(
             {
@@ -136,6 +139,17 @@ def _install_subprocess_stub(
                 "input": kwargs.get("input"),
             }
         )
+        if command[:2] == ("git", "rev-parse"):
+            if not git_available:
+                raise FileNotFoundError("git")
+            if not git_repo:
+                raise subprocess.CalledProcessError(
+                    128, command, stderr="fatal: not a git repository"
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="true\n", stderr="")
+        if command[:2] == ("git", "status"):
+            stdout = b"" if git_clean else b" M tracked.txt\x00"
+            return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
         if command[:2] == ("quickscale", "apply"):
             working_dir = Path(str(kwargs["cwd"]))
             configs.append((working_dir / "quickscale.yml").read_text())
@@ -539,9 +553,89 @@ def test_iterate_existing_recipient_migrates_the_baseline_in_place(
         check.name == "existing-recipient-baseline" and check.status == "passed"
         for check in report.preflight_checks
     )
+    assert any(
+        check.name == "existing-recipient-clean-tree" and check.status == "passed"
+        for check in report.preflight_checks
+    )
     assert git_marker.read_text() == "ref: refs/heads/main\n"
     assert (recipient / "MIGRATION_PROMPT.md").is_file()
     assert not _iterate_stage_dir(recipient).exists()
+
+
+def test_iterate_existing_recipient_blocks_on_dirty_tracked_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", "iterate-donor")
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+    git_marker = recipient / ".git" / "HEAD"
+    git_marker.parent.mkdir()
+    git_marker.write_text("ref: refs/heads/main\n")
+    _install_subprocess_stub(monkeypatch, git_clean=False)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert any("uncommitted tracked changes" in blocker for blocker in report.blockers)
+    assert any(
+        check.name == "existing-recipient-clean-tree" and check.status == "failed"
+        for check in report.preflight_checks
+    )
+    # The blocked run never mutates the recipient.
+    assert not (recipient / "MIGRATION_PROMPT.md").exists()
+
+
+def test_iterate_existing_recipient_allows_non_git_recipient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", "iterate-donor")
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+    _install_subprocess_stub(monkeypatch, git_repo=False)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "ready"
+    assert any(
+        check.name == "existing-recipient-clean-tree" and check.status == "passed"
+        for check in report.preflight_checks
+    )
+
+
+def test_iterate_existing_recipient_blocks_when_git_probe_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", "iterate-donor")
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-donor")
+    _install_subprocess_stub(monkeypatch, git_available=False)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="iterate",
+            donor=donor,
+            recipient=recipient,
+            existing_recipient=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Could not verify whether the existing RECIPIENT is a git repository" in blocker
+        for blocker in report.blockers
+    )
+    assert not (recipient / "MIGRATION_PROMPT.md").exists()
 
 
 def test_iterate_existing_recipient_dry_run_plans_no_regeneration(

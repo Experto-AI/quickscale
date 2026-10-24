@@ -39,7 +39,6 @@ def _show_removal_warning(module_name: str, keep_data: bool) -> None:
     click.echo("  • Update .quickscale/state.yml")
     click.echo("  • Update .quickscale/config.yml")
     click.echo("  • Update quickscale.yml (if exists)")
-    click.echo("  • Update .quickscale/apply-recovery.yml (if pending)")
     click.echo("  • Regenerate managed module wiring files")
 
     if not keep_data:

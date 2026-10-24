@@ -323,20 +323,19 @@ def _print_apply_failure_summary(failed_step: str, reason: str) -> None:
 
 def _abort_after_post_embed_failure(
     ctx: ApplyContext,
-    post_embed_state: QuickScaleState,
     *,
     checkpoint_tree_id: str,
     failed_step: str,
     reason: str,
 ) -> None:
-    """Persist rerunnable recovery state before aborting post-embed failures."""
+    """Persist the resume pointer before aborting post-embed failures.
+
+    Applied state was already written to ``.quickscale/state.yml`` by the
+    state-mutating checkpoint path, so the abort only needs to keep the resume
+    ledger current.
+    """
     if _state._save_apply_recovery_state(
         ctx.output_path,
-        ctx.qs_config,
-        ctx.existing_state,
-        list(post_embed_state.modules.keys()),
-        ctx.delta,
-        state_snapshot=post_embed_state,
         checkpoint_tree_id=checkpoint_tree_id,
     ):
         _print_apply_failure_summary(failed_step=failed_step, reason=reason)
@@ -373,11 +372,6 @@ def _finalize_apply_state(
     def _save_recovery(*, checkpoint_tree_id: str) -> bool:
         return _state._save_apply_recovery_state(
             ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            list(post_embed_state.modules.keys()),
-            ctx.delta,
-            state_snapshot=post_embed_state,
             checkpoint_tree_id=checkpoint_tree_id,
         )
 
@@ -492,7 +486,6 @@ def _exec_step_railway_deploy(
     if not outcome.success:
         _abort_after_post_embed_failure(
             ctx,
-            post_embed_state,
             checkpoint_tree_id=checkpoint_tree_id,
             failed_step="railway deploy",
             reason=str(outcome.message),

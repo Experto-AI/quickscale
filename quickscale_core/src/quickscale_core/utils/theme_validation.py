@@ -1,8 +1,9 @@
 """SA94 read-only theme validation preflight.
 
-Independently parses and validates the ``theme`` field in every present
-desired / state / recovery source before any operational mutation.
-Only ``showcase_react`` is accepted.
+Independently parses and validates the ``theme`` field in the present
+desired and applied-state sources before any operational mutation.
+Only ``showcase_react`` is accepted.  The recovery ledger is a resume
+pointer, not an applied-state source, so it is not read here.
 
 Design invariants
 -----------------
@@ -10,10 +11,10 @@ Design invariants
 * **Fail-close.**  Malformed YAML, missing required structure, or
   unrecognised themes raise :class:`ThemeValidationError` immediately.
   There is no silent fallback or auto-conversion.
-* **All sources checked independently.**  Config-first identity
-  fallback must *not* mask an invalid authoritative or recovery source.
-  If any present file carries an invalid theme, the preflight fails
-  regardless of what other valid sources say.
+* **All state sources checked independently.**  Config-first identity
+  fallback must *not* mask an invalid authoritative source.  If any
+  present state file carries an invalid theme, the preflight fails
+  regardless of what the other valid source says.
 * **Actionable remediation.**  Error messages name the file, the
   invalid value, and the only supported theme.
 """
@@ -35,9 +36,9 @@ class ThemeValidationError(ValueError):
     """Raised when theme validation fails for any source.
 
     The ``source_label`` attribute identifies which configuration source
-    triggered the failure (e.g. ``quickscale.yml``, ``.quickscale/state.yml``,
-    ``.quickscale/apply-recovery.yml``).  The ``theme`` attribute carries
-    the invalid value when applicable.
+    triggered the failure (e.g. ``quickscale.yml`` or
+    ``.quickscale/state.yml``).  The ``theme`` attribute carries the invalid
+    value when applicable.
     """
 
     def __init__(
@@ -60,12 +61,9 @@ SOLE_VALID_THEME = "showcase_react"
 
 _CONFIG_FILE = "quickscale.yml"
 _STATE_FILE = ".quickscale/state.yml"
-_RECOVERY_FILE = ".quickscale/apply-recovery.yml"
 
 _CONFIG_LABEL = "quickscale.yml (desired state)"
 _STATE_LABEL = ".quickscale/state.yml (applied state)"
-_RECOVERY_LABEL = ".quickscale/apply-recovery.yml (recovery ledger)"
-_RECOVERY_CHECKPOINT_THEME = "__checkpoint__"
 
 
 # ---------------------------------------------------------------------------
@@ -78,29 +76,22 @@ def validate_theme_preflight(
     *,
     config_path: Path | None = None,
     defer_config_errors: bool = False,
-    allow_recovery_checkpoint: bool = False,
 ) -> None:
-    """Validate the ``theme`` field in every present configuration source.
+    """Validate the ``theme`` field in every present state source.
 
     Checks *all* of the following sources independently when they exist:
 
     * ``<config_path>`` or ``<project_path>/quickscale.yml`` — desired state
     * ``<project_path>/.quickscale/state.yml`` — applied state
-    * ``<project_path>/.quickscale/apply-recovery.yml`` — recovery ledger
 
-    The recovery ledger may temporarily use the ``__checkpoint__`` placeholder
-    only when ``allow_recovery_checkpoint`` is explicitly enabled. The default
-    remains fail-closed for every source, including the recovery ledger.
+    The recovery ledger carries no applied state and is not a theme source.
 
     Args:
         project_path: Root directory of the QuickScale project.
-        config_path: Desired-state YAML path. State and recovery paths remain
-            rooted at ``project_path``.
+        config_path: Desired-state YAML path. Applied state remains rooted at
+            ``project_path``.
         defer_config_errors: Defer desired-state read, structure, absent-theme,
             and explicit-null errors. Unsupported non-null themes still fail.
-        allow_recovery_checkpoint: Permit the recovery ledger's temporary
-            ``__checkpoint__`` placeholder. This does not permit the
-            placeholder in desired or applied state.
 
     Raises:
         ThemeValidationError: If any present source has a missing,
@@ -119,28 +110,16 @@ def validate_theme_preflight(
         if error:
             errors.append(error)
 
-    # Applied state and recovery remain rooted at the project path.
     state_path = project_path / _STATE_FILE
     if state_path.exists():
         error = _source_error(state_path, _STATE_LABEL, _extract_state_theme)
         if error:
             errors.append(error)
 
-    recovery_path = project_path / _RECOVERY_FILE
-    if recovery_path.exists():
-        error = _source_error(
-            recovery_path,
-            _RECOVERY_LABEL,
-            _extract_state_theme,
-            allow_recovery_checkpoint=allow_recovery_checkpoint,
-        )
-        if error:
-            errors.append(error)
-
     if errors:
         raise ThemeValidationError(
             "\n".join(errors),
-            source_label=_source_labels(desired_path, state_path, recovery_path),
+            source_label=_source_labels(desired_path, state_path),
         )
 
 
@@ -155,7 +134,6 @@ def _source_error(
     extract_theme: Any,
     *,
     defer_errors: bool = False,
-    allow_recovery_checkpoint: bool = False,
 ) -> str | None:
     try:
         _validate_source_theme(
@@ -163,7 +141,6 @@ def _source_error(
             source_label,
             extract_theme,
             defer_errors=defer_errors,
-            allow_recovery_checkpoint=allow_recovery_checkpoint,
         )
     except ThemeValidationError as exc:
         return str(exc)
@@ -171,7 +148,7 @@ def _source_error(
 
 
 def _source_labels(*paths: Path) -> str:
-    labels = (_CONFIG_LABEL, _STATE_LABEL, _RECOVERY_LABEL)
+    labels = (_CONFIG_LABEL, _STATE_LABEL)
     return ", ".join(label for label, path in zip(labels, paths) if path.exists())
 
 
@@ -181,7 +158,6 @@ def _validate_source_theme(
     extract_theme: Any,
     *,
     defer_errors: bool = False,
-    allow_recovery_checkpoint: bool = False,
 ) -> None:
     """Parse *file_path* and validate its theme."""
     try:
@@ -208,11 +184,7 @@ def _validate_source_theme(
             source_label=source_label,
         )
 
-    _validate_theme_value(
-        theme,
-        source_label,
-        allow_recovery_checkpoint=allow_recovery_checkpoint,
-    )
+    _validate_theme_value(theme, source_label)
 
 
 def _load_yaml_source(file_path: Path, source_label: str) -> Any:
@@ -245,19 +217,8 @@ def _project_mapping(raw: Any, source_label: str) -> dict[str, Any]:
     return project
 
 
-def _validate_theme_value(
-    theme: str,
-    source_label: str,
-    *,
-    allow_recovery_checkpoint: bool = False,
-) -> None:
+def _validate_theme_value(theme: str, source_label: str) -> None:
     if theme == SOLE_VALID_THEME:
-        return
-    if (
-        theme == _RECOVERY_CHECKPOINT_THEME
-        and allow_recovery_checkpoint
-        and source_label == _RECOVERY_LABEL
-    ):
         return
 
     if theme == "showcase_html":
@@ -313,14 +274,14 @@ def _extract_config_theme(raw: dict) -> str | None:
 
 
 def _extract_state_theme(raw: dict) -> str | None:
-    """Extract theme from a parsed state.yml or recovery-ledger mapping.
+    """Extract theme from a parsed state.yml mapping.
 
     The caller (:func:`_validate_source_theme`) guarantees that
     ``raw["project"]`` is a :class:`dict`.
 
-    State and recovery files are expected to carry a ``project`` section
-    with an explicit ``theme`` field.  Returns ``None`` when absent
-    (which will be treated as a validation error by the caller).
+    Applied state is expected to carry a ``project`` section with an explicit
+    ``theme`` field.  Returns ``None`` when absent (which will be treated as a
+    validation error by the caller).
     """
     project = _project_mapping(raw, _STATE_LABEL)
     theme = project.get("theme")
@@ -334,7 +295,6 @@ def _path_label_for_source(source_label: str) -> str:
     mapping = {
         _CONFIG_LABEL: _CONFIG_FILE,
         _STATE_LABEL: _STATE_FILE,
-        _RECOVERY_LABEL: _RECOVERY_FILE,
     }
     return mapping.get(source_label, source_label)
 

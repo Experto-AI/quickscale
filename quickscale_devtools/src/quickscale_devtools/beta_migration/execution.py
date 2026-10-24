@@ -22,6 +22,7 @@ from .model import (
     VerificationCommandResult,
     VerificationCommandSpec,
     _append_blocker,
+    _append_check,
     _append_completed_step,
     _append_skipped_step,
     _record_changed_file,
@@ -74,6 +75,11 @@ from pathlib import Path
 from quickscale_core.advisory_lock import AdvisoryLock
 from quickscale_core.project_state import ProjectStateManager
 from quickscale_core.schema.state_schema import StateManager
+from quickscale_core.utils.git_errors import GitError
+from quickscale_core.utils.git_repo import (
+    has_git_repository,
+    is_working_directory_clean,
+)
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 from typing import Any
 
@@ -85,6 +91,91 @@ def _copy_path(source: Path, destination: Path) -> None:
         shutil.copytree(source, destination)
         return
     shutil.copy2(source, destination)
+
+
+def _existing_recipient_clean_tree_check(report: BetaMigrationReport) -> bool:
+    """Refuse an in-place run when tracked recipient files are uncommitted.
+
+    ``--existing-recipient`` preserves the baseline ``.git`` so the migration
+    lands as a reviewable diff.  A tracked working tree with uncommitted
+    changes cannot keep that promise, so the run blocks before any mutation.
+    Untracked, non-ignored files are allowed: they are not part of the
+    baseline the migration is layered on.
+    """
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    recipient_path = report.recipient.path
+    try:
+        in_git_repository = has_git_repository(recipient_path)
+    except GitError as exc:
+        detail = (
+            "Could not verify whether the existing RECIPIENT is a git "
+            f"repository: {exc}. Install git or repair the repository before "
+            "using --existing-recipient."
+        )
+        _append_check(
+            report,
+            name="existing-recipient-clean-tree",
+            status="failed",
+            detail=detail,
+        )
+        _append_blocker(report, detail)
+        return False
+
+    if not in_git_repository:
+        _append_check(
+            report,
+            name="existing-recipient-clean-tree",
+            status="passed",
+            detail=(
+                "Recipient is not a git repository; there is no tracked "
+                "baseline to protect."
+            ),
+        )
+        return True
+
+    try:
+        clean = is_working_directory_clean(
+            recipient_path,
+            include_untracked=False,
+        )
+    except GitError as exc:
+        detail = (
+            "Could not verify the existing RECIPIENT tracked working tree: "
+            f"{exc}. Commit or discard tracked changes and retry."
+        )
+        _append_check(
+            report,
+            name="existing-recipient-clean-tree",
+            status="failed",
+            detail=detail,
+        )
+        _append_blocker(report, detail)
+        return False
+
+    if clean:
+        _append_check(
+            report,
+            name="existing-recipient-clean-tree",
+            status="passed",
+            detail="Recipient tracked working tree is clean.",
+        )
+        return True
+
+    detail = (
+        "Existing RECIPIENT has uncommitted tracked changes. Commit or discard "
+        "them before running with --existing-recipient so the migration stays a "
+        "reviewable diff on the baseline commit."
+    )
+    _append_check(
+        report,
+        name="existing-recipient-clean-tree",
+        status="failed",
+        detail=detail,
+    )
+    _append_blocker(report, detail)
+    return False
 
 
 def _refresh_recipient_snapshot(report: BetaMigrationReport) -> ProjectSnapshot:
@@ -764,6 +855,9 @@ def _run_beta_migration_iterate(
             inputs, execution_intent="run", report=report
         )
         if report.blockers:
+            return report
+        if not _existing_recipient_clean_tree_check(report):
+            report.status = "blocked"
             return report
         report = _execute_fresh_first(report)
         report.pending_manual_actions = _build_pending_manual_actions(report)

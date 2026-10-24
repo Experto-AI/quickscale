@@ -137,6 +137,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     Django `>=6.0.8`, `sqlparse >=0.6.0` and, where it uses DRF, `djangorestframework >=3.18.2`;
     analytics, backups, notifications and storage also declare `certifi >=2026.10.19` and
     `urllib3 >=2.8.0`. Generated projects pin the same Django floor.
+  - **Apply state has one owner and destructive CLI paths are contained.** The recovery ledger
+    records only the resume pointer and progress, while `quickscale apply` writes modules,
+    managed-file hashes, and adopted contract steps to `.quickscale/state.yml`; `quickscale remove`
+    rejects traversal names, `apply --force` stages and swaps a non-empty target, and
+    `--existing-recipient` refuses uncommitted tracked files.
   - **Generated tenant isolation runs under the restricted role.** A project with `orgs` gets a
     `tenant-isolation` CI lane that creates a `NOSUPERUSER/NOBYPASSRLS` test role and runs a
     two-organization isolation template; production settings refuse the

@@ -13,9 +13,6 @@ from typing import Any
 import click
 
 
-from quickscale_core.schema.state_schema import (
-    QuickScaleState,
-)
 from quickscale_core.apply import (
     ApplyStep,
 )
@@ -107,7 +104,7 @@ def _execute_apply_steps(
         # managed wiring is regenerated first so the adoption carries the
         # release's settings schema; a failed regeneration records nothing.
         if (
-            ctx.confirm_contract_adoption
+            _context._context_confirms_contract_adoption(ctx)
             and not ctx.delta.has_changes
             and not ctx.has_pending_post_embed_recovery
         ):
@@ -143,7 +140,7 @@ def _execute_apply_steps(
         # Record the confirmed adoption after apply's own final state write,
         # still under the lock, so the outer command never re-acquires it
         # (SA207).
-        if ctx.confirm_contract_adoption:
+        if _context._context_confirms_contract_adoption(ctx):
             current_state = _project_state_manager.ProjectStateManager(
                 ctx.output_path
             ).load_state()
@@ -241,8 +238,9 @@ def _resume_post_embed_state(
 ) -> tuple[Any, Any]:
     """Return the post-embed state snapshot and its checkpoint tree id.
 
-    When recovering past step 1, use the recovery ledger's applied_state as
-    the post-embed state and its git_index_checkpoint as the tree id.
+    A fresh post-embed snapshot is built when step 2 is about to run.  When
+    resuming past step 2, the authoritative ``state.yml`` is the source of
+    applied state; the ledger contributes only its git index checkpoint.
     """
     if should_run:
         return _finalize._exec_step_post_embed_snapshot(
@@ -251,42 +249,44 @@ def _resume_post_embed_state(
             embed_result.provenance_payloads,
         )
     recovery_ledger = executor.load_ledger()
-    if recovery_ledger is not None:
-        return recovery_ledger.applied_state, recovery_ledger.git_index_checkpoint
-    # Fallback — should not happen in recovery mode.
-    return _finalize._exec_step_post_embed_snapshot(
-        ctx,
-        embed_result.embedded_modules,
-        embed_result.provenance_payloads,
+    if ctx.existing_state is None:
+        raise click.ClickException(
+            "Apply recovery records a completed post-embed step, but "
+            ".quickscale/state.yml is missing. Remove "
+            ".quickscale/apply-recovery.yml and re-run 'quickscale apply'."
+        )
+    checkpoint_tree_id = (
+        recovery_ledger.git_index_checkpoint
+        if recovery_ledger is not None
+        else "pending"
     )
+    return ctx.existing_state, checkpoint_tree_id
 
 
 def _checkpoint_post_embed_steps(
     embed_result: Any,
     *,
-    post_embed_state: Any,
     checkpoint_tree_id: Any,
     should_run: bool,
     checkpoint_step: Callable[..., None],
 ) -> None:
     """Write the step 1 and step 2 recovery checkpoints after the snapshot.
 
-    Seed both checkpoints with the real post-embed snapshot and
-    checkpoint_tree_id so the recovery ledger is self-describing and does not
-    carry placeholder state (AF5-CR-002).
+    Step 2 is always checkpointed when it ran, even when no new module was
+    embedded, so every later checkpoint has an authoritative post-embed state
+    in ``state.yml`` to resume from.  The ledger carries the checkpoint only.
     """
-    if should_run and _embedding._embed_modules_ran_successfully(embed_result):
+    if not should_run:
+        return
+    if _embedding._embed_modules_ran_successfully(embed_result):
         checkpoint_step(
             _apply.APPLY_STEPS[0],
             checkpoint_tree_id=checkpoint_tree_id,
-            state_snapshot=post_embed_state,
         )  # step 1 — embed modules
-    if should_run and embed_result.embedded_modules:
-        checkpoint_step(
-            _apply.APPLY_STEPS[1],
-            checkpoint_tree_id=checkpoint_tree_id,
-            state_snapshot=post_embed_state,
-        )  # step 2 — post-embed snapshot
+    checkpoint_step(
+        _apply.APPLY_STEPS[1],
+        checkpoint_tree_id=checkpoint_tree_id,
+    )  # step 2 — post-embed snapshot
 
 
 def _run_managed_artifact_steps(
@@ -303,7 +303,6 @@ def _run_managed_artifact_steps(
         if not _context._regenerate_managed_wiring_for_apply(ctx, embedded_modules):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["managed module wiring generation"],
                 reason="unable to render managed settings, URL, and integration files",
@@ -317,10 +316,19 @@ def _run_managed_artifact_steps(
         if not step4_outcome.success:
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["capture managed file hashes"],
                 reason=str(step4_outcome.message),
+            )
+        if not _state._persist_state_snapshot(ctx.output_path, post_embed_state):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step="authoritative state persistence",
+                reason=(
+                    "managed file hashes were captured but QuickScale could not "
+                    "save .quickscale/state.yml"
+                ),
             )
         checkpoint_step(_apply.APPLY_STEPS[3])  # step 4
 
@@ -338,7 +346,6 @@ def _run_env_example_sync_steps(
         if not _runtime._ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["backups gitignore hardening"],
                 reason="Unable to update .gitignore with the configured private backups directory.",
@@ -349,7 +356,6 @@ def _run_env_example_sync_steps(
         if not _runtime._sync_notifications_env_example(ctx.output_path, ctx.qs_config):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["notifications env example sync"],
                 reason="Unable to update .env.example with the configured notifications env-var names.",
@@ -360,7 +366,6 @@ def _run_env_example_sync_steps(
         if not _runtime._sync_analytics_env_example(ctx.output_path, ctx.qs_config):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["analytics env example sync"],
                 reason="Unable to update .env.example with the configured analytics env-var names.",
@@ -381,7 +386,6 @@ def _run_module_dependency_steps(
         if not _runtime._sync_billing_env_example(ctx.output_path, ctx.qs_config):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["billing env example sync"],
                 reason="Unable to update .env.example with the configured billing env-var names.",
@@ -395,7 +399,6 @@ def _run_module_dependency_steps(
         ):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["module dependency sync"],
                 reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
@@ -427,7 +430,6 @@ def _run_dependency_setup_step(
         ):
             _finalize._abort_after_post_embed_failure(
                 ctx,
-                post_embed_state,
                 checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP[
                     "post-generation dependency and migration setup"
@@ -468,7 +470,6 @@ def _run_docker_startup_step(
             ) and not _runtime._preflight_stale_docker_volumes(ctx.output_path):
                 _finalize._abort_after_post_embed_failure(
                     ctx,
-                    post_embed_state,
                     checkpoint_tree_id=checkpoint_tree_id,
                     failed_step=_FAILED_STEP["docker startup"],
                     reason=(
@@ -482,7 +483,6 @@ def _run_docker_startup_step(
             if not docker_started:
                 _finalize._abort_after_post_embed_failure(
                     ctx,
-                    post_embed_state,
                     checkpoint_tree_id=checkpoint_tree_id,
                     failed_step=_FAILED_STEP["docker startup"],
                     reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
@@ -508,7 +508,6 @@ def _run_migration_step(
             if not _runtime._run_migrations_in_docker(ctx.output_path):
                 _finalize._abort_after_post_embed_failure(
                     ctx,
-                    post_embed_state,
                     checkpoint_tree_id=checkpoint_tree_id,
                     failed_step=_FAILED_STEP["database migrations"],
                     reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
@@ -517,7 +516,6 @@ def _run_migration_step(
             if not _runtime._run_local_migrations(ctx.output_path):
                 _finalize._abort_after_post_embed_failure(
                     ctx,
-                    post_embed_state,
                     checkpoint_tree_id=checkpoint_tree_id,
                     failed_step=_FAILED_STEP["database migrations"],
                     reason="Local database migrations failed. Run 'poetry run python manage.py migrate' manually for details.",
@@ -600,7 +598,6 @@ def _execute_apply_steps_locked(
         step: ApplyStep,
         *,
         checkpoint_tree_id: str | None = None,
-        state_snapshot: QuickScaleState | None = None,
     ) -> None:
         """Write checkpoint progress for a completed step.
 
@@ -609,15 +606,11 @@ def _execute_apply_steps_locked(
             checkpoint_tree_id: Optional git tree id to seed the
                 recovery ledger with the real post-embed checkpoint
                 instead of a placeholder (AF5-CR-002).
-            state_snapshot: Optional ``QuickScaleState`` snapshot to
-                use as the recovery ledger's applied_state (seeds
-                real project metadata instead of fallback placeholders).
         """
         try:
             executor.checkpoint_step(
                 step,
                 checkpoint_tree_id=checkpoint_tree_id,
-                state_snapshot=state_snapshot,
             )
         except _apply.LedgerError:
             click.secho(
@@ -640,9 +633,38 @@ def _execute_apply_steps_locked(
     assert post_embed_state is not None  # noqa: S101 - internal invariant guaranteed by the caller
     assert checkpoint_tree_id is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
+    # The post-embed snapshot is the first applied-state transition.  Record a
+    # durable unfinished-apply marker before advancing state.yml, then persist
+    # the snapshot.  A crash in between therefore leaves a pending ledger, and
+    # the next apply resumes instead of treating the saved state as complete.
+    if _should_run(2):
+        if not _state._mark_apply_in_progress(
+            ctx.output_path,
+            checkpoint_tree_id=checkpoint_tree_id,
+            resume_step_id=_apply.APPLY_STEPS[1].step_id,
+        ):
+            _finalize._print_apply_failure_summary(
+                failed_step="authoritative state persistence",
+                reason=(
+                    "unable to record the unfinished apply in "
+                    ".quickscale/apply-recovery.yml"
+                ),
+            )
+            raise click.Abort()
+        if not _state._persist_state_snapshot(ctx.output_path, post_embed_state):
+            # Keep the marker: the state file is unchanged (the save is
+            # atomic), and dropping the only unfinished-apply evidence could
+            # turn the next run into a false no-op.
+            _finalize._print_apply_failure_summary(
+                failed_step="authoritative state persistence",
+                reason=(
+                    "unable to save the post-embed snapshot to .quickscale/state.yml"
+                ),
+            )
+            raise click.Abort()
+
     _checkpoint_post_embed_steps(
         embed_result,
-        post_embed_state=post_embed_state,
         checkpoint_tree_id=checkpoint_tree_id,
         should_run=_should_run(2),
         checkpoint_step=_checkpoint_step,

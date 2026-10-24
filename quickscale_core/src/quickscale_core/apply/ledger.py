@@ -1,19 +1,27 @@
 """Recovery-ledger schema and loader for QuickScale F12.1b.
 
 The recovery ledger is a YAML file (``.quickscale/apply-recovery.yml``) that
-extends the applied-state snapshot with optional *diagnostic* step-progress
-information keyed by the stable :data:`~quickscale_core.apply.step.APPLY_STEPS`
-step ids.
+records *where an interrupted apply stopped*: the resume checkpoint, the git
+index checkpoint captured at the post-embed boundary, and optional diagnostic
+step-progress entries keyed by the stable
+:data:`~quickscale_core.apply.step.APPLY_STEPS` step ids.
 
 Design invariants
 -----------------
+* **One state owner.**  ``.quickscale/state.yml`` is the sole authoritative
+  applied-state store.  The recovery ledger never embeds a second applied-state
+  snapshot; resume reads ``state.yml`` and uses the ledger only for the resume
+  pointer and diagnostic progress.
 * **Presence semantics are unchanged.**  Resume gating is driven purely by
   whether the ledger file *exists* (``recovery_state is not None``), matching
   the existing ``apply_command.py`` pattern.  The ``step_progress`` section
   is diagnostic-only and must never be used as a resume gate.
-* **Fail-hard / no-legacy-fallback.**  A ledger file that is malformed,
-  missing required applied-state fields, or that references an unknown step id
-  raises :class:`LedgerError` immediately.  There is no silent degradation.
+* **Fail-hard / no-legacy-fallback.**  A ledger file that is malformed or that
+  references an unknown step id raises :class:`LedgerError` immediately.  There
+  is no silent degradation.  Ledgers written before the single-owner change
+  still load: this parser ignores their old applied-state section.  The CLI
+  reads that section once, outside this module, only to migrate an interrupted
+  pre-SA317 apply into ``state.yml``.
 * **state.yml is a separate concern.**  The ``step_progress`` section only
   exists in the recovery ledger; the canonical ``state.yml`` schema is never
   extended with recovery-only fields.
@@ -38,14 +46,7 @@ from typing import Any
 import yaml
 
 from quickscale_core.apply.step import APPLY_STEPS
-from quickscale_core.schema.state_schema import (
-    ManagedFileRecord,
-    ModuleState,
-    ProjectState,
-    QuickScaleState,
-    StateError,
-    build_state_payload,
-)
+from quickscale_core.schema.state_schema import StateError
 
 # ---------------------------------------------------------------------------
 # Public error type
@@ -265,13 +266,11 @@ class StepProgress:
 class RecoveryLedger:
     """Parsed representation of ``.quickscale/apply-recovery.yml``.
 
-    The ``applied_state`` portion reuses :class:`~quickscale_core.schema.state_schema.QuickScaleState`
-    verbatim — the ledger file carries the same applied-state YAML structure
-    that the canonical ``state.yml`` uses.  ``step_progress`` is an optional
-    diagnostic section absent from ``state.yml``.
+    The ledger records recovery *metadata* only.  Applied state — project
+    identity, modules, managed-file hashes, and adopted contract steps — lives
+    in ``.quickscale/state.yml`` and is never duplicated here.
 
     Attributes:
-        applied_state: The applied-state snapshot embedded in the ledger.
         git_index_checkpoint: Git tree-id captured at the time the recovery
             ledger was written.  Records the current git-index state for
             diagnostic or recovery reference.  **Required — present ledgers
@@ -286,17 +285,13 @@ class RecoveryLedger:
             both are treated as valid.  **Diagnostic-only.**
     """
 
-    applied_state: QuickScaleState
     git_index_checkpoint: str
     resume_checkpoint: ResumeCheckpoint | None = field(default=None)
     step_progress: dict[str, StepProgress] | None = field(default=None)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a YAML-friendly mapping suitable for atomic write."""
-        # The applied-state section is the canonical mapping from
-        # ``state_schema.build_state_payload``; the recovery ledger keeps its
-        # historical omit-when-empty ``modules`` shape.
-        data = build_state_payload(self.applied_state, include_empty_modules=False)
+        data: dict[str, Any] = {}
 
         if self.resume_checkpoint is not None:
             data["resume_checkpoint"] = self.resume_checkpoint.to_dict()
@@ -332,9 +327,6 @@ class LedgerManager:
       temporary file.
     * :attr:`ledger_file` — the resolved :class:`~pathlib.Path` for the
       ledger file (useful for presence checks in callers).
-
-    No writer wiring into apply/remove/module commands is performed here;
-    that is F12.1d scope.
     """
 
     def __init__(self, project_path: Path) -> None:
@@ -356,10 +348,10 @@ class LedgerManager:
 
         Raises:
             LedgerError: If the file exists but is malformed or inconsistent.
-                "Inconsistent" includes: not a YAML dict, missing required
-                applied-state fields, or ``step_progress`` containing a step
-                id that is not in the :data:`~quickscale_core.apply.step.APPLY_STEPS`
-                registry.
+                "Inconsistent" includes: not a YAML mapping, missing the
+                required ``git_index_checkpoint`` field, or ``step_progress``
+                containing a step id that is not in the
+                :data:`~quickscale_core.apply.step.APPLY_STEPS` registry.
         """
         if not self.ledger_file.exists():
             return None
@@ -411,7 +403,9 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
     """Parse raw ``yaml.safe_load`` output into a :class:`RecoveryLedger`.
 
     ``git_index_checkpoint`` is **required** — present ledgers that omit the
-    field raise :class:`LedgerError`.
+    field raise :class:`LedgerError`.  Older ledgers that still carry an
+    applied-state section load with that section ignored; ``state.yml`` is the
+    only source of applied state.
 
     Raises:
         LedgerError: On any structural or consistency violation.
@@ -420,9 +414,6 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
         raise LedgerError(
             f"Recovery ledger must be a YAML mapping, got {type(raw).__name__}"
         )
-
-    # --- Applied-state section -------------------------------------------
-    applied_state = _parse_applied_state(raw)
 
     # --- Optional step_progress section ----------------------------------
     step_progress: dict[str, StepProgress] | None = None
@@ -443,192 +434,11 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
             f"'git_index_checkpoint' is required and must be a non-empty string, "
             f"got {raw_gic!r}"
         )
-    git_index_checkpoint = raw_gic
 
     return RecoveryLedger(
-        applied_state=applied_state,
         resume_checkpoint=resume_checkpoint,
         step_progress=step_progress,
-        git_index_checkpoint=git_index_checkpoint,
-    )
-
-
-def _ledger_adopted_contract_steps(
-    project_data: dict[str, Any],
-) -> list[str] | None:
-    """Return validated adopted-contract steps from a ledger project section."""
-    adopted_steps_raw = project_data.get("adopted_contract_steps")
-    if adopted_steps_raw is None:
-        return None
-    if not isinstance(adopted_steps_raw, list) or any(
-        not isinstance(step_id, str) or not step_id for step_id in adopted_steps_raw
-    ):
-        raise LedgerError(
-            "Recovery ledger project.adopted_contract_steps must be a list "
-            "of non-empty strings"
-        )
-    return list(adopted_steps_raw)
-
-
-def _ledger_project_state(project_data: dict[str, Any]) -> ProjectState:
-    """Validate and build the project section of a recovery ledger."""
-    from datetime import datetime
-
-    slug = project_data.get("slug")
-    package = project_data.get("package")
-    theme = project_data.get("theme")
-
-    if not isinstance(slug, str) or not slug:
-        raise LedgerError(
-            f"Recovery ledger project.slug must be a non-empty string, got {slug!r}"
-        )
-    if not isinstance(package, str) or not package:
-        raise LedgerError(
-            f"Recovery ledger project.package must be a non-empty string, got {package!r}"
-        )
-    if not isinstance(theme, str) or not theme:
-        raise LedgerError(
-            f"Recovery ledger project.theme must be a non-empty string, got {theme!r}"
-        )
-
-    adopted_steps = _ledger_adopted_contract_steps(project_data)
-
-    return ProjectState(
-        slug=slug,
-        package=package,
-        theme=theme,
-        project_contract=project_data.get("project_contract"),
-        adopted_contract_steps=adopted_steps,
-        created_at=project_data.get("created_at", datetime.now().isoformat()),
-        last_applied=project_data.get("last_applied", datetime.now().isoformat()),
-    )
-
-
-def _ledger_modules(modules_data: dict[str, Any]) -> dict[str, ModuleState]:
-    """Validate and build the modules section of a recovery ledger."""
-    from datetime import datetime
-
-    from quickscale_core.config import normalize_installed_version
-    from quickscale_core.contracts.module_options import sanitize_module_options
-
-    modules: dict[str, ModuleState] = {}
-    for module_name, module_info in modules_data.items():
-        if not isinstance(module_info, dict):
-            raise LedgerError(
-                f"Recovery ledger module '{module_name}' state must be a mapping"
-            )
-        modules[module_name] = ModuleState(
-            name=module_name,
-            version=normalize_installed_version(module_info.get("version")),
-            commit_sha=module_info.get("commit_sha"),
-            embedded_at=module_info.get("embedded_at", datetime.now().isoformat()),
-            options=sanitize_module_options(
-                module_name,
-                module_info.get("options") or {},
-            ),
-            prefix=module_info.get("prefix"),
-            branch=module_info.get("branch"),
-            installed_at=module_info.get("installed_at"),
-        )
-    return modules
-
-
-def _ledger_managed_file_record(
-    entry: Any, *, file_path: str | None = None
-) -> ManagedFileRecord:
-    """Return one validated managed-file record from a ledger entry."""
-    if not isinstance(entry, dict):
-        if file_path is None:
-            raise LedgerError(
-                f"Each managed_files entry must be a mapping, "
-                f"got {type(entry).__name__}"
-            )
-        raise LedgerError(
-            f"Managed file '{file_path}' value must be a mapping, "
-            f"got {type(entry).__name__}"
-        )
-    try:
-        if file_path is None:
-            return ManagedFileRecord.from_dict(entry)
-        return ManagedFileRecord.from_dict({**entry, "path": file_path})
-    except (KeyError, TypeError, ValueError) as exc:
-        if file_path is None:
-            raise LedgerError(
-                f"Managed file record is missing required fields: {exc}"
-            ) from exc
-        raise LedgerError(
-            f"Managed file record for '{file_path}' is missing required fields: {exc}"
-        ) from exc
-
-
-def _parse_ledger_managed_files(raw: dict[str, Any]) -> dict[str, ManagedFileRecord]:
-    """Validate and build the managed-files section of a recovery ledger.
-
-    Distinguish "key absent" (valid — use empty dict) from "key present with
-    explicit null" (invalid — fail hard).
-    """
-    managed_files: dict[str, ManagedFileRecord] = {}
-    managed_files_data = raw.get("managed_files")
-    if managed_files_data is None:
-        if "managed_files" in raw:
-            raise LedgerError(
-                "'managed_files' must be a list or mapping when present, got None"
-            )
-        return managed_files
-    if isinstance(managed_files_data, list):
-        for entry in managed_files_data:
-            record = _ledger_managed_file_record(entry)
-            managed_files[record.path] = record
-        return managed_files
-    if isinstance(managed_files_data, dict):
-        for file_path, file_info in managed_files_data.items():
-            record = _ledger_managed_file_record(file_info, file_path=file_path)
-            managed_files[record.path] = record
-        return managed_files
-    raise LedgerError(
-        f"'managed_files' must be a list or mapping, "
-        f"got {type(managed_files_data).__name__}"
-    )
-
-
-def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
-    """Extract and validate the applied-state fields from the raw ledger dict.
-
-    Reuses the same validation logic that ``StateManager.load()`` applies to
-    ``state.yml`` — missing or wrong-type required fields raise
-    :class:`LedgerError`.
-
-    Raises:
-        LedgerError: If required applied-state fields are absent or invalid.
-    """
-    # version is optional (default "1") matching StateManager behaviour
-    version = raw.get("version", "1")
-
-    # project section is required
-    project_data = raw.get("project")
-    if not isinstance(project_data, dict):
-        raise LedgerError(
-            "Recovery ledger 'project' section must be a mapping; "
-            f"got {type(project_data).__name__ if project_data is not None else 'absent'}"
-        )
-    project = _ledger_project_state(project_data)
-
-    # modules section is optional
-    modules_data = raw.get("modules", {})
-    if not isinstance(modules_data, dict):
-        raise LedgerError(
-            f"Recovery ledger 'modules' section must be a mapping, "
-            f"got {type(modules_data).__name__}"
-        )
-    modules = _ledger_modules(modules_data)
-
-    managed_files = _parse_ledger_managed_files(raw)
-
-    return QuickScaleState(
-        version=str(version),
-        project=project,
-        modules=modules,
-        managed_files=managed_files,
+        git_index_checkpoint=raw_gic,
     )
 
 

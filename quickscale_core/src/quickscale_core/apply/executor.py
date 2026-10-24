@@ -19,6 +19,9 @@ Design invariants
 * **Checkpoint writes are atomic.**  Each call to :meth:`checkpoint_step`
   reads-modifies-writes the ledger file atomically via
   :class:`~quickscale_core.apply.ledger.LedgerManager`.
+* **The ledger is not a state owner.**  Checkpoints record progress and the
+  resume pointer only; applied state is read from ``.quickscale/state.yml`` on
+  every resume.
 
 No imports from ``quickscale_cli`` are permitted here; this module is pure
 ``quickscale_core`` domain code.
@@ -37,7 +40,6 @@ from quickscale_core.apply.ledger import (
     StepProgress,
 )
 from quickscale_core.apply.step import APPLY_STEPS, ApplyStep, step_by_id
-from quickscale_core.schema.state_schema import QuickScaleState
 
 
 # ---------------------------------------------------------------------------
@@ -207,13 +209,14 @@ class ApplyExecutor:
         detail: str | None = None,
         next_step: ApplyStep | None = None,
         checkpoint_tree_id: str | None = None,
-        state_snapshot: QuickScaleState | None = None,
     ) -> RecoveryLedger:
         """Write a checkpoint for a completed step.
 
         This reads the current recovery ledger, adds a
         :class:`StepProgress` entry for *step*, advances the
         :class:`ResumeCheckpoint` to the next step, and saves atomically.
+        Applied state stays in ``.quickscale/state.yml``; the ledger only
+        records where execution stopped.
 
         Args:
             step: The step that just completed.
@@ -224,11 +227,6 @@ class ApplyExecutor:
             checkpoint_tree_id: Optional git tree id.  When provided,
                 updates the ledger's ``git_index_checkpoint`` (overriding
                 any carried-forward value).
-            state_snapshot: Optional ``QuickScaleState`` snapshot to
-                use as the ledger's ``applied_state``.  When provided,
-                overrides both carried-forward and fallback state so the
-                recovery ledger reflects the real post-embed baseline
-                instead of placeholder placeholders.
 
         Returns:
             The saved :class:`RecoveryLedger`.
@@ -267,48 +265,21 @@ class ApplyExecutor:
             merged_progress.update(existing.step_progress)
         merged_progress[step.step_id] = progress_entry
 
-        if existing is not None:
-            # Use provided state_snapshot if available, otherwise carry
-            # forward the existing applied_state.  Also honour an explicit
-            # checkpoint_tree_id when one is provided (AF5-CR-002).
-            applied_state = (
-                state_snapshot if state_snapshot is not None else existing.applied_state
-            )
-            gic = (
-                checkpoint_tree_id
-                if checkpoint_tree_id is not None
-                else existing.git_index_checkpoint
-            )
-            ledger = RecoveryLedger(
-                applied_state=applied_state,
-                resume_checkpoint=new_checkpoint,
-                step_progress=merged_progress,
-                git_index_checkpoint=gic,
-            )
-        else:
-            # No existing ledger: build a minimal one.  When
-            # state_snapshot is provided (post-embed), use the real
-            # state instead of placeholder fields (AF5-CR-002).
-            from quickscale_core.schema.state_schema import ProjectState
+        # Honour an explicit checkpoint_tree_id when one is provided; otherwise
+        # carry the existing ledger's value forward.  A ledger created before
+        # the post-embed checkpoint has no real tree id yet, so the explicit
+        # sentinel keeps the required field non-empty until it is captured.
+        gic = checkpoint_tree_id
+        if not gic and existing is not None:
+            gic = existing.git_index_checkpoint
+        if not gic:
+            gic = "pending"
 
-            gic = checkpoint_tree_id or "pending"
-            if state_snapshot is not None:
-                applied_state = state_snapshot
-            else:
-                applied_state = QuickScaleState(
-                    version="1",
-                    project=ProjectState(
-                        slug="__checkpoint__",
-                        package="__checkpoint__",
-                        theme="__checkpoint__",
-                    ),
-                )
-            ledger = RecoveryLedger(
-                applied_state=applied_state,
-                resume_checkpoint=new_checkpoint,
-                step_progress=merged_progress,
-                git_index_checkpoint=gic,
-            )
+        ledger = RecoveryLedger(
+            resume_checkpoint=new_checkpoint,
+            step_progress=merged_progress,
+            git_index_checkpoint=gic,
+        )
 
         self._ledger_manager.save(ledger)
         return ledger

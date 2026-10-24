@@ -583,7 +583,7 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Remove should clear stale recovery state so later apply only adds desired modules."""
+    """A pending ledger is a resume pointer; remove keeps it and apply reads state.yml."""
     project_path = tmp_path / "myproject"
     inventory = _write_project_with_modules(
         project_path,
@@ -602,7 +602,9 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
     )
 
     assert remove_result.exit_code == 0
-    assert not (project_path / ".quickscale" / "apply-recovery.yml").exists()
+    # remove no longer rewrites or clears the recovery ledger: it is not a
+    # state owner.  The resumed apply reads the removed module from state.yml.
+    assert (project_path / ".quickscale" / "apply-recovery.yml").exists()
     assert not (project_path / "modules" / "auth").exists()
 
     # Use a dependency-closed desired subset so this lifecycle test exercises
