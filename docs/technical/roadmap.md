@@ -65,7 +65,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (h) ─► SA318 ─► [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
+Track 1: SA318 ─► [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
@@ -76,7 +76,7 @@ Track 3: SA316 ─► SA317 (a, b) ─► SA319 (a → b) ─► SA322 (a → b 
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA153 (h) can ship any time; SA153 (j) needs SA318 and SA320 (a) only, and (f) needs
+SA153 (j) needs SA318 and SA320 (a) only, and (f) needs
 SA191d (production); SA320 (b/c) may finish after SA153 (j). SA277 waits for SA191d (production).
 SA191d's operator gates are idle time on Track 2, filled with SA310/SA311 and then the Optional
 module tickets. SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its
@@ -92,7 +92,7 @@ before SA319, SA318 before SA153 (j).
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA153 (h) | yes | no: SA191d (production) for SA153 (f) | yes: SA153 (h), SA318 |
+| 1 | SA318 | yes | no: SA191d (production) for SA153 (f) | yes: SA318 |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA317 | yes | no: SA191d (production) for SA277 | yes: SA317 |
 
@@ -189,9 +189,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   deployed site, and the extension/tenant declarations pass in `manage.py check`.
 
   **Slices:**
-  - [ ] (h) Close only served-head, crawler-summary, sitemap and robots gaps in the
-    project; request-level crawler tests pass with the existing React build (Tier 2-full).
-  - [ ] (j) After (h), SA318 and SA320 (a), close search → detail → inquiry gaps; test organization
+  - [x] (h)
+  - [ ] (j) After SA318 and SA320 (a), close search → detail → inquiry gaps; test organization
     isolation under the restricted role and the extension declarations, with module data accessed
     through managed hooks (Tier 2-full).
   - [ ] (f) After (j) and SA191d (production), deploy and re-prove that journey on the live site
