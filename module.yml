@@ -104,6 +104,9 @@ dependencies:
   - boto3
   - django-markdownx
   - Pillow
+  - certifi
+  - urllib3
+  - sqlparse
   - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.
