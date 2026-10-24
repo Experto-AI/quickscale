@@ -239,6 +239,11 @@ items:
     `components/forms/FormRenderer.tsx:113` and `hooks/useFormSchema.ts:61-64`. Five theme source
     files plus two emitted social templates carry module paths/types; the three main files carry
     17 resource-subpath literals and four files declare 29 payload types.
+  - **Post-snapshot (2026-10-24):** SA320 (a) moved `CrmPage.tsx`'s five subpaths and `CrmStats`
+    into the generated managed `frontend/src/quickscaleSeam.hooks.ts`, and the closed-world test
+    now rejects a declared resource subpath or payload type in a user-owned file with the managed
+    hook as its passing control. The other pages and templates above still carry theirs, so the
+    finding stays open for SA320 (b)/(c).
   - `test_emission_closed_world.py:489` / `:540-550` permits "a single module reference"; it
     forbids enumerations, not resource subpaths or payload shapes.
   - Contract steps: `project_contract.yml` has **61 step ids** and 116 adoption sub-steps; growth
@@ -250,12 +255,16 @@ items:
     but left resource subpaths and types in pages; `test_emission_closed_world` still allows one
     reference. SA277 a3 only versions the handoff prompt. SA153 (j) has not landed. **Relocated,
     not removed.**
-- **Counter-evidence:** searched for a generated managed-hooks file (`quickscaleSeam.hooks.*`), a
-  detector for module subpaths/payload types in user-owned files, and any adoption verification
-  against file content. Found none. The closed-world test and contract-vintage gate are real, but
-  their scope stops at enumerations and template *wiring*; SA316 now hashes every managed output,
-  but the resource paths and payload types still live in user-owned files. SA153's roadmap line
-  already assigns the managed-hook boundary to this finding.
+- **Counter-evidence:** at the audit snapshot the search found no generated managed-hooks file
+  (`quickscaleSeam.hooks.*`), no detector for module subpaths/payload types in user-owned files,
+  and no adoption verification against file content. The closed-world test and contract-vintage
+  gate are real, but their scope stopped at enumerations and template *wiring*; SA316 hashes every
+  managed output. **SA320 (a) has since landed (2026-10-24):** the generated
+  `frontend/src/quickscaleSeam.hooks.ts` renders each active manifest's `frontend_resources`, the
+  closed-world test rejects a declared resource subpath or payload type in a user-owned file with
+  the managed hook as its passing control, and `CrmPage.tsx` imports the hook. The remaining theme
+  files above still restate their paths and types, so the finding remains open for SA320 (b)/(c).
+  SA153's roadmap line still owns the portal's managed-hook boundary.
 - **Why it compounds:** growth variable = **declared adoption steps × live projects**. Each module
   resource or payload change adds a step (steps are monotonic; the roadmap's stated target is
   "toward zero"); each live project must adopt every step by hand. Built on top: the contract-vintage
@@ -291,8 +300,10 @@ items:
   names a module resource subpath or payload type (with a control case that the managed hook passes).
   **Acceptance check:** changing a module endpoint subpath produces no new `project_contract.yml`
   step and no user-owned diff; the page imports the regenerated hook. Source-checkable through the
-  emission mapping. **First step:** move `CrmPage.tsx`'s section paths and `CrmStats` type into a
-  generated `quickscaleSeam.hooks.crm` file.
+  emission mapping. **First step:** delivered by SA320 (a) on 2026-10-24 — `CrmPage.tsx`'s section
+  paths and `CrmStats` type now come from the generated `frontend/src/quickscaleSeam.hooks.ts`. The
+  next step is SA320 (b): move the remaining theme pages' module paths and types onto the generated
+  hook, then SA320 (c) for the per-module core-template branches.
 - **Remaining delivery ownership:** SA277 (Track 3) owns the two-stage upgrade rule; it does not
   remove resource contracts from user-owned pages. SA153 (j, Track 1) owns the portal's
   managed-hook boundary. Completing either alone is not closure.
@@ -527,9 +538,9 @@ items:
 
 **Probe A — SA153 adds a project-owned public page (next feature).** Stations: user-owned theme page,
 module endpoint, manifest wiring, `project_contract.yml` step, adoption in `bap-web-new`, docs, and
-the missing managed-hook file. Seven stations, and the page↔endpoint pair is held by no gate.
-Verdict: **finding evidence for F1.** The roadmap itself assigns the managed-hook boundary to
-SA153.
+the managed-hook file (delivered by SA320 (a); the remaining pages still bypass it). Seven stations,
+and the page↔endpoint pair is held by no gate. Verdict: **finding evidence for F1.** The roadmap
+itself assigns the managed-hook boundary to SA153.
 
 **Probe B — add a 13th module.** Stations: module directory and `module.yml`, package
 `pyproject.toml`, `MODULE_CATALOG`, `AUTHORITATIVE_MODULE_COUNT`, root `pyproject.toml`, `mypy.ini`
@@ -707,3 +718,9 @@ watchlist **6**.
 - 2026-10-24 — `apply-state-dual-owner`: resolved by SA317.  The recovery ledger now stores the
   resume pointer and diagnostic progress only; `state.yml` is the single applied-state owner and
   resume reads it.
+- 2026-10-24 — `generated-file-ownership-unmodeled`: **still-open, slice (a) landed**. SA320 (a)
+  generates `frontend/src/quickscaleSeam.hooks.ts` from each active manifest's `frontend_resources`
+  section (CRM declares five subpaths and `CrmStats`), moves `CrmPage.tsx` onto it, and extends the
+  closed-world test to reject a declared resource subpath or payload type in a user-owned file with
+  the managed hook as the passing control. The remaining theme pages and the core-template module
+  branches still carry paths and types, so the finding stays open for SA320 (b)/(c).

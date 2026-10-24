@@ -281,15 +281,17 @@ def _plan_make_check(*make_args: str) -> subprocess.CompletedProcess:
     """
     Dry-run the real Makefile's ``check`` recipe with a load-tolerant timeout.
 
-    The plan must not inherit a caller's ``QUIET``: the quiet branch's recursive
-    ``$(MAKE)`` lines execute even under ``-n``, and the nested unit run reads
-    from the captured test process's stdin.  ``make check QUIET=1`` is the
-    documented gate command, so the plan strips that variable.
+    The plan must not inherit a caller's ``QUIET``: the quiet branch runs its
+    validation commands inside the recursive ``check`` recipe, which GNU Make
+    executes even under ``-n``, and the nested unit run reads from the captured
+    test process's stdin.  ``make check QUIET=1`` is the documented gate
+    command, so the plan assigns ``QUIET=`` on the child's command line; an
+    environment override is not enough, because GNU Make restores a variable
+    carried in ``MAKEFLAGS`` at command-line precedence over the environment.
     """
     return subprocess.run(
-        ["make", "-n", "check", *make_args],
+        ["make", "-n", "check", *make_args, "QUIET="],
         cwd=str(REPO_ROOT),
-        env={**os.environ, "QUIET": ""},
         capture_output=True,
         text=True,
         timeout=_MAKE_PLAN_TIMEOUT,
@@ -3293,3 +3295,27 @@ class TestMakeRegistryDerivationFailure:
         assert result.returncode != 0
         assert "Unable to derive local check gate targets" in result.stderr
         assert not marker.exists()
+
+
+class TestMakePlanEnvironmentIsolation:
+    """The plan neutralizes an inherited quiet-mode assignment."""
+
+    def test_inherited_makeflags_quiet_is_overridden_on_the_command_line(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        A parent ``make check QUIET=1`` cannot select the quiet branch.
+
+        GNU Make restores command-line assignments from ``MAKEFLAGS`` at
+        command-line precedence, so clearing the child environment is not
+        enough.  The probe prints the resolved value and stops during parsing,
+        before any recipe (or nested validation command) can run.
+        """
+        monkeypatch.setenv("MAKEFLAGS", " -- QUIET=1")
+
+        result = _plan_make_check(
+            "--eval=$(info REVIEW_QUIET=[$(QUIET)] origin=$(origin QUIET))$(error REVIEW_STOP)"
+        )
+
+        assert "REVIEW_QUIET=[] origin=command line" in result.stdout
+        assert "REVIEW_STOP" in result.stderr
