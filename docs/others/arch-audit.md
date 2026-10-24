@@ -246,8 +246,8 @@ items:
 - **Rank rationale:** High × High, steep. It crosses the generator ↔ project ownership boundary;
   every module API change after 0.89 either mints an adoption step or silently breaks a page; SA153
   is the next work item and adds exactly this surface; declared steps went 53 → 58 in three days.
-- **Horizon & trigger:** `now` — the next module endpoint change, or SA153 (h/j) adding the first
-  project-owned public page.
+- **Horizon & trigger:** `now` — the next module endpoint change, or SA153 (j) coupling a
+  project-owned page to a module resource.
 - **Confidence:** High — mechanism read, theme census counted, gates read, no enforcing layer found.
 - **Context dependence:** `wrong-for-now` (dimension: count of live generated projects). Lives in
   deployment reality (B); with one project, regeneration (SA299 style) is a valid containment.
@@ -273,7 +273,7 @@ items:
     check alone, without regenerating or pulling anything.
   - Fix-regression audit: SA289 moved API **bases** into the seam (`runtime/seam.py:7-10,344,392`)
     but left resource subpaths and types in pages; `test_emission_closed_world` still allows one
-    reference. SA277 a3 only versions the handoff prompt. SA153 (h/j) has not landed. **Relocated,
+    reference. SA277 a3 only versions the handoff prompt. SA153 (j) has not landed. **Relocated,
     not removed.**
 - **Counter-evidence:** searched for a generated managed-hooks file (`quickscaleSeam.hooks.*`), a
   detector for module subpaths/payload types in user-owned files, and any adoption verification
@@ -318,7 +318,7 @@ items:
   emission mapping. **First step:** move `CrmPage.tsx`'s section paths and `CrmStats` type into a
   generated `quickscaleSeam.hooks.crm` file.
 - **Remaining delivery ownership:** SA277 (Track 3) owns the two-stage upgrade rule; it does not
-  remove resource contracts from user-owned pages. SA153 (h → j, Track 1) owns the portal's
+  remove resource contracts from user-owned pages. SA153 (j, Track 1) owns the portal's
   managed-hook boundary. Completing either alone is not closure.
 
 ### Finding 2: Module update is a mutable multi-commit operation
@@ -898,7 +898,7 @@ watchlist **6**.
 
 - 2026-10-23 — `generated-file-ownership-unmodeled`: **still-open**. Mechanism unchanged; project
   steps 53 → **58**; theme resource subpaths/types remain (5 source files + 2 templates); no
-  `quickscaleSeam.hooks.*`; SA277 a3 only versions the handoff prompt; SA153 (h/j) not landed. New
+  `quickscaleSeam.hooks.*`; SA277 a3 only versions the handoff prompt; SA153 (j) not landed. New
   evidence: `quickscale_managed/*` is untracked and the vintage gate excludes runtime (now F3).
 - 2026-10-23 — `core-holds-module-vocabulary`: carried (trigger not fired: 12 modules; count and
   catalog still hand-declared).
