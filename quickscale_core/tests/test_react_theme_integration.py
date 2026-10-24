@@ -1353,6 +1353,9 @@ class TestReactThemeModuleActivationMatrix:
         crm_page = (
             output_path / "frontend" / "src" / "pages" / "CrmPage.tsx"
         ).read_text()
+        seam_hooks = (
+            output_path / "frontend" / "src" / "quickscaleSeam.hooks.ts"
+        ).read_text()
         settings_page = (
             output_path / "frontend" / "src" / "pages" / "SettingsPage.tsx"
         ).read_text()
@@ -1439,6 +1442,15 @@ class TestReactThemeModuleActivationMatrix:
         assert "remains staff-only." not in normalized_crm_page
         assert "is available to organization viewers." in normalized_crm_page
         assert "CRM Dashboard" in crm_page
+        # SA320: the CRM resource contract lives in the managed hook file, not
+        # in the user-owned page.
+        assert "from '@/quickscaleSeam.hooks'" in crm_page
+        assert "CRM_RESOURCE_PATHS" in crm_page
+        assert "interface CrmStats" not in crm_page
+        assert "export interface CrmStats" in seam_hooks
+        assert "export const CRM_RESOURCE_PATHS" in seam_hooks
+        assert "stats: 'stats/'" in seam_hooks
+        assert "contacts: number" in seam_hooks
 
         assert "Storage & CDN" in settings_page
         assert "No admin config surface" in settings_page

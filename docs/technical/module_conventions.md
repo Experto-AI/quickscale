@@ -673,9 +673,17 @@ rather than the release that introduced it.
   `QuickScaleModuleApiPaths`/`QuickScaleModuleDocumentPaths` interfaces and the managed
   `frontend/src/quickscaleSeam.keys.ts`
   renders the validator's required key manifest, both from the shipped set (SA276), so a module
-  that joins the set changes no user-owned theme file. The theme's SPA pages and presentation
-  tables still name the modules that have React surfaces, as [frontend.md](frontend.md) § Module
-  frontend surfaces records; a module with a React surface adds itself there.
+  that joins the set changes no user-owned theme file. A module's API resource subpaths and
+  payload types are generated too: the module declares them in its manifest's
+  `frontend_resources` section (a resource name to a module-relative API subpath, a payload type
+  name to its field/type pairs), and the managed `frontend/src/quickscaleSeam.hooks.ts` renders
+  each module's declaration beside the seam files (SA320). A user-owned page imports the
+  generated constant and type instead of restating a subpath or a response shape, so a module
+  release that changes either changes no user-owned file; the closed-world emission check rejects
+  a user-owned file that names a declared resource subpath or declares a declared payload type.
+  The theme's SPA pages and presentation tables still name the modules that have React surfaces,
+  as [frontend.md](frontend.md) § Module frontend surfaces records; a module with a React surface
+  adds itself there.
 - ✅ The generated `templates/index.html` is user-owned (U3), so the change reaches new projects and
   the release notes carry the step for existing ones.
 - ❌ Hand-written per-module lines or `INSTALLED_APPS` tests in `index.html.j2`, mount paths

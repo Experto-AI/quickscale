@@ -4,6 +4,7 @@ from quickscale_core.generator.ci_environment import CI_ENVIRONMENT_RELATIVE_PAT
 from quickscale_core.generator.operations_page import OPERATIONS_PAGE_RELATIVE_PATH
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
 )
 
@@ -181,14 +182,15 @@ FRESH_FIRST_PROTECTED_PACKAGE_FILES = (
 
 # Recipient-managed files the fresh-first path preserves without donor
 # overwrite.  ``railway.json`` carries deploy configuration; the theme's
-# managed seam declaration and key manifest and the managed CI environment
-# file and operations page are regenerated in the recipient by
-# ``quickscale apply``/``quickscale update``, so donor content never belongs
-# over them.
+# managed seam declaration, key manifest, and module hooks, plus the managed
+# CI environment file and operations page, are regenerated in the recipient
+# by ``quickscale apply``/``quickscale update``, so donor content never
+# belongs over them.
 FRESH_FIRST_PROTECTED_ROOT_FILES = (
     "railway.json",
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     CI_ENVIRONMENT_RELATIVE_PATH,
     OPERATIONS_PAGE_RELATIVE_PATH,
 )
@@ -304,6 +306,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "tests/__init__.py",
     "tests/conftest.py",
     "tests/test_example.py",
+    "tests/test_tenant_isolation.py",
     # ---- Frontend root configs (user-owned after generation) ----
     # Generated once, user-editable, and not migration targets.  The
     # frontend build configs (vite, tsconfig, eslint, postcss) are kept

@@ -543,13 +543,14 @@ class ProjectGenerator:
         output_path: Path,
     ) -> None:
         """Generate project structure in specified directory"""
-        # The managed theme seam declaration and key manifest (SA276) render
-        # from the shipped module tables the runtime seam owns — the same
-        # content ``apply`` and ``update`` write under the managed-file hash
-        # guard.  Imported here, not at module scope, so the emission-mapping
+        # The managed theme seam declaration, key manifest, and module hooks
+        # (SA276, SA320) render from the shipped module tables and manifests
+        # the runtime seam owns — the same content ``apply`` and ``update``
+        # write under the managed-file hash guard.  Imported here, not at module scope, so the emission-mapping
         # path stays free of the runtime package.
         from quickscale_core.runtime.seam import (
             render_seam_declaration,
+            render_seam_hooks,
             render_seam_key_manifest,
         )
 
@@ -597,9 +598,11 @@ class ProjectGenerator:
             "stripe_api_version": STRIPE_API_VERSION,
             # Runtime DB role (RLS enforcement — NOSUPERUSER, NOBYPASSRLS)
             **runtime_db_template_context(package_name),
-            # Managed theme seam declaration and key manifest (SA276).
+            # Managed theme seam declaration, key manifest, and module hooks
+            # (SA276, SA320).
             "seam_declaration": render_seam_declaration(),
             "seam_key_manifest": render_seam_key_manifest(),
+            "seam_hooks": render_seam_hooks(),
             # Managed CI environment file (SA286): the module-owned non-live
             # CI credentials, rendered for the selected module set.
             "ci_environment": render_ci_environment(

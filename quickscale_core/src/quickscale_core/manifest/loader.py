@@ -58,6 +58,7 @@ from quickscale_core.manifest.loader_options import (
     _validate_option_references,
     _validate_validation_block,
 )
+from quickscale_core.manifest.loader_frontend import _parse_frontend_resources
 from quickscale_core.manifest.loader_sections import (
     _parse_ci_environment,
     _parse_contract_vintage,
@@ -253,6 +254,7 @@ _TOP_LEVEL_MANIFEST_KEYS = frozenset(
         "dependencies",
         "managed_files",
         "ci_env",
+        "frontend_resources",
         "operations",
         "throttle_scopes",
         "derivation",
@@ -396,6 +398,9 @@ def load_manifest(
         data, module_name, {**mutable_options, **immutable_options}
     )
 
+    # Parse frontend resource declarations (additive; None when absent)
+    frontend_resources = _parse_frontend_resources(data, module_name)
+
     # Parse operations declarations (additive; None when absent)
     operations = _parse_operations(
         data, module_name, {**mutable_options, **immutable_options}
@@ -429,6 +434,7 @@ def load_manifest(
         dependencies=dependencies,
         managed_files=managed_files,
         ci_env=ci_env,
+        frontend_resources=frontend_resources,
         operations=operations,
         throttle_scopes=throttle_scopes,
         derivation_rules=derivation.get("normalization_rules", []),
@@ -566,6 +572,7 @@ __all__ = [
     "_parse_config_section",
     "_parse_contract_vintage",
     "_parse_derivation_section",
+    "_parse_frontend_resources",
     "_parse_managed_files",
     "_parse_operations",
     "_parse_project_contract_vintage",

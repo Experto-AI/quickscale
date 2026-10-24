@@ -97,7 +97,8 @@
         ],
         "theme": "showcase_react"
       }
-    }
+    },
+    "sa320": "Regenerated 2026-10-24 \u2014 the generated theme gains the managed frontend/src/quickscaleSeam.hooks.ts rendered from each active manifest's frontend_resources declaration; CrmPage.tsx imports CRM_RESOURCE_PATHS and CrmStats from it instead of declaring the five subpaths and the response interface, and the managed seam path list gains the hook file (SA320). All three variants gain 1 path (frontend/src/quickscaleSeam.hooks.ts) and change 1 hash (frontend/src/pages/CrmPage.tsx). All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
@@ -362,7 +363,7 @@
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "644",
-      "sha256": "054f78f1b224ebc2a604eb69aff2768da324a0c4d56726248004b426c90844f5"
+      "sha256": "0d2e3f26829f63770eead63710ebee77c02da5fad6bf38ec2d2fe6b33abfcf9d"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "644",
@@ -427,6 +428,10 @@
     "frontend/src/quickscaleSeam.d.ts": {
       "mode": "644",
       "sha256": "8a311d14fb46033078d6189d63994c3947622c659b1daef3f88515e640cfe4f1"
+    },
+    "frontend/src/quickscaleSeam.hooks.ts": {
+      "mode": "644",
+      "sha256": "25aa99f74d84797225d77cddc577138135c81c2de531046c41bc4b16213a2524"
     },
     "frontend/src/quickscaleSeam.keys.ts": {
       "mode": "644",
@@ -936,7 +941,7 @@
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "644",
-      "sha256": "054f78f1b224ebc2a604eb69aff2768da324a0c4d56726248004b426c90844f5"
+      "sha256": "0d2e3f26829f63770eead63710ebee77c02da5fad6bf38ec2d2fe6b33abfcf9d"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "644",
@@ -1001,6 +1006,10 @@
     "frontend/src/quickscaleSeam.d.ts": {
       "mode": "644",
       "sha256": "8a311d14fb46033078d6189d63994c3947622c659b1daef3f88515e640cfe4f1"
+    },
+    "frontend/src/quickscaleSeam.hooks.ts": {
+      "mode": "644",
+      "sha256": "25aa99f74d84797225d77cddc577138135c81c2de531046c41bc4b16213a2524"
     },
     "frontend/src/quickscaleSeam.keys.ts": {
       "mode": "644",
@@ -1510,7 +1519,7 @@
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "644",
-      "sha256": "054f78f1b224ebc2a604eb69aff2768da324a0c4d56726248004b426c90844f5"
+      "sha256": "0d2e3f26829f63770eead63710ebee77c02da5fad6bf38ec2d2fe6b33abfcf9d"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "644",
@@ -1575,6 +1584,10 @@
     "frontend/src/quickscaleSeam.d.ts": {
       "mode": "644",
       "sha256": "8a311d14fb46033078d6189d63994c3947622c659b1daef3f88515e640cfe4f1"
+    },
+    "frontend/src/quickscaleSeam.hooks.ts": {
+      "mode": "644",
+      "sha256": "25aa99f74d84797225d77cddc577138135c81c2de531046c41bc4b16213a2524"
     },
     "frontend/src/quickscaleSeam.keys.ts": {
       "mode": "644",

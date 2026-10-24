@@ -32,7 +32,7 @@ quickscale plan myapp
 # → Generates quickscale.yml with theme: showcase_react
 ```
 
-**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization, except the QuickScale-managed files (`<package>/settings/modules.py`, `<package>/urls_modules.py`, `<package>/quickscale_managed/`, `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md`), which apply, update, and remove regenerate; a local edit to any of them is reported as managed-file drift by `quickscale status`. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects must adopt those public pages manually if they want them.
+**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization, except the QuickScale-managed files (`<package>/settings/modules.py`, `<package>/urls_modules.py`, `<package>/quickscale_managed/`, `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, `frontend/src/quickscaleSeam.hooks.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md`), which apply, update, and remove regenerate; a local edit to any of them is reported as managed-file drift by `quickscale status`. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects must adopt those public pages manually if they want them.
 
 **Typical flow** to create and run a generated project:
 
@@ -176,8 +176,8 @@ applied forward on the next `migrate`.
 | Project part | Changed by `quickscale update`? | Notes |
 | --- | --- | --- |
 | `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits are unsupported; `quickscale update` refuses and lists them unless `--allow-local-changes` is passed. |
-| Managed wiring and generated pages — `<package>/settings/modules.py`, `<package>/urls_modules.py`, `<package>/quickscale_managed/`, `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md` | Yes | QuickScale-owned; never edit them. `quickscale status` reports a local edit as managed-file drift. |
-| `frontend/` — the React app | Never, except the managed `frontend/src/quickscaleSeam.d.ts` and `frontend/src/quickscaleSeam.keys.ts` above | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
+| Managed wiring and generated pages — `<package>/settings/modules.py`, `<package>/urls_modules.py`, `<package>/quickscale_managed/`, `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, `frontend/src/quickscaleSeam.hooks.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md` | Yes | QuickScale-owned; never edit them. `quickscale status` reports a local edit as managed-file drift. |
+| `frontend/` — the React app | Never, except the managed `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, and `frontend/src/quickscaleSeam.hooks.ts` above | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
 | `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, which loads the token source from Vite in DEBUG and the compiled React stylesheet otherwise; shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |
 | Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
 | Project-owned apps (for example a `properties` app) | Never | Yours entirely. |
@@ -196,7 +196,8 @@ After completing every named adoption step, repeat the command with
 user-owned generated files an adoption step names, but for `quickscale update` and `quickscale
 apply` the confirming option also regenerates the QuickScale-managed files (`<package>/settings/modules.py`,
 `<package>/urls_modules.py`, `<package>/quickscale_managed/`, `frontend/src/quickscaleSeam.d.ts`,
-`frontend/src/quickscaleSeam.keys.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md`)
+`frontend/src/quickscaleSeam.keys.ts`, `frontend/src/quickscaleSeam.hooks.ts`,
+`.github/quickscale-ci-env`, and `quickscale-operations.md`)
 from the installed modules — which is how an adoption step whose
 deliverable is managed wiring, such as the SA217 settings schema, completes. Such a step therefore
 runs in this order: make and commit the manual edit (`quickscale update` refuses a dirty tree),
@@ -262,8 +263,8 @@ origin when the browser reaches Vite through another hostname or an HTTPS develo
 a canonical HTTP(S) origin with no path, query, fragment, or user information.
 
 **Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
-QuickScale command rewrites it, except the managed `frontend/src/quickscaleSeam.d.ts` and
-`frontend/src/quickscaleSeam.keys.ts` that apply,
+QuickScale command rewrites it, except the managed `frontend/src/quickscaleSeam.d.ts`,
+`frontend/src/quickscaleSeam.keys.ts`, and `frontend/src/quickscaleSeam.hooks.ts` that apply,
 update, and remove regenerate. What can still change under it is the backend it calls — module API
 responses such as `/orgs/api/`, `/forms/api/<slug>/`, and the CRM API, and the page configuration
 Django passes to the React bundle through `window.__QUICKSCALE__`. Keep the frontend in the same

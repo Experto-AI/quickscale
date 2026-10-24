@@ -19,6 +19,7 @@ from quickscale_core.generator.operations_page import OPERATIONS_PAGE_RELATIVE_P
 from quickscale_core.project_state_records import ManagedFileHash
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
 )
 from quickscale_core.schema.state_schema import ManagedFileRecord, StateError
@@ -52,13 +53,15 @@ _PYCACHE_DIRECTORY = "__pycache__"
 
 # Default managed project files that ``quickscale apply`` regenerates outside
 # the Python package, so they resolve against the project root rather than the
-# package directory.  The theme's seam declaration and its key manifest render
-# from the shipped module set (SA276); the CI environment file renders from
-# each installed module's declared CI placeholders and the operations page
-# from each installed module's declared operations text (SA286).
+# package directory.  The theme's seam declaration, key manifest, and module
+# hooks render from the shipped module set and manifests (SA276, SA320); the
+# CI environment file renders from each installed module's declared CI
+# placeholders and the operations page from each installed module's declared
+# operations text (SA286).
 DEFAULT_MANAGED_PROJECT_PATHS: tuple[str, ...] = (
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     CI_ENVIRONMENT_RELATIVE_PATH,
     OPERATIONS_PAGE_RELATIVE_PATH,
 )

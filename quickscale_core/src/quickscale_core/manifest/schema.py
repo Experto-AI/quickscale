@@ -189,6 +189,34 @@ class ModuleOperations:
 
 
 @dataclass
+class FrontendResources:
+    """A module's frontend resource contract for the managed theme hook.
+
+    Populated from the top-level ``frontend_resources`` section.  ``paths``
+    maps a resource name the theme may reference (``stats``) to that
+    resource's module-relative API subpath (``stats/``), and ``payload_types``
+    maps a response type name (``CrmStats``) to its fields and TypeScript
+    types (``contacts: number``).
+
+    The generated project's managed ``frontend/src/quickscaleSeam.hooks.ts``
+    renders these declarations for the shipped module set, so a module
+    resource path or payload shape has one generated home and a module release
+    that changes one changes no user-owned theme file.
+
+    Attributes:
+        paths: Resource name -> module-relative API subpath, in declaration
+            order.  A subpath is appended to the module's ``moduleApiPaths``
+            base, never written by a user-owned file.
+        payload_types: Type name -> ordered field name/type pairs, in
+            declaration order.  A field type is ``string``, ``number``, or
+            ``boolean``.
+    """
+
+    paths: dict[str, str] = field(default_factory=dict)
+    payload_types: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
+@dataclass
 class ModuleManifest:
     """Complete module manifest from module.yml"""
 
@@ -206,6 +234,12 @@ class ModuleManifest:
 
     The generated project's managed ``quickscale-operations.md`` page renders
     it; see :class:`ModuleOperations`."""
+
+    frontend_resources: FrontendResources | None = None
+    """The module's frontend resource contract, or ``None`` when absent.
+
+    The generated project's managed ``quickscaleSeam.hooks.ts`` renders it;
+    see :class:`FrontendResources`."""
 
     ci_env: dict[str, str] = field(default_factory=dict)
     """Non-live CI environment placeholders keyed by declaring option name.

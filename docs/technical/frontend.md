@@ -119,6 +119,7 @@ social condition before hydrating or linking. The three-place rule below is unch
 2. Required fields fail hard. The validator requires every key of the generated key manifest: an own boolean per module flag, a non-empty string per path and API base. Optional fields are validated strictly *when present* (see `publicPage`).
 3. `modules` must carry each required flag as an **own** boolean property, so a prototype-inherited or string-typed value is rejected, not coerced.
 4. Do not read `window.__QUICKSCALE__` directly. Go through `useProjectConfig()` / `useModules()` / `useOwnerMode()` / `useCurrentOrgSlug()`.
+5. A module's API resource subpaths and payload types are not seam fields and are generated separately: the module declares them in its manifest's `frontend_resources` section, the managed `frontend/src/quickscaleSeam.hooks.ts` renders each module's declaration, and a page imports the generated constant and type instead of restating a subpath or response interface (SA320). The closed-world emission test rejects a user-owned file that names a declared resource subpath or declares a declared payload type; the managed hook is the passing control.
 
 ### React → Django
 
@@ -261,7 +262,7 @@ The authoritative statement of both rules is [module_architecture.md §Module Im
 
 ## Module frontend surfaces
 
-Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list lives in the generated managed `frontend/src/quickscaleSeam.d.ts`, whose types the theme's hooks import (SA276); the validator requires its keys from the generated `frontend/src/quickscaleSeam.keys.ts`. The producer reuses the same seam tables: `templates/index.html.j2` renders the runtime seam tag (rule 31), which carries a key for every shipped module.
+Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list lives in the generated managed `frontend/src/quickscaleSeam.d.ts`, whose types the theme's hooks import (SA276); the validator requires its keys from the generated `frontend/src/quickscaleSeam.keys.ts`. The producer reuses the same seam tables: `templates/index.html.j2` renders the runtime seam tag (rule 31), which carries a key for every shipped module. A module page's API resource subpaths and response types come from the managed `frontend/src/quickscaleSeam.hooks.ts`, rendered from the manifest's `frontend_resources` section (SA320).
 
 Adding a module with a React surface therefore touches the theme. That is the current design, consistent with [module-extension.md](module-extension.md)'s "Theme/frontend → user-owned generated code" classification: modules own backend contracts, the theme owns presentation.
 

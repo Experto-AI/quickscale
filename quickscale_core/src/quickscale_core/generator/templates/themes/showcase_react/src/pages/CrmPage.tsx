@@ -4,16 +4,14 @@ import { Button } from '@/components/ui/button'
 import { useApiData } from '@/hooks/useApi'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 import { Briefcase, Building2, UserCircle, Tag, ExternalLink, ArrowUpRight } from 'lucide-react'
-
-interface CrmStats {
-  contacts: number
-  companies: number
-  deals: number
-  tags: number
-}
+import { CRM_RESOURCE_PATHS, type CrmStats } from '@/quickscaleSeam.hooks'
 
 function useCrmStats(crmApiBase: string) {
-  const stats = useApiData<CrmStats>(`${crmApiBase}stats/`, ['crm', crmApiBase, 'stats'])
+  const stats = useApiData<CrmStats>(`${crmApiBase}${CRM_RESOURCE_PATHS.stats}`, [
+    'crm',
+    crmApiBase,
+    'stats',
+  ])
 
   return {
     contacts: stats.data?.contacts ?? 0,
@@ -33,28 +31,28 @@ const buildCrmSections = (crmApiBase: string) =>
       name: 'Contacts',
       icon: UserCircle,
       description: 'Manage customer contacts and communication',
-      apiPath: `${crmApiBase}contacts/`,
+      apiPath: `${crmApiBase}${CRM_RESOURCE_PATHS.contacts}`,
     },
     {
       key: 'companies',
       name: 'Companies',
       icon: Building2,
       description: 'Track companies and organizations',
-      apiPath: `${crmApiBase}companies/`,
+      apiPath: `${crmApiBase}${CRM_RESOURCE_PATHS.companies}`,
     },
     {
       key: 'deals',
       name: 'Deals',
       icon: Briefcase,
       description: 'Manage deals and sales pipeline',
-      apiPath: `${crmApiBase}deals/`,
+      apiPath: `${crmApiBase}${CRM_RESOURCE_PATHS.deals}`,
     },
     {
       key: 'tags',
       name: 'Tags',
       icon: Tag,
       description: 'Organize records with tags',
-      apiPath: `${crmApiBase}tags/`,
+      apiPath: `${crmApiBase}${CRM_RESOURCE_PATHS.tags}`,
     },
   ] as const
 
@@ -122,7 +120,7 @@ export function CrmPage() {
           </Button>
           <Button variant="outline" asChild>
             <a
-              href={`${documentPaths.crmApiBase}contacts/`}
+              href={`${documentPaths.crmApiBase}${CRM_RESOURCE_PATHS.contacts}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -130,7 +128,11 @@ export function CrmPage() {
             </a>
           </Button>
           <Button variant="outline" asChild>
-            <a href={`${documentPaths.crmApiBase}deals/`} target="_blank" rel="noopener noreferrer">
+            <a
+              href={`${documentPaths.crmApiBase}${CRM_RESOURCE_PATHS.deals}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Deals API <ExternalLink className="ml-1 h-3 w-3" />
             </a>
           </Button>

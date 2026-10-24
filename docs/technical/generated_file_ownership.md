@@ -172,7 +172,12 @@ guard.  ``frontend/src/quickscaleSeam.keys.ts`` is its generated runtime
 companion: the same tables as key arrays, which the theme's seam validator
 requires every seam entry against and the theme's tests build their fixtures
 from, so the module set has one generated home and a module that joins the set
-changes no user-owned theme file.  Both are classified as
+changes no user-owned theme file.  ``frontend/src/quickscaleSeam.hooks.ts`` is
+the managed module-hook file: it renders each active manifest's
+``frontend_resources`` declaration — the module's API resource subpaths and
+payload types — so a user-owned page imports a resource path or response type
+instead of restating it, and a module release that changes either changes only
+this file (SA320).  All three are classified as
 recipient-managed protected root files
 (``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the recipient's
 copies and never writes donor content over them, and a project does not
@@ -262,7 +267,8 @@ Rationale: User-owned static file.  Generated once; not a migration target.
 targets — ``showcase_react`` does not emit them.
 
 ### Category U5 — Test scaffolding
-``tests/__init__.py``, ``tests/conftest.py``, ``tests/test_example.py``.
+``tests/__init__.py``, ``tests/conftest.py``, ``tests/test_example.py``,
+``tests/test_tenant_isolation.py``.
 Rationale: One-time generated test scaffold that users customize. Fresh-first
 reconciles only its generated project-name docstrings.
 

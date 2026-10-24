@@ -17,14 +17,19 @@ from pathlib import Path
 from typing import Any
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
+from quickscale_core.manifest.schema import FrontendResources
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
+    _frontend_resources_by_module,
     render_module_api_paths,
     render_module_document_paths,
     render_module_flags,
     render_module_paths,
     render_seam_declaration,
+    render_seam_hooks,
     render_seam_key_manifest,
     seam_api_path_names,
     seam_document_path_names,
@@ -557,6 +562,113 @@ class TestSeamKeyManifest:
         assert manifest.endswith("as const\n")
         assert not SEAM_KEY_MANIFEST_RELATIVE_PATH.startswith("/")
         assert SEAM_KEY_MANIFEST_RELATIVE_PATH.endswith("quickscaleSeam.keys.ts")
+
+
+def _declared_frontend_contracts() -> dict[str, FrontendResources]:
+    """Return each shipped manifest's declared frontend resource contract."""
+    contracts: dict[str, FrontendResources] = {}
+    for entry in MODULE_CATALOG:
+        contract = load_module_manifest_with_fallback(entry.name).frontend_resources
+        if contract is not None:
+            contracts[entry.name] = contract
+    return contracts
+
+
+class TestSeamHooks:
+    """The managed module hooks render each manifest's frontend contract (SA320)."""
+
+    def test_hooks_carry_each_declared_path_and_payload_type(self) -> None:
+        """Every manifest declaration reaches the hook file, and nothing else."""
+        hooks = render_seam_hooks()
+        contracts = _declared_frontend_contracts()
+        assert contracts, "at least one shipped manifest must declare its contract"
+
+        for module_name, contract in contracts.items():
+            assert f"export const {module_name.upper()}_RESOURCE_PATHS = {{" in hooks
+            for resource, path in contract.paths.items():
+                assert f"  {resource}: '{path}'," in hooks
+            for type_name, fields in contract.payload_types.items():
+                assert f"export interface {type_name} {{" in hooks
+                for field_name, field_type in fields.items():
+                    assert f"  {field_name}: {field_type}" in hooks
+
+    def test_hooks_state_the_regenerate_contract(self) -> None:
+        """It states the regenerate contract and lives at a project-relative path."""
+        hooks = render_seam_hooks()
+
+        assert hooks.startswith("// QuickScale managed module hooks.")
+        assert "DO NOT EDIT MANUALLY" in hooks
+        assert "module.yml" in hooks
+        assert not SEAM_HOOKS_RELATIVE_PATH.startswith("/")
+        assert SEAM_HOOKS_RELATIVE_PATH.endswith("quickscaleSeam.hooks.ts")
+
+    def test_hooks_follow_the_active_installed_manifest(self, monkeypatch) -> None:
+        """An installed manifest without the section yields no contract exports.
+
+        Regeneration reads the project's embedded manifests, so the hook
+        follows the backend actually installed; adopting the page against an
+        older module is why the contract step updates embedded modules first.
+        """
+        from types import SimpleNamespace
+
+        import quickscale_core.runtime.seam as seam_module
+
+        original = seam_module._load_contract_manifest
+        monkeypatch.setattr(
+            "quickscale_core.runtime.seam._load_contract_manifest",
+            lambda name: (
+                SimpleNamespace(frontend_resources=None)
+                if name == "crm"
+                else original(name)
+            ),
+        )
+
+        hooks = render_seam_hooks()
+
+        assert "CRM_RESOURCE_PATHS" not in hooks
+        assert "CrmStats" not in hooks
+
+        monkeypatch.setattr(
+            "quickscale_core.runtime.seam._load_contract_manifest",
+            lambda name: (
+                SimpleNamespace(
+                    frontend_resources=FrontendResources(
+                        paths={"stats": "stats/"},
+                        payload_types={"CrmStats": {"contacts": "number"}},
+                    )
+                )
+                if name == "crm"
+                else original(name)
+            ),
+        )
+
+        hooks = render_seam_hooks()
+
+        assert "export const CRM_RESOURCE_PATHS" in hooks
+        assert "export interface CrmStats" in hooks
+
+    def test_duplicate_payload_type_across_modules_fails_loud(
+        self, monkeypatch
+    ) -> None:
+        """The hook file has one TypeScript namespace, so a duplicate fails."""
+        from types import SimpleNamespace
+
+        monkeypatch.setattr(
+            "quickscale_core.runtime.seam.MODULE_CATALOG",
+            (SimpleNamespace(name="alpha"), SimpleNamespace(name="beta")),
+        )
+        monkeypatch.setattr(
+            "quickscale_core.runtime.seam._load_contract_manifest",
+            lambda name: SimpleNamespace(
+                frontend_resources=FrontendResources(
+                    paths={name: f"{name}/"},
+                    payload_types={"SharedPayload": {"value": "string"}},
+                )
+            ),
+        )
+
+        with pytest.raises(ValueError, match="SharedPayload"):
+            _frontend_resources_by_module()
 
 
 class TestSeamTemplateTags:

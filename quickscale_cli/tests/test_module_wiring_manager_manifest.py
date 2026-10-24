@@ -1601,10 +1601,11 @@ class TestRegenerateManagedWiringEmptySelection:
                 in urls_content
             )
 
-            # The managed theme seam declaration and key manifest are
-            # regenerated too (SA276).
+            # The managed theme seam declaration, key manifest, and module
+            # hooks are regenerated too (SA276, SA320).
             from quickscale_core.runtime.seam import (
                 render_seam_declaration,
+                render_seam_hooks,
                 render_seam_key_manifest,
             )
 
@@ -1615,6 +1616,10 @@ class TestRegenerateManagedWiringEmptySelection:
             seam_keys_file = project / "frontend" / "src" / "quickscaleSeam.keys.ts"
             assert seam_keys_file.exists()
             assert seam_keys_file.read_text() == render_seam_key_manifest()
+
+            seam_hooks_file = project / "frontend" / "src" / "quickscaleSeam.hooks.ts"
+            assert seam_hooks_file.exists()
+            assert seam_hooks_file.read_text() == render_seam_hooks()
 
             # The managed CI environment file is regenerated too (SA286);
             # an empty selection declares no module CI value.

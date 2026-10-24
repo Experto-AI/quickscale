@@ -278,10 +278,18 @@ _MAKE_PLAN_TIMEOUT = 300
 
 
 def _plan_make_check(*make_args: str) -> subprocess.CompletedProcess:
-    """Dry-run the real Makefile's ``check`` recipe with a load-tolerant timeout."""
+    """
+    Dry-run the real Makefile's ``check`` recipe with a load-tolerant timeout.
+
+    The plan must not inherit a caller's ``QUIET``: the quiet branch's recursive
+    ``$(MAKE)`` lines execute even under ``-n``, and the nested unit run reads
+    from the captured test process's stdin.  ``make check QUIET=1`` is the
+    documented gate command, so the plan strips that variable.
+    """
     return subprocess.run(
         ["make", "-n", "check", *make_args],
         cwd=str(REPO_ROOT),
+        env={**os.environ, "QUIET": ""},
         capture_output=True,
         text=True,
         timeout=_MAKE_PLAN_TIMEOUT,

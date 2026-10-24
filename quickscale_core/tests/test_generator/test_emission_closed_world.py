@@ -6,11 +6,19 @@ names or name a module URL (a namespaced route name, a module-stemmed flat
 name, or a mount/route alternation), and no user-owned emitted TypeScript file
 may declare the shipped module set (a typed key block, a quoted name list, a
 union, or a complete flag object) or name a module route — the set lives in
-the generated managed seam declaration and key manifest
-(``frontend/src/quickscaleSeam.d.ts`` and ``frontend/src/quickscaleSeam.keys.ts``),
-and the theme's hooks import its types from there (SA276).  A single module
-reference — a gate, a card entry, a navigation key — is rule 37's allowed
-theme surface and is not flagged.  Module wiring (URL includes, shell routes,
+the generated managed seam declaration, key manifest, and module hooks
+(``frontend/src/quickscaleSeam.d.ts``, ``frontend/src/quickscaleSeam.keys.ts``,
+and ``frontend/src/quickscaleSeam.hooks.ts``), and the theme's hooks import
+its types from there (SA276).  A single module reference — a gate, a card
+entry, a navigation key — is rule 37's allowed theme surface and is not
+flagged.
+
+The same closed world covers module resource contracts (SA320): no user-owned
+emitted TypeScript file may name a module's manifest-declared API resource
+subpath (``stats/``) or declare its payload type (``interface CrmStats``).
+Both live in the managed ``frontend/src/quickscaleSeam.hooks.ts`` file,
+rendered from the shipped manifests' ``frontend_resources`` declarations, so
+a module that changes either is covered without editing this test.  Module wiring (URL includes, shell routes,
 template URLs) reaches a project only through the versioned
 ``quickscale_core.runtime`` library and the managed ``urls_modules.py`` /
 ``settings/modules.py`` files that ``apply`` regenerates, so a module release
@@ -60,6 +68,7 @@ from quickscale_core.generator.operations_page import (
 )
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
     seam_modules,
 )
@@ -83,9 +92,14 @@ _MODULE_NAMES = frozenset(entry.name for entry in MODULE_CATALOG)
 #: boolean flag (``orgs`` carries none; rule 31).
 _MODULE_FLAG_KEYS = frozenset(module.name for module in seam_modules())
 
-#: The generated managed seam files: the module set lives there by design.
+#: The generated managed seam files: the module set, and each module's
+#: resource contract, live there by design.
 _MANAGED_SEAM_PATHS = frozenset(
-    {SEAM_DECLARATION_RELATIVE_PATH, SEAM_KEY_MANIFEST_RELATIVE_PATH}
+    {
+        SEAM_DECLARATION_RELATIVE_PATH,
+        SEAM_KEY_MANIFEST_RELATIVE_PATH,
+        SEAM_HOOKS_RELATIVE_PATH,
+    }
 )
 
 #: The generated managed CI environment file: the module-owned CI values
@@ -147,6 +161,28 @@ def _declared_ci_environment() -> tuple[frozenset[str], frozenset[str]]:
 
 _CI_ENV_NAMES, _CI_ENV_VALUES = _declared_ci_environment()
 
+
+def _declared_frontend_contract() -> tuple[frozenset[str], frozenset[str]]:
+    """Return the shipped manifests' frontend resource paths and payload types.
+
+    Each module's ``frontend_resources`` section declares the API subpaths and
+    payload types the managed hook file renders; a user-owned theme file must
+    restate neither, because the managed hook is their one generated home.
+    """
+    paths: set[str] = set()
+    payload_types: set[str] = set()
+    for entry in MODULE_CATALOG:
+        manifest = load_module_manifest_with_fallback(entry.name)
+        contract = manifest.frontend_resources
+        if contract is None:
+            continue
+        paths.update(contract.paths.values())
+        payload_types.update(contract.payload_types)
+    return frozenset(paths), frozenset(payload_types)
+
+
+_FRONTEND_RESOURCE_PATHS, _FRONTEND_PAYLOAD_TYPES = _declared_frontend_contract()
+
 #: A module's namespaced URL name (``quickscale_billing:pricing_page``).
 _MODULE_URL_NAME = re.compile(
     r"quickscale_(?:modules_)?(?:" + "|".join(sorted(_MODULE_NAMES)) + r"):"
@@ -199,8 +235,8 @@ def _scan_kind(emitted_path: str, package_name: str) -> str | None:
     operations values it references live in the managed
     ``quickscale-operations.md`` page (SA286).  User-owned TypeScript is
     every emitted ``.ts``/``.tsx`` file under ``frontend/`` except the
-    generated managed seam files, which carry the module set by design
-    (SA276).
+    generated managed seam files, which carry the module set and each
+    module's frontend resource contract by design (SA276, SA320).
     """
     if (
         emitted_path in _MANAGED_SEAM_PATHS
@@ -394,6 +430,24 @@ def _typescript_violations(text: str) -> list[str]:
                 f"line {_line_number(clean, offset)}: literal duplicates the "
                 "shipped module flag set"
             )
+    for resource_path in sorted(_FRONTEND_RESOURCE_PATHS):
+        for match in re.finditer(re.escape(resource_path), clean):
+            violations.append(
+                f"line {_line_number(clean, match.start())}: module resource "
+                f"subpath {resource_path!r}"
+            )
+    for type_name in sorted(_FRONTEND_PAYLOAD_TYPES):
+        pattern = re.compile(
+            r"(?:^|[\n;])\s*(?:export\s+)?(?:interface|type)\s+"
+            + re.escape(type_name)
+            + r"\b",
+            re.MULTILINE,
+        )
+        for match in pattern.finditer(clean):
+            violations.append(
+                f"line {_line_number(clean, match.start())}: module payload "
+                f"type declaration {type_name!r}"
+            )
     return violations
 
 
@@ -554,6 +608,24 @@ def test_typescript_detector_ignores_comments() -> None:
     assert not _typescript_violations("// ['auth', 'blog']\n/* 'crm' | 'forms' */\n")
 
 
+def test_typescript_detector_rejects_a_module_resource_subpath() -> None:
+    assert _typescript_violations("const stats = `${crmApiBase}stats/`\n")
+
+
+def test_typescript_detector_rejects_a_module_payload_type_declaration() -> None:
+    assert _typescript_violations("interface CrmStats {\n  contacts: number\n}\n")
+    assert _typescript_violations("type CrmStats = { contacts: number }\n")
+
+
+def test_typescript_detector_accepts_the_managed_hook_import() -> None:
+    # The managed hook owns the subpath and the type; a page imports both and
+    # is not flagged, which is what makes the managed file the passing control.
+    assert not _typescript_violations(
+        "import { CRM_RESOURCE_PATHS, type CrmStats } from '@/quickscaleSeam.hooks'\n"
+        "const stats = `${crmApiBase}${CRM_RESOURCE_PATHS.stats}`\n"
+    )
+
+
 def test_ci_workflow_detector_rejects_a_module_credential_name() -> None:
     assert _ci_environment_violations("        POSTHOG_API_KEY: ph_test_ci\n")
     assert _ci_environment_violations("        STRIPE_SECRET_KEY: sk_test_ci\n")
@@ -666,8 +738,10 @@ def test_scan_set_excludes_only_the_managed_files() -> None:
     assert kinds.get(f"{_PROJECT_NAME}/settings/modules.py") is None
     assert kinds.get(SEAM_DECLARATION_RELATIVE_PATH) is None
     assert kinds.get(SEAM_KEY_MANIFEST_RELATIVE_PATH) is None
+    assert kinds.get(SEAM_HOOKS_RELATIVE_PATH) is None
     assert SEAM_DECLARATION_RELATIVE_PATH in mapping
     assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
+    assert SEAM_HOOKS_RELATIVE_PATH in mapping
     # The managed CI environment file is excluded; the user-owned workflow
     # that loads it is scanned (SA286).
     assert kinds.get(CI_ENVIRONMENT_RELATIVE_PATH) is None

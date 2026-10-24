@@ -1,10 +1,11 @@
 """Theme-to-API contract test for the CRM workspace's stat cards.
 
 The theme's ``useCrmStats`` hook expects one response shape from the CRM count
-endpoint (``crm/api/stats/``).  This test reads the shipped theme source and
-checks that expectation against the endpoint's rendered DRF response, so a
-renamed or re-wrapped key on either side fails here — the contract check whose
-absence let the stat cards read ``.count`` / ``.results`` from a bare list.
+endpoint (``crm/api/stats/``).  The shape and the resource subpath live in the
+managed ``quickscaleSeam.hooks.ts`` the CRM manifest's ``frontend_resources``
+declaration renders; this test reads both sides and checks the
+expectation against the endpoint's rendered DRF response, so a renamed or
+re-wrapped key, subpath, or type on either side fails here.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from django.urls import reverse
 from rest_framework import status
 
 import quickscale_core
+from quickscale_core.runtime.seam import render_seam_hooks
 
 THEME_CRM_PAGE = (
     Path(quickscale_core.__file__).resolve().parent
@@ -46,9 +48,9 @@ def _theme_source() -> str:
 
 
 def _declared_stats_fields(source: str) -> dict[str, str]:
-    """Return the stats fields the theme's interface declares, with their types."""
+    """Return the stats fields the managed hook declares, with their types."""
     match = _STATS_INTERFACE.search(source)
-    assert match is not None, "CrmPage.tsx must declare interface CrmStats"
+    assert match is not None, "quickscaleSeam.hooks.ts must declare interface CrmStats"
     fields = dict(_INTERFACE_FIELD.findall(match.group("body")))
     assert fields, "interface CrmStats must declare its fields"
     return fields
@@ -61,14 +63,28 @@ class TestCrmStatsThemeContract:
     def test_theme_reads_the_stats_endpoint(self) -> None:
         """The stat hook fetches the endpoint this module mounts."""
         source = _theme_source()
+        hooks = render_seam_hooks()
 
-        assert "`${crmApiBase}stats/`" in source
+        assert "CRM_RESOURCE_PATHS.stats" in source
+        assert "stats: 'stats/'" in hooks
         assert reverse("quickscale_crm:stats") == "/crm/api/stats/"
+
+    def test_page_imports_the_managed_contract(self) -> None:
+        """The page imports the managed type and paths instead of restating them."""
+        source = _theme_source()
+
+        assert "from '@/quickscaleSeam.hooks'" in source
+        assert "interface CrmStats" not in source
+        assert "contacts/" not in source
+        assert "companies/" not in source
+        assert "deals/" not in source
+        assert "tags/" not in source
+        assert "stats/" not in source
 
     def test_theme_shape_matches_the_rendered_response(self, viewer_client) -> None:
         """The declared interface, the hook reads, and the response agree."""
         source = _theme_source()
-        fields = _declared_stats_fields(source)
+        fields = _declared_stats_fields(render_seam_hooks())
 
         assert set(fields) == EXPECTED_STATS_KEYS
         assert set(fields.values()) == {"number"}

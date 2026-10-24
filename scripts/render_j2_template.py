@@ -73,12 +73,13 @@ def get_lint_context() -> dict:
     else:
         modules = _all_modules
 
-    # The managed seam declaration and key manifest are rendered content,
-    # never dummies: the emitted files must lint and type-check exactly as a
-    # generated project receives them.  Imported here so ``--list-modules``
-    # stays dependency-free.
+    # The managed seam declaration, key manifest, and module hooks are
+    # rendered content, never dummies: the emitted files must lint and
+    # type-check exactly as a generated project receives them.  Imported here
+    # so ``--list-modules`` stays dependency-free.
     from quickscale_core.runtime.seam import (
         render_seam_declaration,
+        render_seam_hooks,
         render_seam_key_manifest,
     )
 
@@ -91,6 +92,7 @@ def get_lint_context() -> dict:
         "selected_modules": modules,
         "seam_declaration": render_seam_declaration(),
         "seam_key_manifest": render_seam_key_manifest(),
+        "seam_hooks": render_seam_hooks(),
     }
 
 

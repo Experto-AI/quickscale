@@ -151,6 +151,14 @@ config:
         choices: [email, username, both]
 ```
 
+Optional sections: `managed_files`, `ci_env`, `operations`, `throttle_scopes`,
+`frontend_resources`, `derivation`, and `contract_vintage`. `frontend_resources`
+declares the module's theme resource contract — `paths` maps a resource name to
+a module-relative API subpath, and `payload_types` maps a response type name to
+its TypeScript field/type pairs — which the managed
+`frontend/src/quickscaleSeam.hooks.ts` renders for user-owned pages (Module
+Conventions rule 31).
+
 ---
 
 ## State Management

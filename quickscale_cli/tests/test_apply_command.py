@@ -1515,6 +1515,9 @@ class TestApplyDriftDetection:
         (project / "frontend" / "src" / "quickscaleSeam.keys.ts").write_text(
             "// keys\n"
         )
+        (project / "frontend" / "src" / "quickscaleSeam.hooks.ts").write_text(
+            "// hooks\n"
+        )
         managed_root = project / "myapp" / "quickscale_managed"
         managed_root.mkdir(parents=True)
         (managed_root / "__init__.py").write_text("")
@@ -1534,6 +1537,7 @@ class TestApplyDriftDetection:
         assert "myapp/urls_modules.py" in state.managed_files
         assert "frontend/src/quickscaleSeam.d.ts" in state.managed_files
         assert "frontend/src/quickscaleSeam.keys.ts" in state.managed_files
+        assert "frontend/src/quickscaleSeam.hooks.ts" in state.managed_files
         assert "myapp/quickscale_managed/__init__.py" in state.managed_files
         assert "myapp/quickscale_managed/social_urls.py" in state.managed_files
 
@@ -1583,6 +1587,7 @@ class TestApplyDriftDetection:
         assert "myapp/urls_modules.py" in paths
         assert "frontend/src/quickscaleSeam.d.ts" in paths
         assert "frontend/src/quickscaleSeam.keys.ts" in paths
+        assert "frontend/src/quickscaleSeam.hooks.ts" in paths
         assert all("\\" not in p for p in paths)
 
 

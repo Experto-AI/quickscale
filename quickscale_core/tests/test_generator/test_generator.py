@@ -1032,9 +1032,11 @@ class TestSa90MappingDrivenGeneration:
         assert "frontend/design/fonts/README.md" in react_map
         assert "frontend/design/brand/README.md" in react_map
 
-        # Managed theme seam declaration and key manifest (SA276)
+        # Managed theme seam declaration, key manifest, and module hooks
+        # (SA276, SA320)
         assert "frontend/src/quickscaleSeam.d.ts" in react_map
         assert "frontend/src/quickscaleSeam.keys.ts" in react_map
+        assert "frontend/src/quickscaleSeam.hooks.ts" in react_map
 
         # Shared files should be present
         assert "Makefile" in react_map
@@ -1056,8 +1058,10 @@ class TestSa90MappingDrivenGeneration:
         from quickscale_core.project_state_hashes import DEFAULT_MANAGED_PROJECT_PATHS
         from quickscale_core.runtime.seam import (
             SEAM_DECLARATION_RELATIVE_PATH,
+            SEAM_HOOKS_RELATIVE_PATH,
             SEAM_KEY_MANIFEST_RELATIVE_PATH,
             render_seam_declaration,
+            render_seam_hooks,
             render_seam_key_manifest,
         )
 
@@ -1066,11 +1070,13 @@ class TestSa90MappingDrivenGeneration:
         )
         assert SEAM_DECLARATION_RELATIVE_PATH in mapping
         assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
+        assert SEAM_HOOKS_RELATIVE_PATH in mapping
         assert CI_ENVIRONMENT_RELATIVE_PATH in mapping
         assert OPERATIONS_PAGE_RELATIVE_PATH in mapping
         assert DEFAULT_MANAGED_PROJECT_PATHS == (
             SEAM_DECLARATION_RELATIVE_PATH,
             SEAM_KEY_MANIFEST_RELATIVE_PATH,
+            SEAM_HOOKS_RELATIVE_PATH,
             CI_ENVIRONMENT_RELATIVE_PATH,
             OPERATIONS_PAGE_RELATIVE_PATH,
         )
@@ -1083,6 +1089,8 @@ class TestSa90MappingDrivenGeneration:
         assert emitted_declaration.read_text() == render_seam_declaration()
         emitted_manifest = output / SEAM_KEY_MANIFEST_RELATIVE_PATH
         assert emitted_manifest.read_text() == render_seam_key_manifest()
+        emitted_hooks = output / SEAM_HOOKS_RELATIVE_PATH
+        assert emitted_hooks.read_text() == render_seam_hooks()
 
     def test_managed_ci_environment_file_is_emitted_verbatim(
         self, tmp_path: Path

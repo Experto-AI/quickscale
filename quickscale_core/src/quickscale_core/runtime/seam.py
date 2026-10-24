@@ -35,9 +35,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+from quickscale_core.contracts.module_discovery import (
+    get_bundled_manifests_path,
+    resolve_manifest_base_path,
+)
+from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.schema import FrontendResources, ModuleManifest
 
 __all__ = [
     "SEAM_DECLARATION_RELATIVE_PATH",
+    "SEAM_HOOKS_RELATIVE_PATH",
     "SEAM_KEY_MANIFEST_RELATIVE_PATH",
     "SeamModule",
     "SeamRoute",
@@ -46,6 +53,7 @@ __all__ = [
     "render_module_flags",
     "render_module_paths",
     "render_seam_declaration",
+    "render_seam_hooks",
     "render_seam_key_manifest",
     "seam_api_path_names",
     "seam_document_path_names",
@@ -427,3 +435,110 @@ def render_seam_key_manifest() -> str:
         "\n"
         f"export const SEAM_MODULE_DOCUMENT_PATH_KEYS = {document_keys} as const\n"
     )
+
+
+#: Project-relative path of the theme's managed module hooks (SA320).
+#: The file carries each shipped module's manifest-declared API resource
+#: subpaths and payload types, so a user-owned page imports the module's
+#: resource contract instead of restating a subpath or a response type.
+#: Generation emits it, and ``quickscale apply``/``quickscale update``/
+#: ``quickscale remove`` regenerate it under the managed-file hash guard
+#: beside the seam declaration and key manifest.
+SEAM_HOOKS_RELATIVE_PATH = "frontend/src/quickscaleSeam.hooks.ts"
+
+
+def _load_contract_manifest(module_name: str) -> ModuleManifest:
+    """Load one module's manifest for the generated frontend contract.
+
+    The active manifest base is read first, so ``apply``/``update``/``remove``
+    in a generated project use the installed module's own declaration (the
+    frontend contract then matches the backend actually present), and
+    generation in the maintainer workspace uses the source manifest.  A
+    module the project does not install has no manifest under an embedded
+    module base, so it falls back to the release's bundled snapshot: the theme
+    emits every module page as a dormant file, and a page for an uninstalled
+    module still imports its contract at build time.
+    """
+    base = resolve_manifest_base_path()
+    candidate = base / module_name / "module.yml"
+    if not candidate.is_file():
+        if (base / module_name).exists():
+            # A module directory without a manifest is a broken installation;
+            # load_manifest_from_path fails hard instead of masking it.
+            return load_manifest_from_path(candidate)
+        candidate = get_bundled_manifests_path() / module_name / "module.yml"
+    return load_manifest_from_path(candidate)
+
+
+def _frontend_resources_by_module() -> tuple[tuple[str, FrontendResources], ...]:
+    """Return each shipped module's declared frontend resource contract.
+
+    Manifests are read for the whole shipped set, not the project's installed
+    set: the theme emits every module page as a dormant file, so a page for an
+    uninstalled module still imports its contract at build time.  A payload
+    type declared by two modules is refused, because the hook file has one
+    TypeScript namespace.
+    """
+    contracts: list[tuple[str, FrontendResources]] = []
+    seen_types: dict[str, str] = {}
+    for entry in MODULE_CATALOG:
+        manifest = _load_contract_manifest(entry.name)
+        contract = manifest.frontend_resources
+        if contract is None:
+            continue
+        for type_name in contract.payload_types:
+            other = seen_types.get(type_name)
+            if other is not None:
+                raise ValueError(
+                    f"Frontend payload type {type_name!r} is declared by both "
+                    f"{other!r} and {entry.name!r}; the managed hook file has "
+                    "one TypeScript namespace, so the type needs one owner."
+                )
+            seen_types[type_name] = entry.name
+        contracts.append((entry.name, contract))
+    return tuple(contracts)
+
+
+def render_seam_hooks() -> str:
+    """Render the theme's managed module hooks from the active manifests.
+
+    One ``<MODULE>_RESOURCE_PATHS`` constant per module that declares resource
+    paths and one exported interface per declared payload type.  A declaring
+    module's resource subpath or response shape therefore lives in this
+    generated file; a user-owned page imports it and never restates either, so
+    a module release that changes one needs no user-owned diff.  The active
+    manifest set is the project's installed modules plus the release's shipped
+    snapshots for modules it does not install, so the hook follows the backend
+    the project actually runs.
+    """
+    blocks: list[str] = []
+    for module_name, contract in _frontend_resources_by_module():
+        if contract.paths:
+            entries = "\n".join(
+                f"  {resource}: '{path}'," for resource, path in contract.paths.items()
+            )
+            blocks.append(
+                f"export const {module_name.upper()}_RESOURCE_PATHS = {{\n"
+                f"{entries}\n"
+                "} as const"
+            )
+        for type_name, fields in contract.payload_types.items():
+            members = "\n".join(
+                f"  {field_name}: {field_type}"
+                for field_name, field_type in fields.items()
+            )
+            blocks.append(f"export interface {type_name} {{\n{members}\n}}")
+    header = (
+        "// QuickScale managed module hooks.\n"
+        "//\n"
+        "// DO NOT EDIT MANUALLY. This file is regenerated by QuickScale from the\n"
+        "// active module manifests (quickscale_modules/*/module.yml): the\n"
+        "// project's installed modules plus the shipped set for modules it does\n"
+        "// not install. A module release that changes a resource subpath or\n"
+        "// payload type changes only this file; the theme's pages import these\n"
+        "// declarations instead of restating a module resource path or response\n"
+        "// type.\n"
+    )
+    if not blocks:
+        return header
+    return header + "\n" + "\n\n".join(blocks) + "\n"

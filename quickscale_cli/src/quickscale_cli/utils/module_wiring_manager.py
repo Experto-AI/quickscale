@@ -43,8 +43,10 @@ from quickscale_core.manifest.settings_schema import compile_settings_schema
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_HOOKS_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
     render_seam_declaration,
+    render_seam_hooks,
     render_seam_key_manifest,
 )
 from quickscale_core.schema.config_schema import validate_config
@@ -285,17 +287,19 @@ def _build_wiring_specs(
 
 
 def _write_seam_files(project_path: Path) -> None:
-    """Write the managed theme seam files (SA276).
+    """Write the managed theme seam files (SA276, SA320).
 
-    The declaration carries the theme's module-key types and the key manifest
-    carries the same tables as runtime arrays, rendered from the shipped
-    module set; apply, embed, update, and remove all regenerate them alongside
-    the managed wiring files, so they never drift from the shipped set on
-    their own.
+    The declaration carries the theme's module-key types, the key manifest
+    carries the same tables as runtime arrays, and the hooks file carries
+    each active module's manifest-declared resource subpaths and payload
+    types; apply, embed, update, and remove all regenerate them alongside the
+    managed wiring files, so they never drift from the module set on their
+    own.
     """
     for relative, render in (
         (SEAM_DECLARATION_RELATIVE_PATH, render_seam_declaration),
         (SEAM_KEY_MANIFEST_RELATIVE_PATH, render_seam_key_manifest),
+        (SEAM_HOOKS_RELATIVE_PATH, render_seam_hooks),
     ):
         target_path = project_path / relative
         target_path.parent.mkdir(parents=True, exist_ok=True)

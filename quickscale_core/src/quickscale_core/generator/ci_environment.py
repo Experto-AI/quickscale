@@ -141,11 +141,11 @@ def seed_local_environment(content: str, entries: Mapping[str, str]) -> str:
 
     missing: list[str] = []
     for name in sorted(entries):
-        index = assigned.get(name)
-        if index is None:
+        assigned_index = assigned.get(name)
+        if assigned_index is None:
             missing.append(f"{name}={entries[name]}")
-        elif not lines[index].partition("=")[2].strip():
-            lines[index] = f"{name}={entries[name]}"
+        elif not lines[assigned_index].partition("=")[2].strip():
+            lines[assigned_index] = f"{name}={entries[name]}"
 
     if missing:
         if lines and lines[-1].strip():

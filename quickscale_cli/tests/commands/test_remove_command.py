@@ -350,6 +350,7 @@ class TestRemoveCommand:
             "myproject/urls_modules.py",
             seam_relative,
             "frontend/src/quickscaleSeam.keys.ts",
+            "frontend/src/quickscaleSeam.hooks.ts",
         ):
             assert relative in state.managed_files
             assert state.managed_files[relative].hash == hash_managed_file(

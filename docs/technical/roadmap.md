@@ -91,7 +91,7 @@ before SA319.
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA320 (a) | yes | no: SA191d (production) for SA153 (f) | yes: — |
+| 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA317 | yes | no: SA191d (production) for SA277 | yes: SA317 |
 
@@ -142,7 +142,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   26). SA316 landed the watch that covers every new managed output from its first release.
 
   **Slices:**
-  - [ ] (a) Generate `quickscaleSeam.hooks` plus payload types per installed module from its
+  - [x] (a) Generate `quickscaleSeam.hooks` plus payload types per installed module from its
     manifest; move `CrmPage.tsx`'s section paths and `CrmStats` into it; extend the closed-world
     check to reject a module resource subpath or payload type in a user-owned file, with the
     managed hook as its passing control. Changing a module endpoint subpath then produces no

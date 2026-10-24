@@ -299,6 +299,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
     assert "myapp/urls_modules.py" in committed_paths
     assert "frontend/src/quickscaleSeam.d.ts" in committed_paths
     assert "frontend/src/quickscaleSeam.keys.ts" in committed_paths
+    assert "frontend/src/quickscaleSeam.hooks.ts" in committed_paths
     assert ".github/quickscale-ci-env" in committed_paths
     assert "quickscale-operations.md" in committed_paths
 
@@ -325,6 +326,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
         "myapp/urls_modules.py",
         "frontend/src/quickscaleSeam.d.ts",
         "frontend/src/quickscaleSeam.keys.ts",
+        "frontend/src/quickscaleSeam.hooks.ts",
         ".github/quickscale-ci-env",
         "quickscale-operations.md",
     ):
