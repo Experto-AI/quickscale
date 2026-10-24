@@ -353,6 +353,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
         assert sync_result.added_package_dependencies == [
             "django-filter",
             "djangorestframework",
+            "sqlparse",
         ]
 
         pyproject_content = (project_path / "pyproject.toml").read_text()
@@ -361,7 +362,8 @@ class TestGeneratedProjectDependencyInstallSmoke:
             in pyproject_content
         )
         assert 'django-filter = "^26.1"' in pyproject_content
-        assert 'djangorestframework = "^3.17.2"' in pyproject_content
+        assert 'djangorestframework = "^3.18.2"' in pyproject_content
+        assert 'sqlparse = ">=0.6.0"' in pyproject_content
 
         assert _install_module_dependencies(project_path, "forms") is True
 

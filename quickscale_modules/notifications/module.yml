@@ -119,6 +119,9 @@ required_modules: []
 dependencies:
   - djangorestframework
   - django-anymail
+  - certifi
+  - urllib3
+  - sqlparse
   - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.

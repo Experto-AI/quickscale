@@ -129,6 +129,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     development, its examples parse and edit the generated `.env` instead of overwriting it,
     `.dockerignore` excludes local backups, the Redis cache declares and requires its client,
     and a partial PyPI publish resumes.
+  - **Module dependency floors clear the advisory range.** Every first-party module requires
+    Django `>=6.0.8`, `sqlparse >=0.6.0` and, where it uses DRF, `djangorestframework >=3.18.2`;
+    analytics, backups, notifications and storage also declare `certifi >=2026.10.19` and
+    `urllib3 >=2.8.0`. Generated projects pin the same Django floor.
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
   - **`ClientIdentityMiddleware` in generated projects.** A first-position middleware aligns ordinary DRF request identity with the canonical resolver, so a short forwarded chain cannot be trusted by one consumer and rejected by another. Proxy configuration is validated before mutation and the production proxy count is derived rather than guessed.

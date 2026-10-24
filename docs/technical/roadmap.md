@@ -43,7 +43,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA327 | Raise module dependency floors past open Dependabot advisories | 2 | — | Required |
 | SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 2 | — | Required |
 | SA310 | Fix the subscription Checkout S1 and order billing webhooks | 2 | — | Required |
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
@@ -69,11 +68,11 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA318 ─► [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
-Track 2: SA327 ─► SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
+Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
 Track 3: SA316 ─► SA317 (a, b) ─► SA319 (a → b) ─► SA322 (a → b → c)
          ─► SA325 ─► SA326 ─► [SA191d (production)] SA277
-     release path: SA327, SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
+     release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA316 ─► SA320 (a) ─► SA153 (j); SA191d (production) ─► SA153 (f)
 ```
 
@@ -95,7 +94,7 @@ before SA319, SA318 before SA153 (j).
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA318 | yes | no: SA191d (production) for SA153 (f); SA316 for SA320 | yes: SA318 |
-| 2 | SA327, then SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA327, SA191d (re-proof), SA310, SA311 |
+| 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA316 | yes | no: SA191d (production) for SA277 | yes: SA316, SA317 |
 
 **Clearing blockers.** Track 1: SA316 (Track 3) clears SA320; SA191d (production) clears SA153 (f).
@@ -221,22 +220,7 @@ are retired after the cutover. A QuickScale defect follows the release re-entry 
 defect is fixed in `bap-web`. The module fixes below reach `bap-web` through its next ordinary
 update; the cutover does not wait for them.
 
-- [ ] **SA327 — Raise module dependency floors past open Dependabot advisories.**
-
-  GitHub reports open Dependabot alerts on `main` (2026-10-24). The root `poetry.lock` on `v89`
-  already resolves every patched version (Pillow 13.0.0, Django 6.0.8, djangorestframework
-  3.18.3, certifi 2026.10.19, urllib3 2.8.0, idna 3.18, sqlparse 0.6.0), and Pillow floors in
-  blog, listings and storage are already `>=13.0.0`; pushing `v89` clears only those. Module
-  manifests have no lock, so Dependabot judges their declared ranges, which still admit
-  vulnerable versions: `Django >=6.0.7` in every module, `djangorestframework ^3.17.2` in
-  modules, and no floor for transitive `certifi`, `urllib3` and `sqlparse`.
-
-  **Acceptance:** every module `pyproject.toml` floors Django at `>=6.0.8`, djangorestframework
-  at `>=3.18.2`, and declares floors for `sqlparse >=0.6.0` plus `certifi >=2026.10.19` and
-  `urllib3 >=2.8.0` where the module pulls them in (analytics, backups, notifications, storage);
-  the root lock and generated-project templates agree; after push, the Dependabot open-alert
-  list for `Experto-AI/quickscale` is empty or each remaining alert has a recorded disposition;
-  affected modules are republished on the next module release (Tier 2-fast).
+- [x] **SA327 — Raise module dependency floors past open Dependabot advisories.**
 
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 

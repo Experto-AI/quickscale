@@ -2000,9 +2000,12 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+certifi = ">=2026.10.19"
+Django = ">=6.0.8,<6.1.0"
 posthog = ">=7.33.0,<8.0.0"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
+urllib3 = ">=2.8.0"
 
 [package.source]
 type = "directory"
@@ -2019,9 +2022,10 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 django-allauth = ">=65.18.0,<66.0.0"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2039,9 +2043,12 @@ develop = true
 
 [package.dependencies]
 boto3 = "^1.43.58"
-Django = ">=6.0.7,<6.1.0"
+certifi = ">=2026.10.19"
+Django = ">=6.0.8,<6.1.0"
 django-storages = "^1.14.6"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
+urllib3 = ">=2.8.0"
 
 [package.source]
 type = "directory"
@@ -2058,9 +2065,10 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
-djangorestframework = "^3.17.2"
+Django = ">=6.0.8,<6.1.0"
+djangorestframework = "^3.18.2"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 stripe = ">=15.3.1,<16.0.0"
 
 [package.source]
@@ -2078,11 +2086,12 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 django-markdownx = "^4.0.11"
-djangorestframework = "^3.17.2"
+djangorestframework = "^3.18.2"
 Pillow = ">=13.0.0,<14.0.0"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2099,10 +2108,11 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 django-filter = "^26.1"
-djangorestframework = "^3.17.2"
+djangorestframework = "^3.18.2"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2119,10 +2129,11 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 django-filter = "^26.1"
-djangorestframework = "^3.17.2"
+djangorestframework = "^3.18.2"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2139,12 +2150,13 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 django-filter = "^26.1"
 django-markdownx = "^4.0.11"
-djangorestframework = "^3.17.2"
+djangorestframework = "^3.18.2"
 Pillow = ">=13.0.0,<14.0.0"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2161,10 +2173,13 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+certifi = ">=2026.10.19"
+Django = ">=6.0.8,<6.1.0"
 django-anymail = ">=15.0,<16.0"
-djangorestframework = "^3.17.2"
+djangorestframework = "^3.18.2"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
+urllib3 = ">=2.8.0"
 
 [package.source]
 type = "directory"
@@ -2181,10 +2196,11 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 django-allauth = ">=65.18.0,<66.0.0"
-djangorestframework = "^3.17.2"
+djangorestframework = "^3.18.2"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2201,8 +2217,9 @@ files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
 
 [package.source]
 type = "directory"
@@ -2220,11 +2237,14 @@ develop = true
 
 [package.dependencies]
 boto3 = {version = "^1.43.58", optional = true}
-Django = ">=6.0.7,<6.1.0"
+certifi = ">=2026.10.19"
+Django = ">=6.0.8,<6.1.0"
 django-markdownx = "^4.0.11"
 django-storages = {version = "^1.14.6", optional = true}
 Pillow = ">=13.0.0,<14.0.0"
 quickscale-core = {path = "../../quickscale_core", develop = true}
+sqlparse = ">=0.6.0"
+urllib3 = ">=2.8.0"
 
 [package.extras]
 cloud = ["boto3 (>=1.43.58,<2.0.0)", "django-storages (>=1.14.6,<2.0.0)"]

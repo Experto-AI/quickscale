@@ -408,12 +408,12 @@ Each first-party embedded module is independently packaged with its own Python a
 
 | Package | Python Constraint | Django Constraint |
 |---------|------------------|-------------------|
-| All 12 `quickscale_modules/*` | `>=3.14,<3.15` | `>=6.0.7,<6.1.0` |
+| All 12 `quickscale_modules/*` | `>=3.14,<3.15` | `>=6.0.8,<6.1.0` |
 
 The 12 packaged modules are: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage.
 
 **Key properties:**
-- Module Django pins (`>=6.0.7`) and the generated-project template pin (`>=6.0.7`) currently match. The two are expressed separately and the module bound is *allowed* to be tighter (it was, at `>=6.0.5` vs `>=6.0.3`, before the 6.0.7 bump), so both must be updated together.
+- Module Django pins (`>=6.0.8`) and the generated-project template pin (`>=6.0.8`) currently match. The two are expressed separately and the module bound is *allowed* to be tighter (it was, at `>=6.0.5` vs `>=6.0.3`, before the 6.0.7 bump), so both must be updated together.
 - No module carries PostgreSQL, Docker, CI matrix, or Node.js constraints — those are generated-project-only.
 - Module Python constraints match the generator and generated-project constraints (`>=3.14,<3.15`), but as an independent copy that must be manually bumped.
 
@@ -468,7 +468,7 @@ Standing constraint-duplication concerns:
 
 1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` are separate strings that are *required to be equal* (`>=3.14,<3.15`). `check_generator_python_constraints` / `check_module_python_constraints` compare all four generator packages and all 12 modules against the pin on every test run, so a coordinated bump must touch every copy or the suite fails. They are not independently versionable despite being written out separately.
 
-2. **Embedded-module Django pin:** All 12 packaged modules and `runtime_pins.DJANGO_CONSTRAINT` currently both carry `>=6.0.7,<6.1.0`. The module value is expressed separately from the pin (`_EXPECTED_MODULE_DJANGO_CONSTRAINT` in `test_templates.py`) so the modules *may* carry a tighter lower bound than the template — they historically did (`>=6.0.5` vs `>=6.0.3`). The two coincide as of the 6.0.7 bump. `test_module_django_lower_bound_drift` pins the expected module value, so changing either side without the other fails.
+2. **Embedded-module Django pin:** All 12 packaged modules and `runtime_pins.DJANGO_CONSTRAINT` currently both carry `>=6.0.8,<6.1.0`. The module value is expressed separately from the pin (`_EXPECTED_MODULE_DJANGO_CONSTRAINT` in `test_templates.py`) so the modules *may* carry a tighter lower bound than the template — they historically did (`>=6.0.5` vs `>=6.0.3`). The two coincide as of the 6.0.8 bump. `test_module_django_lower_bound_drift` pins the expected module value, so changing either side without the other fails.
 
 3. **Frontend constraints are template literals:** Node.js 24.22.1, pnpm 11.18.0, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are literal values, not sourced from `runtime_pins.py`. Note `@types/node` tracks the *Node runtime major* (24), not npm's newest release, so it is deliberately held back from `latest`.
 

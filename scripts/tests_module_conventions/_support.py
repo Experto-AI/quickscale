@@ -219,7 +219,7 @@ def _golden_module(name: str = "demo") -> Module:
                 "\n"
                 "[tool.poetry.dependencies]\n"
                 "python = '>=3.14,<3.15'\n"
-                "Django = '>=6.0.7,<6.1.0'\n"
+                "Django = '>=6.0.8,<6.1.0'\n"
                 "quickscale-core = {path = '../../quickscale_core', develop = true}\n"
                 "\n"
                 "[tool.poetry.group.dev.dependencies]\n"

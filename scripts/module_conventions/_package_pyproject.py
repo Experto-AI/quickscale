@@ -58,7 +58,7 @@ PYPROJECT_TEMPLATE_PROJECT: dict[str, object] = {
 
 PYPROJECT_TEMPLATE_RUNTIME: dict[str, object] = {
     "python": ">=3.14,<3.15",
-    "Django": ">=6.0.7,<6.1.0",
+    "Django": ">=6.0.8,<6.1.0",
 }
 
 PYPROJECT_TEMPLATE_CORE_DEPENDENCY: dict[str, object] = {

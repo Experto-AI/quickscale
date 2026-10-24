@@ -419,7 +419,7 @@ class TestRuntimeDatabaseProvisioningContract:
 # These are the F7.3-contract values that all packaged modules and
 # generator packages must carry.  They are duplicated here only for test
 # self-containment; the authoritative values live in runtime_pins.py.
-_EXPECTED_MODULE_DJANGO_CONSTRAINT = ">=6.0.7,<6.1.0"
+_EXPECTED_MODULE_DJANGO_CONSTRAINT = ">=6.0.8,<6.1.0"
 
 
 @pytest.fixture(scope="module")
@@ -442,7 +442,7 @@ class TestRuntimePinDriftDetection:
 
     The modules previously carried an intentionally tighter Django lower
     bound than ``runtime_pins.DJANGO_CONSTRAINT``.  Both sides now sit
-    at ``>=6.0.7,<6.1.0``, so the
+    at ``>=6.0.8,<6.1.0``, so the
     expected module value and the runtime pin currently coincide.  The
     two remain separately expressed on purpose: a future bump may
     reintroduce a tighter module bound, and this test forces any such
@@ -485,8 +485,8 @@ class TestRuntimePinDriftDetection:
         """Module Django constraints must match the tighter expected value.
 
         The documented intentional drift is:
-          - Template: ``>=6.0.7,<6.1.0`` (runtime_pins.DJANGO_CONSTRAINT)
-          - Modules: ``>=6.0.7,<6.1.0`` (may be a tighter lower bound)
+          - Template: ``>=6.0.8,<6.1.0`` (runtime_pins.DJANGO_CONSTRAINT)
+          - Modules: ``>=6.0.8,<6.1.0`` (may be a tighter lower bound)
 
         This test verifies every packaged module carries the tighter
         ``_EXPECTED_MODULE_DJANGO_CONSTRAINT`` value.  If a version bump changes either

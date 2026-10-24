@@ -85,6 +85,7 @@ dependencies:
   - djangorestframework
   - django-markdownx
   - Pillow
+  - sqlparse
   - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.
