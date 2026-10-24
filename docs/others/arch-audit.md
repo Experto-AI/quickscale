@@ -29,8 +29,7 @@ claims a "GDPR-capable" organization purge. One maintainer, very high cadence (3
 commits in twelve months), twelve modules at 0.89.0. Growth direction (roadmap): SA191d production
 cutover, SA153 first project-owned property portal, SA277 upgrade path. Stated-vs-actual gaps are
 the subject of several findings: "one source" claims coexist with hand-synced lists; the generated
-README calls its dev Compose file production-ready; the generated test harness cannot exercise the
-RLS guarantee it ships.
+test harness cannot exercise the RLS guarantee it ships.
 
 **Declared architecture (from `docs/technical/decisions.md`, `module_architecture.md`,
 `plan-apply-system.md`, `module_conventions.md`, and the test docstrings):**
@@ -150,7 +149,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. |
 | 2 | `module-upgrade-no-reconciler` | Module update is a mutable multi-commit operation | now | High | M | two-way | Update follows a branch tip and mutates modules without a journal or lockfile refresh. |
 | 3 | `contract-vintage-boundary-blind` | Contract gate watches templates, not runtime/managed outputs | now | High | M | two-way | Runtime behavior and module-managed files change existing projects with no step or drift signal. |
-| 4 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | A dev Compose file is called production, media is container-local, and schema changes at boot. |
+| 4 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
 | 5 | `generated-isolation-unverified` | Generated projects never test tenant isolation under the runtime role | now | High | S | two-way | The generated suite bypasses the RLS guarantee it ships. |
 | 6 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
 | 7 | `apply-state-dual-owner` | Apply state has two full owners and a lossy resume snapshot | 6–18 months | High | M | two-way | A crash can persist state without managed-file hashes. |
@@ -466,10 +465,10 @@ items:
 ### Finding 4: Generated production topology is prose, not an artifact
 
 - **ID:** `generated-deploy-topology-unmodeled`
-- **Rank rationale:** High × Medium, steep. The README tells users to run a dev stack as production;
-  the default media backend is container-local while blog/listings can store user files; every
-  deploy runs schema changes at boot. SA191d makes production live now; the cost is paid on the
-  first self-hosted deploy or media upload.
+- **Rank rationale:** High × Medium, steep. The generated README previously told users to run a dev
+  stack as production (since corrected); the default media backend is container-local while
+  blog/listings can store user files; every deploy runs schema changes at boot. SA191d makes
+  production live now; the cost is paid on the first self-hosted deploy or media upload.
 - **Horizon & trigger:** `now` — SA191d production cutover, the first self-hosted production deploy,
   or the first media-bearing feature in a project without the storage module.
 - **Confidence:** High — templates read in full; no production profile, volume, or pre-deploy hook
@@ -481,9 +480,10 @@ items:
   stack, and production media defaults to container-local storage, while migrations run at every
   boot with no pre-deploy or rollback contract.
 - **Evidence:**
-  - `README.md.j2:338-346` says the included `Dockerfile` and `docker-compose.yml` are "ready for
-    production use"; the Compose file sets `INSTALL_DEV: "true"`, runs
-    `python manage.py runserver`, uses `settings.local`, binds the source tree, and runs as host UID
+  - `README.md.j2:338-346` then said the included `Dockerfile` and `docker-compose.yml` were "ready
+    for production use" (since corrected: the template now labels Compose as local development);
+    the Compose file sets `INSTALL_DEV: "true"`, runs `python manage.py runserver`, uses
+    `settings.local`, binds the source tree, and runs as host UID
     (`docker-compose.yml.j2:70,78,80-86`). `local.py.j2:24,118` forces `DEBUG=True` and wildcard
     hosts.
   - Boot migrations: `start.sh.j2:103-120` runs `migrate` and `createcachetable` on every boot;
@@ -513,8 +513,8 @@ items:
 - **Steelman:** Railway is the only supported production path, and Compose is a local-dev
   convenience; media is expected to use the storage module; single-instance boot migrations are a
   common small-SaaS trade-off. That holds while every project uses Railway, one replica, and S3. The
-  README's production claim and the default local backend contradict it for anyone who follows the
-  generated instructions.
+  former README production claim (now corrected) and the default local backend contradicted it for
+  anyone who followed the generated instructions.
 - **Correct shape:** one generated production deployment contract — a production Compose/profile or
   a documented platform path with pre-deploy migrations, persistent or object media, separate
   readiness/liveness, and a rollback story.
@@ -524,9 +524,9 @@ items:
 - **Options:**
   1. **Production Compose/profile** with gunicorn/production settings, a one-shot migrate job, a
      media volume or required S3, and readiness. M, two-way; removes the artifact gap.
-  2. **Make Railway the only supported production path**, remove the Compose production claim, and
-     add a startup check that refuses local media in production. S, two-way; cheaper, but narrows
-     self-hosting.
+  2. **Make Railway the only supported production path**, keep the Compose file documented as local
+     development, and add a startup check that refuses local media in production. S, two-way;
+     cheaper, but narrows self-hosting.
   3. **Accept and document** with an operator checklist and a media warning. Containment: a deploy
      preflight. Revocation: first self-hosted deployment or first media loss.
 - **Recommendation:** option 1 if self-hosting is supported; option 2 if Railway-only is the
@@ -867,7 +867,8 @@ None. No team decision record accepts any open finding with a containment and re
 - **Will a second generated project go live before 1.0?** Yes → F1 stays rank 1 and option 3 is
   dead; the steps × projects cost doubles immediately.
 - **Is self-hosted Compose a supported production path or a dev convenience?** If dev-only, F4's
-  preferred option becomes 2 (remove the claim), and the finding drops to a documentation/gate fix.
+  preferred option becomes 2 (keep the corrected local-development labeling and add the release
+  gate), and the finding drops to a documentation/gate fix.
 - **Will SA153's project-owned extension add tenant models and migrations?** The roadmap says it adds
   `0002+` migrations; if it also adds tenant tables, F5 and F6 both rise (F5's Medium likelihood
   becomes High; F6's horizon moves to now).

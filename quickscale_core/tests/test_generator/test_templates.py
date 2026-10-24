@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Callable
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, UndefinedError
 
 from quickscale_core.generator.runtime_database import (
@@ -1141,16 +1142,22 @@ class TestRuntimeDatabaseUrlOperatorContract:
         """README local quick-start should tell non-Docker users to clear RUNTIME_DATABASE_URL.
 
         CR-SA22-002 regression: the local Setup section must guide non-Docker
-        users to remove RUNTIME_DATABASE_URL from .env after copying .env.example,
-        since the runtime role is only provisioned automatically by Docker Compose.
+        users to remove RUNTIME_DATABASE_URL from the generated .env, since the
+        runtime role is only provisioned automatically by Docker Compose.
         """
         template = jinja_env.get_template("README.md.j2")
         output = template.render(test_context)
 
         # Locate the local Setup section
-        assert "cp .env.example .env" in output
-        setup_section = output[output.index("cp .env.example .env") :]
+        assert "### Setup (Local Development)" in output
+        setup_section = output.split("### Setup (Local Development)", 1)[1]
         setup_section = setup_section[: setup_section.index("# 3. Run migrations")]
+
+        # The generated .env carries the host identity; never overwrite it.
+        assert "cp .env.example .env" not in setup_section, (
+            "README must not tell users to clobber the generated .env"
+        )
+        assert "The generator already wrote .env" in setup_section
 
         # The local quick-start must mention RUNTIME_DATABASE_URL
         assert "RUNTIME_DATABASE_URL" in setup_section, (
@@ -2128,6 +2135,89 @@ class TestClientIpAndSharedCache:
         )
         assert "createcachetable" in output, (
             "Production cache docs should mention createcachetable for DatabaseCache"
+        )
+
+    def test_production_cache_requires_the_redis_client(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The Redis branch must fail closed when its client is missing."""
+        output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+
+        assert "require_redis_cache_client(_redis_url)" in output
+
+    def test_production_settings_fail_closed_without_redis_client(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A REDIS_URL selection without the redis package fails at import."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        production_output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
+        monkeypatch.setattr("importlib.util.find_spec", lambda name: None)
+
+        with pytest.raises(
+            ImproperlyConfigured, match="'redis' package is not installed"
+        ):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": "a-valid-production-secret-key",
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                    "RUNTIME_DATABASE_URL": "",
+                    "REDIS_URL": "redis://localhost:6379/0",
+                },
+            )
+
+    def test_production_settings_select_redis_when_client_is_present(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The same selection succeeds when the redis client is importable."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        production_output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
+        monkeypatch.setattr("importlib.util.find_spec", lambda name: object())
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={
+                "SECRET_KEY": "a-valid-production-secret-key",
+                "DATABASE_URL": (
+                    "postgresql://postgres:postgres@localhost:5432/testproject"
+                ),
+                "RUNTIME_DATABASE_URL": "",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        )
+
+        caches = namespace["CACHES"]
+        assert isinstance(caches, dict)
+        assert caches["default"]["BACKEND"] == (
+            "django.core.cache.backends.redis.RedisCache"
         )
 
     # ── Syntax validity ───────────────────────────────────────────────

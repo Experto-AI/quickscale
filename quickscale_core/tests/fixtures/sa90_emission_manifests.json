@@ -94,12 +94,13 @@
         "theme": "showcase_react"
       }
     },
-    "sa306": "Regenerated 2026-10-23 \u2014 the generated .github/workflows/ci.yml frontend-lint job no longer carries the job-level hashFiles(...) guard GitHub rejects before any job starts; the job runs unconditionally because every showcase_react generation emits frontend/package.json (SA306). 1 fixture hash updated per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative."
+    "sa306": "Regenerated 2026-10-23 \u2014 the generated .github/workflows/ci.yml frontend-lint job no longer carries the job-level hashFiles(...) guard GitHub rejects before any job starts; the job runs unconditionally because every showcase_react generation emits frontend/package.json (SA306). 1 fixture hash updated per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
+    "sa312": "Regenerated 2026-10-24 \u2014 the generated README labels Docker Compose as the local development stack instead of production, its setup steps edit the generated .env instead of copying .env.example over it, and its storage example is space-indented; the generated .dockerignore excludes .quickscale/backups/ and transient .quickscale/*.lock files while keeping the .quickscale/wheels/ cache visible to local-wheel image builds, and .gitignore ignores /static/frontend/; the generated pyproject declares the redis client and production.py fails closed when REDIS_URL selects RedisCache without it (SA312). 5 fixture hashes updated per variant: .dockerignore, .gitignore, README.md, pyproject.toml, testproject/settings/production.py. All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
       "mode": "644",
-      "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
+      "sha256": "09310d3f1e185ad648c1d24f7b010a4bc7613bae4fc4d0a11fb2fe647bdabc08"
     },
     ".editorconfig": {
       "mode": "644",
@@ -123,7 +124,7 @@
     },
     ".gitignore": {
       "mode": "644",
-      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
+      "sha256": "50bfa0b1a6a57111d31ae813fe91f0bbf3c9941fb42fef85b9fa5f8002a2862b"
     },
     ".pre-commit-config.yaml": {
       "mode": "644",
@@ -143,7 +144,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "82bb274eb98a368e7bda0f7a5adc710c5564ba411c0a38646cc04221c6d2effe"
+      "sha256": "1da70af60086d96a205fe49f59472f916a451bede91cbc3730f26a50e9a4824a"
     },
     "db/init.sql": {
       "mode": "644",
@@ -555,7 +556,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "12d7881b2a385fc89b0bfbeaecde51c5fb5db962136f0f2a7b537603997e16e1"
+      "sha256": "24c2b1c7c3123e6f9bdec34e7b7215faeb2be8306bf82920674fe83631fb6e62"
     },
     "quickscale-operations.md": {
       "mode": "644",
@@ -635,7 +636,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "43bcc800cc05b71b9e52863721ed79e5b6479f8e0b8db6973a18c8cbe76d7914"
+      "sha256": "ccceb933601565d63adb40a55c86849d0032ba2ca3b9bb2b90cbea4ad033eb3f"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -669,7 +670,7 @@
   "react_empty": {
     ".dockerignore": {
       "mode": "644",
-      "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
+      "sha256": "09310d3f1e185ad648c1d24f7b010a4bc7613bae4fc4d0a11fb2fe647bdabc08"
     },
     ".editorconfig": {
       "mode": "644",
@@ -693,7 +694,7 @@
     },
     ".gitignore": {
       "mode": "644",
-      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
+      "sha256": "50bfa0b1a6a57111d31ae813fe91f0bbf3c9941fb42fef85b9fa5f8002a2862b"
     },
     ".pre-commit-config.yaml": {
       "mode": "644",
@@ -713,7 +714,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "82bb274eb98a368e7bda0f7a5adc710c5564ba411c0a38646cc04221c6d2effe"
+      "sha256": "1da70af60086d96a205fe49f59472f916a451bede91cbc3730f26a50e9a4824a"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1125,7 +1126,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "12d7881b2a385fc89b0bfbeaecde51c5fb5db962136f0f2a7b537603997e16e1"
+      "sha256": "24c2b1c7c3123e6f9bdec34e7b7215faeb2be8306bf82920674fe83631fb6e62"
     },
     "quickscale-operations.md": {
       "mode": "644",
@@ -1205,7 +1206,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "43bcc800cc05b71b9e52863721ed79e5b6479f8e0b8db6973a18c8cbe76d7914"
+      "sha256": "ccceb933601565d63adb40a55c86849d0032ba2ca3b9bb2b90cbea4ad033eb3f"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -1239,7 +1240,7 @@
   "react_selected": {
     ".dockerignore": {
       "mode": "644",
-      "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
+      "sha256": "09310d3f1e185ad648c1d24f7b010a4bc7613bae4fc4d0a11fb2fe647bdabc08"
     },
     ".editorconfig": {
       "mode": "644",
@@ -1263,7 +1264,7 @@
     },
     ".gitignore": {
       "mode": "644",
-      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
+      "sha256": "50bfa0b1a6a57111d31ae813fe91f0bbf3c9941fb42fef85b9fa5f8002a2862b"
     },
     ".pre-commit-config.yaml": {
       "mode": "644",
@@ -1283,7 +1284,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "82bb274eb98a368e7bda0f7a5adc710c5564ba411c0a38646cc04221c6d2effe"
+      "sha256": "1da70af60086d96a205fe49f59472f916a451bede91cbc3730f26a50e9a4824a"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1695,7 +1696,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "12d7881b2a385fc89b0bfbeaecde51c5fb5db962136f0f2a7b537603997e16e1"
+      "sha256": "24c2b1c7c3123e6f9bdec34e7b7215faeb2be8306bf82920674fe83631fb6e62"
     },
     "quickscale-operations.md": {
       "mode": "644",
@@ -1775,7 +1776,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "43bcc800cc05b71b9e52863721ed79e5b6479f8e0b8db6973a18c8cbe76d7914"
+      "sha256": "ccceb933601565d63adb40a55c86849d0032ba2ca3b9bb2b90cbea4ad033eb3f"
     },
     "testproject/urls.py": {
       "mode": "644",

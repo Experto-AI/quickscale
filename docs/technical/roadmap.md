@@ -13,8 +13,8 @@ with the defects that block publication.
 **Release status.** 0.89.0 fixes 0.88.0's S1 billing defects; a live 0.88.0 install moves to
 0.89.0 on a fresh database. The 2026-10-23 technical audit found a new S1
 (`billing-subscription-checkout-metadata-key-too-long`) and eight S2s in the unpublished tag, so
-0.89.0 re-enters the release loop: SA310–SA313 land, the tag is re-cut and re-validated, and then
-the operator's Phases 5–6 sealing and PyPI publication follow SA191d
+0.89.0 re-enters the release loop: SA310, SA311 and SA313 land, the tag is re-cut and
+re-validated, and then the operator's Phases 5–6 sealing and PyPI publication follow SA191d
 ([publish_procedure.md](publish_procedure.md)).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
@@ -46,21 +46,20 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 2 | — | Required |
 | SA310 | Fix the subscription Checkout S1 and order billing webhooks | 2 | — | Required |
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
-| SA312 | Close the generated-project and release-workflow safety defects | 1 | — | Required |
 | SA313 | Run backup dump and restore under the backup role | 3 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
 | SA316 | Extend the contract-vintage gate to runtime and managed outputs | 3 | — | Optional |
 | SA317 | Give apply state one owner; close CLI command defects | 3 | — | Optional |
-| SA318 | Run generated tenant-isolation tests under the runtime role | 1 | SA312 | Optional |
+| SA318 | Run generated tenant-isolation tests under the runtime role | 1 | — | Optional |
 | SA319 | Update modules as one sealed-tag transaction | 3 | SA317 | Optional |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | SA316 | Optional |
-| SA321 | Make the generated production deployment contract an artifact | 1 | SA312 | Optional |
+| SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA322 | Make backup restore safe and its recovery point coherent | 3 | SA313 | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
 | SA325 | Make module settings, defaults, messages and READMEs follow one contract | 3 | — | Optional |
-| SA326 | Wire the unwired release and security gates | 3 | SA312 | Optional |
+| SA326 | Wire the unwired release and security gates | 3 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d, SA318, SA320 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
@@ -68,18 +67,18 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA312 ─► SA153 (h) ─► SA318 ─► [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
+Track 1: SA153 (h) ─► SA318 ─► [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
 Track 3: SA313 ─► SA316 ─► SA317 (a, b) ─► SA319 (a → b) ─► SA322 (a → b → c)
-         ─► SA325 ─► [SA312] SA326 ─► [SA191d (production)] SA277
-     release path: SA310, SA311, SA312, SA313 ─► re-cut 0.89.0 ─► SA191d ─► publication
+         ─► SA325 ─► SA326 ─► [SA191d (production)] SA277
+     release path: SA310, SA311, SA313 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA316 ─► SA320 (a) ─► SA153 (j); SA191d (production) ─► SA153 (f)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA312 leads Track 1 because publication needs it; SA153 (h) can ship any time; SA153 (j) needs SA318 and SA320 (a) only, and (f) needs
+SA153 (h) can ship any time; SA153 (j) needs SA318 and SA320 (a) only, and (f) needs
 SA191d (production); SA320 (b/c) may finish after SA153 (j). SA277 waits for SA191d (production).
 SA191d's operator gates are idle time on Track 2, filled with SA310/SA311 and then the Optional
 module tickets. SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its
@@ -95,13 +94,13 @@ before SA319, SA318 before SA153 (j), SA313 before SA322.
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA312, then SA153 (h) | yes | no: SA191d (production) for SA153 (f); SA316 for SA320 | yes: SA153 (h), SA312, SA318 |
+| 1 | SA153 (h) | yes | no: SA191d (production) for SA153 (f); SA316 for SA320 | yes: SA153 (h), SA318 |
 | 2 | SA191d (re-proof), then SA310 | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA313 | yes | no: SA191d (production) for SA277 | yes: SA313, SA316, SA317 |
 
 **Clearing blockers.** Track 1: SA316 (Track 3) clears SA320; SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
-SA312 (Track 1) clears SA326's workflow edits; SA191d (production) clears SA277.
+SA191d (production) clears SA277.
 
 ### Ownership and merge coordination
 
@@ -116,7 +115,7 @@ SA312 (Track 1) clears SA326's workflow edits; SA191d (production) clears SA277.
   fixtures, versioned upgrade prompt, and upgrade decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
-  `decisions.md`, `README.md.j2` (SA312, SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
+  `decisions.md`, `README.md.j2` (SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
   SA321), billing `_settings.py` (SA310, SA314), module manifests (SA320 (c), SA325),
   `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
   (`App.test.tsx`, `AppRoutes.test.tsx`; SA153 adds pages).
@@ -135,20 +134,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — generated project and property portal
 
-- [ ] **SA312 — Close the generated-project and release-workflow safety defects before publication.**
-
-  Closes tech `generated-compose-called-production-runs-debug` (documentation correction only; the
-  production artifact is SA321), `generated-redis-cache-missing-client`,
-  `dockerignore-bakes-local-backups`, `generated-readme-examples-invalid`,
-  `e2e-generated-ci-contract-stale-grep`, and `publish-pypi-no-skip-existing`. The three README
-  fixes share `README.md.j2`, so they land together.
-
-  **Acceptance:** the README no longer calls the dev Compose stack production; selecting the Redis
-  cache renders a project whose lock includes the client and whose startup check fails without it;
-  the rendered `.dockerignore` excludes `.quickscale/`; every fenced `yaml` block in the rendered
-  README parses and no example overwrites a generated file (a generator test enforces both); the
-  E2E contract check asserts the parsed action pin shape inside the generator suite; publish skips
-  existing files and checks each package after upload (Tier 2-full).
+- [x] **SA312 — Close the generated-project and release-workflow safety defects before publication.**
 
 - [ ] **SA318 — Run generated tenant-isolation tests under the restricted runtime role.**
 

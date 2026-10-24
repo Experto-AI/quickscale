@@ -22,6 +22,7 @@ Public API (SA206):
   manifest-declared module throttle scopes, the module-contributed keys, and
   the proxy-derived ``NUM_PROXIES``.
 * :func:`require_production_secret_key` — the production SECRET_KEY guard.
+* :func:`require_redis_cache_client` — the production Redis-cache client guard.
 * :data:`KNOWN_PRIVILEGED_COMMANDS`, :data:`KNOWN_NON_DB_COMMANDS`, and
   :func:`resolve_runtime_database_url` — the launcher one-shot command-mode
   contract and the privileged/runtime database selection.
@@ -35,6 +36,7 @@ projects adopt it through a declared contract step.
 from __future__ import annotations
 
 import contextvars
+import importlib.util
 import json
 import logging
 import re
@@ -57,6 +59,7 @@ __all__ = [
     "correlation_id_var",
     "num_proxies_for",
     "require_production_secret_key",
+    "require_redis_cache_client",
     "resolve_runtime_database_url",
     "secure_proxy_ssl_header",
     "validated_proxy_settings",
@@ -353,6 +356,29 @@ def require_production_secret_key(secret_key: object) -> str:
             "get_random_secret_key; print(get_random_secret_key())'"
         )
     return normalized_secret_key
+
+
+# ── Production Redis-cache client guard ──────────────────────────────
+
+
+def require_redis_cache_client(redis_url: str | None) -> None:
+    """Reject a Redis cache selection whose client is not installed.
+
+    Django's ``RedisCache`` backend imports the ``redis`` package on first
+    use.  Generated projects declare that client, but a partially installed
+    or hand-edited environment can still reach serving with it absent; every
+    throttled request would then fail instead of the deployment failing at
+    configuration time.
+    """
+    if not redis_url:
+        return
+    if importlib.util.find_spec("redis") is None:
+        raise ImproperlyConfigured(
+            "REDIS_URL is set, so production settings select Django's "
+            "RedisCache, but the 'redis' package is not installed. Install "
+            "the project dependencies (poetry install) or unset REDIS_URL to "
+            "use the database-backed cache."
+        )
 
 
 # ── Launcher one-shot command-mode contract ──────────────────────────

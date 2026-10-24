@@ -595,7 +595,8 @@ Generated projects include Docker support for both development and production. A
 ```bash
 # Development with Docker Compose v2
 cd myapp
-cp .env.example .env  # Configure environment variables
+# The generator wrote .env with your host UID/GID. A fresh clone has none,
+# so create it from .env.example and set DOCKER_UID/DOCKER_GID to your host IDs.
 docker compose up --build
 docker compose exec backend python manage.py migrate
 

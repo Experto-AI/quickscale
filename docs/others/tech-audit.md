@@ -9,6 +9,14 @@ inputs. No drift between orientation and delivery. This file is the single sourc
 defects that are found but not yet fixed. Cite a finding by its slug ID; section numbers are not
 stable.
 
+**Fix record (2026-10-24).** SA312 closes six findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`:
+`generated-compose-called-production-runs-debug`,
+`generated-redis-cache-missing-client`, `dockerignore-bakes-local-backups`,
+`generated-readme-examples-invalid`, `e2e-generated-ci-contract-stale-grep`, and
+`publish-pypi-no-skip-existing`. The live ticket state is in
+[the roadmap](../technical/roadmap.md).
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -17,9 +25,10 @@ manifest engine, runtime seams, and DR engine, and twelve Django modules (`quick
 ship as vendored runtime dependencies. There are **three deployment realities**: (a) **generated
 projects**, internet-facing Django apps on Railway or self-hosted Docker, PostgreSQL 18 with FORCE
 RLS through a `NOSUPERUSER`/`NOBYPASSRLS` runtime role; (b) **the maintainer toolchain**, run locally
-and in GitHub Actions against this repository; and (c) the documented **self-hosted Compose**
-"production" path, which is in fact the dev stack (finding
-`generated-compose-called-production-runs-debug`). Repository visibility: **public**
+and in GitHub Actions against this repository; and (c) the previously documented **self-hosted
+Compose** "production" path, which was in fact the dev stack (finding
+`generated-compose-called-production-runs-debug`, since corrected in the README). Repository
+visibility: **public**
 (`github.com/Experto-AI/quickscale`); there is no `SECURITY.md`, so the disclosure rule is applied.
 Entry points: module HTTP/DRF views, Stripe and Svix webhooks, management commands with a `--trigger`
 provenance, the CLI, the generator, and GitHub Actions. Actors: anonymous visitors, org members
@@ -171,14 +180,14 @@ items:
                quickscale_modules/orgs/src/quickscale_modules_orgs/forms.py,
                quickscale_modules/orgs/src/quickscale_modules_orgs/_api_views.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: generated-compose-called-production-runs-debug, status: open, severity: S2, category: X,
+  - {id: generated-compose-called-production-runs-debug, status: fixed, severity: S2, category: X,
      title: "The generated README calls the dev Compose stack production; it runs runserver with DEBUG=True",
      effort: Small, confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/README.md.j2,
                quickscale_core/src/quickscale_core/generator/templates/docker-compose.yml.j2,
                quickscale_core/src/quickscale_core/generator/templates/project_name/settings/local.py.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: generated-redis-cache-missing-client, status: open, severity: S2, category: VI,
+  - {id: generated-redis-cache-missing-client, status: fixed, severity: S2, category: VI,
      title: "Selecting the recommended Redis cache fails at first use: the redis client is not a project dependency",
      effort: Trivial, confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2,
@@ -253,7 +262,7 @@ items:
      effort: Trivial, confidence: High, reality: maintainer-toolchain,
      anchors: [quickscale_cli/src/quickscale_cli/commands/remove_command.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: dockerignore-bakes-local-backups, status: open, severity: S3, category: III,
+  - {id: dockerignore-bakes-local-backups, status: fixed, severity: S3, category: III,
      title: "Generated .dockerignore omits .quickscale/backups, so local DB dumps enter the image",
      effort: Trivial, confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/.dockerignore.j2,
@@ -265,13 +274,13 @@ items:
      anchors: [quickscale_cli/src/quickscale_cli/commands/_generation.py,
                quickscale_core/src/quickscale_core/generator/generator.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: e2e-generated-ci-contract-stale-grep, status: open, severity: S3, category: VII,
+  - {id: e2e-generated-ci-contract-stale-grep, status: fixed, severity: S3, category: VII,
      title: "The E2E workflow greps for mutable action tags that the generated workflow no longer contains",
      effort: Trivial, confidence: High, reality: maintainer-toolchain,
      anchors: [.github/workflows/e2e.yml,
                quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: publish-pypi-no-skip-existing, status: open, severity: S3, category: VII,
+  - {id: publish-pypi-no-skip-existing, status: fixed, severity: S3, category: VII,
      title: "A partial PyPI publish cannot be resumed", effort: Trivial, confidence: High,
      reality: maintainer-toolchain,
      anchors: [.github/workflows/publish.yml], depends_on: [], chain: [],
@@ -327,7 +336,7 @@ items:
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/serializers.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: generated-readme-examples-invalid, status: open, severity: S4, category: X,
+  - {id: generated-readme-examples-invalid, status: fixed, severity: S4, category: X,
      title: "Generated README examples use invalid YAML, clobber the generated .env, and miss the Vite output in .gitignore",
      effort: Small, confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/README.md.j2,
@@ -395,6 +404,8 @@ items:
 
 ## Summary table
 
+Rows record audit-time severity; current status is in the machine-readable index above.
+
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `billing-subscription-checkout-metadata-key-too-long` | S1 | IX | Subscription Checkout metadata key exceeds Stripe's 40-character limit | Trivial | High | new |
@@ -436,13 +447,14 @@ items:
 | `notifications-message-status-aggregate-race` | S4 | II | Concurrent sibling webhooks leave the aggregate stale | Trivial | Medium | carried |
 | `forms-retention-skips-null-ip-rows` | S4 | IX | Retention skips rows stored without an IP | Trivial | High | carried |
 
-Quick wins (Trivial effort, S2/S3): `generated-redis-cache-missing-client`,
-`forms-null-optional-field-500`, `billing-invoice-payment-failed-unscoped`,
-`cli-remove-accepts-path-traversal`, `dockerignore-bakes-local-backups`,
-`e2e-generated-ci-contract-stale-grep`, `publish-pypi-no-skip-existing`,
+Quick wins (Trivial effort, S2/S3): `forms-null-optional-field-500`,
+`billing-invoice-payment-failed-unscoped`, `cli-remove-accepts-path-traversal`,
 `backups-prune-no-keep-last`.
 
 ## Findings
+
+Findings marked `status: fixed` in the machine-readable index keep the audit-time evidence
+below; their `Fix:` text records what the fix required, not outstanding work.
 
 ### S1
 
@@ -1015,8 +1027,8 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 | CLI | local operator | confirmation + advisory lock | n/a | apply backup/rollback | `cli-remove-accepts-path-traversal`; `cli-apply-force-never-forces` |
 | Uploads (blog/listings/storage) | session + member | org-scoped rows; public media by design | size/format/dimension, bomb error | object storage | `media-s3-fixed-path-overwrite`; `media-image-decode-before-dimension-cap` |
 | Tenant ORM/RLS | n/a | `TenantManager` + FORCE RLS | n/a | GUC per scope | `billing-credit-services-missing-org-scope`; `orgs-contextvar-leak-on-db-error` |
-| Caches / throttles | n/a | per-user/anon scopes | DRF rates | shared cache required | `generated-redis-cache-missing-client`; `social-cache-bulk-invalidation` |
-| Release pipeline | GitHub OIDC / tokens | least privilege, SHA pins | n/a | artifact promotion | `e2e-generated-ci-contract-stale-grep`; `publish-pypi-no-skip-existing` |
+| Caches / throttles | n/a | per-user/anon scopes | DRF rates | shared cache required | `social-cache-bulk-invalidation` |
+| Release pipeline | GitHub OIDC / tokens | least privilege, SHA pins | n/a | artifact promotion | none open |
 | Dependencies | n/a | lockfiles/pins | n/a | n/a | accepted postcss advisory; no fresh audit |
 | Backups | n/a | operator/admin gate | checksum/format/migration identity | dump+sidecar | `backups-*` findings; F6 structural context |
 
@@ -1031,11 +1043,8 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 3. `crm-deal-owner-cross-tenant` — serializer validation + read filter; independent.
 4. `media-s3-fixed-path-overwrite` — storage option + test; independent.
 5. `orgs-admin-can-demote-owner` — actor-rank check in form + API; independent.
-6. `generated-compose-called-production-runs-debug` — docs correction first; production profile can
-   follow.
-7. `generated-redis-cache-missing-client` — dependency + startup check.
-8. `forms-null-optional-field-500` — normalize/reject; independent.
-9. `billing-webhook-status-applied-out-of-order` — provider re-fetch or version column; needs a
+6. `forms-null-optional-field-500` — normalize/reject; independent.
+7. `billing-webhook-status-applied-out-of-order` — provider re-fetch or version column; needs a
    migration if the version approach is chosen.
 
 **Then (S3), in three batches:**
@@ -1050,11 +1059,9 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; land the runtime-role fix first
   and the restore-metadata fix before the prune change.
 - **Generator/CLI/release batch:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`,
-  `dockerignore-bakes-local-backups`, `e2e-generated-ci-contract-stale-grep`,
-  `publish-pypi-no-skip-existing`, `generated-readme-examples-invalid`,
-  `media-image-decode-before-dimension-cap`, `auth-profile-email-change-desync`. The E2E and publish
-  fixes must land before the next release tag; the README/.dockerignore changes ride with the next
-  generator release.
+  `media-image-decode-before-dimension-cap`, `auth-profile-email-change-desync`. The README,
+  `.dockerignore`, E2E-contract and publish-resumability fixes are closed; the rest ride with the
+  next generator release.
 
 **S4 tail:** batch by file (orgs receivers, backups admin/perms, forms export/options, auth logging,
 three prior S4s). No ordering constraint beyond “backup runtime-role first”.
@@ -1062,15 +1069,15 @@ three prior S4s). No ordering constraint beyond “backup runtime-role first”.
 Parallelizable: the billing, orgs, CRM, media, generator-docs, and release-workflow batches touch
 disjoint files. The backup batch and the generator batch both touch `quickscale_core` but different
 subtrees; run them in parallel if the branch strategy allows. Conflicts: `_settings.py` (billing key
-+ RLS), `_capture.py` (runtime role + artifact row + perms), and `README.md.j2` (compose + YAML +
-.env) are the shared-file hotspots; coordinate reviewers.
++ RLS) and `_capture.py` (runtime role + artifact row + perms) are the shared-file hotspots;
+coordinate reviewers.
 
 ## Per-subsystem verdicts
 
-- **Generated-project templates:** findings `generated-compose-called-production-runs-debug`,
-  `generated-redis-cache-missing-client`, `dockerignore-bakes-local-backups`,
-  `generated-readme-examples-invalid`; otherwise read in full, secure defaults verified (secret
-  guard, non-root, cookies/HSTS, conditional proxy trust).
+- **Generated-project templates:** four findings, fixed since the audit
+  (`generated-compose-called-production-runs-debug`, `generated-redis-cache-missing-client`,
+  `dockerignore-bakes-local-backups`, `generated-readme-examples-invalid`); otherwise read in full,
+  secure defaults verified (secret guard, non-root, cookies/HSTS, conditional proxy trust).
 - **Billing:** findings 1, 9, and five S3/S4; webhook signature/raw body, price parity, RLS targets,
   and the current-subscription constraint verified. The provider-contract tests are fake-client only.
 - **Orgs:** findings `orgs-admin-can-demote-owner`, `orgs-bulk-delete-leaves-zero-owners`, two S4s,
@@ -1088,11 +1095,13 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
   retention (prior S4) verified.
 - **CLI:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`; argv-list subprocess,
   advisory locks, theme preflight, and apply checkpoint/rollback verified.
-- **Core generator/DR:** findings 2, the restore/prune/lock items, and the S4 README/ignore items;
-  emission mapping, Jinja autoescape rationale, and runtime settings fail-closed paths verified.
-- **Scripts/CI/publish:** `e2e-generated-ci-contract-stale-grep`, `publish-pypi-no-skip-existing`;
-  action SHA pins, least-privilege permissions, and the gate registry verified. The manual/unwired
-  gates are in the Tooling gaps section.
+- **Core generator/DR:** findings 2, the restore/prune/lock items, and the fixed S4 README/ignore
+  items; emission mapping, Jinja autoescape rationale, and runtime settings fail-closed paths
+  verified.
+- **Scripts/CI/publish:** two findings, fixed since the audit
+  (`e2e-generated-ci-contract-stale-grep`, `publish-pypi-no-skip-existing`); action SHA pins,
+  least-privilege permissions, and the gate registry verified. The manual/unwired gates are in the
+  Tooling gaps section.
 - **Notifications/social/listings/analytics:** no new defect beyond the carried notifications race
   and watchlist items; Svix raw-body verification, delivery-status contract, public filters, and
   analytics escaping verified.
@@ -1144,10 +1153,9 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
 
 ## Structural smells
 
-- **Generated production topology is prose, not an artifact** (arch F4): the dev Compose file is
-  called production, media is container-local by default, and schema changes at boot. The ticket is
-  `generated-compose-called-production-runs-debug`; the structural form is arch
-  `generated-deploy-topology-unmodeled`.
+- **Generated production topology is prose, not an artifact** (arch F4): media is container-local
+  by default and schema changes at boot. The README's production claim is corrected; the structural
+  form is arch `generated-deploy-topology-unmodeled`.
 - **Backups define a database dump, not a coherent recovery point** (arch F6): media is read live,
   project migrations are excluded, and restore has no lease/atomicity. The tickets are the backup
   findings; the structural form is arch `backup-restore-incoherent`.
@@ -1185,9 +1193,6 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
   rejection before `Image.load()`.
 - **No cross-org owner test**: add the CRM serializer test.
-- **E2E contract check is a brittle string grep**: assert the parsed action pin shape (or the pinned
-  SHA) and run it in the generator test suite, not only in the release-triggered E2E workflow.
-- **Publish action lacks resumability**: add `skip-existing` and a post-publish per-package check.
 - **Secret scanning is working-tree-only**: `check_secret_scanning.py`/`gitleaks dir` never scans
   history; a deleted credential is invisible. Add a history scan (or document the limitation) and
   make the suppression file expiring/justified.
@@ -1198,8 +1203,6 @@ subtrees; run them in parallel if the branch strategy allows. Conflicts: `_setti
   class-level `csrf_exempt` dispatch if one handler calls `_enforce_csrf`; the org-context gate
   misses `from ... import current_org` attribute use. Tie these to the release/backup/media classes
   they would catch, not to individual findings alone.
-- **Generated README examples are not linted**: a YAML parse check over fenced `yaml` blocks and a
-  diff check for `.env`/`.gitignore` would catch `generated-readme-examples-invalid`.
 - **Gate parity**: CI and the local `make` lanes should share the same coverage/security commands;
   the `QUIET` bypasses are a release risk.
 
@@ -1250,14 +1253,12 @@ release.
 
 ## Questions that would change severity
 
-- **Does the production deployment actually set `REDIS_URL`?** A no demotes
-  `generated-redis-cache-missing-client` to S4 (the DB cache fallback is selected). A yes keeps S2.
 - **Does any generated project run `quickscale_backups_create` rather than a manual `pg_dump`?** A no
   makes the backup findings latent for that deployment (S4 watchlist) but does not fix the shipped
   engine; a yes keeps S2.
-- **Is self-hosted Compose a supported production path, or only a dev convenience?** If dev-only, the
-  fix is the README claim (still S2 for the misleading instruction); if supported, the production
-  Compose profile is required before the next release.
+- **Is self-hosted Compose a supported production path, or only a dev convenience?** This decides
+  the generated production deployment artifact: a supported path needs a production Compose profile;
+  a dev-only path needs one documented production path (architectural audit F4).
 - **Does the project use Stripe Invoicing or one-off invoices on the same customer?** A no demotes
   `billing-invoice-payment-failed-unscoped` to S4; a yes keeps S3.
 - **Are all `/admin/` staff accounts superusers, with no tenant user ever granted `is_staff`?** A yes

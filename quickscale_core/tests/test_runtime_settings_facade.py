@@ -15,6 +15,7 @@ import types
 import uuid
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_core.runtime import settings as facade
 
@@ -35,6 +36,7 @@ class TestFacadePublicSurface:
             "correlation_id_var",
             "num_proxies_for",
             "require_production_secret_key",
+            "require_redis_cache_client",
             "resolve_runtime_database_url",
             "secure_proxy_ssl_header",
             "validated_proxy_settings",
@@ -54,6 +56,39 @@ class TestFacadePublicSurface:
     def test_correlation_context_variable_is_a_contextvar(self) -> None:
         assert isinstance(facade.correlation_id_var, contextvars.ContextVar)
         assert facade.correlation_id_var.name == "correlation_id"
+
+
+class TestRedisCacheClientGuard:
+    """The Redis cache selection fails closed without its client."""
+
+    def test_redis_url_without_client_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(facade.importlib.util, "find_spec", lambda name: None)
+
+        with pytest.raises(
+            ImproperlyConfigured, match="'redis' package is not installed"
+        ):
+            facade.require_redis_cache_client("redis://localhost:6379/0")
+
+    def test_redis_url_with_client_passes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(facade.importlib.util, "find_spec", lambda name: object())
+
+        facade.require_redis_cache_client("redis://localhost:6379/0")
+
+    def test_no_redis_url_does_not_probe_the_client(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        probed: list[str] = []
+        monkeypatch.setattr(
+            facade.importlib.util, "find_spec", lambda name: probed.append(name)
+        )
+
+        facade.require_redis_cache_client(None)
+
+        assert probed == []
 
 
 class TestProxyTrustDerivation:

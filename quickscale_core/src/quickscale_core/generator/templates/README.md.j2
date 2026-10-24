@@ -22,9 +22,12 @@ The generated root `Makefile` is the default local entrypoint for setup, linting
 # 1. Install project dependencies
 make setup
 
-# 2. Copy environment variables
-cp .env.example .env
-# Edit .env for local database/port changes as needed.
+# 2. Review the generated .env
+# The generator already wrote .env with your host UID/GID and local database
+# URL. Edit it for local database/port changes as needed. Do not copy
+# .env.example over it: that template cannot carry your host identity.
+# If .env is missing (it is gitignored, so a fresh clone has none), create it
+# from .env.example and set DOCKER_UID/DOCKER_GID to your host IDs.
 # The shipped SECRET_KEY placeholder is for local development only.
 # Generate a real SECRET_KEY before deploying to production.
 # If running without Docker, delete RUNTIME_DATABASE_URL from .env so that
@@ -78,9 +81,11 @@ If you plan to use the QuickScale `auth` module (custom `AUTH_USER_MODEL`), embe
 ### Setup (Docker)
 
 ```bash
-# 1. Copy environment variables
-cp .env.example .env
-# Edit .env for local database/port changes as needed.
+# 1. Review the generated .env
+# The generator wrote .env with your host UID/GID; edit it for local
+# database/port changes instead of copying .env.example over it. If .env is
+# missing (a fresh clone has none), create it from .env.example and set
+# DOCKER_UID/DOCKER_GID to your host IDs.
 # The shipped SECRET_KEY placeholder is for local development only.
 # Generate a real SECRET_KEY before deploying to production.
 
@@ -107,7 +112,7 @@ This project comes pre-configured with:
 - ✅ **Generated Makefile** - Root `make` targets for setup, lint, format, test, and CI-friendly checks
 - ✅ **Django 6.0+** - Latest stable Django version
 - ✅ **PostgreSQL** - Local and production database (no SQLite fallback)
-- ✅ **Docker** - Containerized development and production deployment
+- ✅ **Docker** - Containerized local development and a production image build
 - ✅ **Environment-based settings** - Separate configs for local/production
 - ✅ **Security best practices** - SECRET_KEY management, ALLOWED_HOSTS, security middleware
 - ✅ **Testing infrastructure** - pytest, pytest-django, factory_boy, pytest-cov
@@ -246,7 +251,8 @@ poetry run python manage.py startapp myapp
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+The generated `.env` holds local-development values. For production, set these
+variables in your deployment environment (`.env.example` lists every supported key):
 
 ```bash
 # Required for production
@@ -282,17 +288,17 @@ Set these fields in `quickscale.yml` and then run `quickscale apply`:
 
 ```yaml
 modules:
-	storage:
-		backend: s3
-		media_url: /media/
-		public_base_url: https://cdn.example.com
-		bucket_name: your-media-bucket
-		endpoint_url: ""
-		region_name: eu-west-1
-		access_key_id_env_var: AWS_ACCESS_KEY_ID
-		secret_access_key_env_var: AWS_SECRET_ACCESS_KEY
-		default_acl: ""
-		querystring_auth: false
+  storage:
+    backend: s3
+    media_url: /media/
+    public_base_url: https://cdn.example.com
+    bucket_name: your-media-bucket
+    endpoint_url: ""
+    region_name: eu-west-1
+    access_key_id_env_var: AWS_ACCESS_KEY_ID
+    secret_access_key_env_var: AWS_SECRET_ACCESS_KEY
+    default_acl: ""
+    querystring_auth: false
 ```
 
 > **Secret handling — SA29:** The ``access_key_id_env_var`` and ``secret_access_key_env_var``
@@ -335,17 +341,24 @@ Before deploying to production:
 - [ ] Run migrations: `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate` (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL; the command-mode env var is a one-shot inline prefix only, never persistent configuration)
 - [ ] Collect static files: `QUICKSCALE_NON_DB_COMMAND=collectstatic python manage.py collectstatic` (one-shot inline prefix; supplies a dummy `DATABASE_URL` when the real one is absent)
 
-### Docker Deployment
+### Docker (Local Development)
 
-The included `Dockerfile` and `docker-compose.yml` are ready for production use:
+The included `Dockerfile` builds the production image, but `docker-compose.yml` is a
+**local development stack**: it runs Django's development server with
+`settings.local` (`DEBUG=True`) and bind-mounts the source tree. It is not a
+production deployment.
 
 ```bash
-# Build production image
+# Build the image
 docker build -t {{ project_name }}:latest .
 
-# Run with docker compose
+# Start the local development stack
 docker compose -f docker-compose.yml up -d
 ```
+
+For production deployment, follow the procedure in `OPERATIONS.md` (Railway or a
+manual deploy of the built image). Do not run the Compose stack as the production
+service.
 
 ## 📚 Project Structure
 

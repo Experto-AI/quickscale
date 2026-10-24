@@ -25,6 +25,14 @@ def _tag_globs(workflow_path: Path) -> list[str]:
     return cast(list[str], workflow["on"]["push"]["tags"])
 
 
+def _workflow(workflow_path: Path) -> dict[str, Any]:
+    """Read a workflow without YAML 1.1 boolean key coercion."""
+    return cast(
+        dict[str, Any],
+        yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader),
+    )
+
+
 def _publish_tag_globs() -> list[str]:
     return _tag_globs(_PUBLISH_WORKFLOW)
 
@@ -63,3 +71,25 @@ def test_namespaced_split_tag_matches_no_actual_publish_glob() -> None:
 
     assert publish_globs
     assert all(not fnmatch(_SPLIT_TAG, publish_glob) for publish_glob in publish_globs)
+
+
+def test_pypi_publish_resumes_a_partial_upload() -> None:
+    """A re-run of a partially published tag must skip existing files."""
+    workflow = _workflow(_PUBLISH_WORKFLOW)
+    steps = cast(list[dict[str, Any]], workflow["jobs"]["publish-pypi"]["steps"])
+    publish_step = next(step for step in steps if step.get("name") == "Publish to PyPI")
+
+    assert publish_step["with"]["skip-existing"] == "true"
+
+
+def test_published_release_is_verified_after_the_upload() -> None:
+    """Every distribution is checked against the index after publishing."""
+    workflow = _workflow(_PUBLISH_WORKFLOW)
+    verify_job = cast(dict[str, Any], workflow["jobs"]["verify-published"])
+
+    assert verify_job["needs"] == "publish-pypi"
+    commands = "\n".join(
+        cast(str, step.get("run", ""))
+        for step in cast(list[dict[str, Any]], verify_job["steps"])
+    )
+    assert "scripts/check_release_published.py" in commands

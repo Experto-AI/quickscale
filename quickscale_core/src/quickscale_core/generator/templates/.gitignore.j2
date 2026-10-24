@@ -20,6 +20,9 @@ db.sqlite3-journal
 /media
 /staticfiles
 /static_root
+# Vite writes the built React bundle here; leaving it untracked blocks
+# `quickscale apply` module embedding on a dirty working tree.
+/static/frontend/
 
 # Environment variables
 .env

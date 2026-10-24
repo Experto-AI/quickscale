@@ -16,7 +16,8 @@ REQUIRED ENVIRONMENT VARIABLES:
 - SENTRY_DSN: (optional) Sentry error tracking DSN
 
 OPTIONAL ENVIRONMENT VARIABLES:
-- REDIS_URL: When set, enables Redis as the shared cache backend (recommended; standard on Railway)
+- REDIS_URL: When set, enables Redis as the shared cache backend (recommended; standard on Railway).
+  The generated project declares the ``redis`` client; startup fails closed when it is absent.
 - USE_X_FORWARDED_FOR: Defaults to ``True`` in production; set to ``False`` for single-host
   deployments. Disabling it also stops ``X-Forwarded-Proto`` from being trusted, so the HTTPS
   redirect and secure cookies cannot be spoofed by a direct plaintext client.
@@ -40,6 +41,7 @@ from decouple import config
 from quickscale_core.runtime.settings import (
     num_proxies_for,
     require_production_secret_key,
+    require_redis_cache_client,
     resolve_runtime_database_url,
     secure_proxy_ssl_header,
 )
@@ -233,6 +235,7 @@ STORAGES["staticfiles"] = {  # noqa: F405
 #
 _redis_url = config("REDIS_URL", default=None)
 if _redis_url:
+    require_redis_cache_client(_redis_url)
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.redis.RedisCache",

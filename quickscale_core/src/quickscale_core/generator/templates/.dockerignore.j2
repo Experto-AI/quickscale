@@ -59,3 +59,11 @@ LICENSE
 *.tmp
 node_modules/
 npm-debug.log*
+
+# QuickScale state and local backups
+# Keep local database dumps out of the build context: the Dockerfile's
+# `COPY . .` would otherwise bake them into the runtime image and its layers.
+# The `.quickscale/wheels/` cache stays visible because a project pinned to a
+# locally built quickscale-core wheel installs from it during the image build.
+.quickscale/backups/
+.quickscale/*.lock

@@ -998,6 +998,11 @@ def _install_project_dependencies(
         f"stdout: {lock_result.stdout}\n"
         f"stderr: {lock_result.stderr}"
     )
+    # The production settings select RedisCache when REDIS_URL is set; the
+    # generated lock must carry the client that backend imports.
+    assert 'name = "redis"' in (project_path / "poetry.lock").read_text(
+        encoding="utf-8"
+    ), "the generated lock must include the Redis cache client"
 
     install_result = subprocess.run(
         ["poetry", "install", "--no-interaction"],
@@ -1570,6 +1575,12 @@ def test_install_project_dependencies_install_failure_reports_labelled_streams(
     def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         calls.append(command)
         if command == ["poetry", "lock"]:
+            # A successful lock produces the file the helper inspects; the
+            # generated pyproject declares the Redis cache client.
+            (tmp_path / "poetry.lock").write_text(
+                '[[package]]\nname = "redis"\nversion = "8.1.0"\n',
+                encoding="utf-8",
+            )
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         assert command == ["poetry", "install", "--no-interaction"]
         return subprocess.CompletedProcess(

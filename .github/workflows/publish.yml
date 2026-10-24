@@ -358,6 +358,10 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          # Resume a partial upload instead of refusing an already-present
+          # file; the tag/VERSION checks above still reject a version mismatch.
+          skip-existing: true
 
   verify-published:
     name: Verify Published Release

@@ -161,9 +161,10 @@ jobs:
 
     - name: Verify generated CI workflow contract
       run: |
+        # Action refs are asserted as parsed `uses:` pin shapes in
+        # quickscale_core/tests/test_generator/test_generated_project_release_artifacts.py;
+        # grepping a mutable tag here only goes stale when the pin is refreshed.
         grep -qF "runs-on: ubuntu-24.04" /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -qF "actions/checkout@v6" /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -qF "actions/setup-python@v6" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -qF "apt.postgresql.org" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -qF "apt.postgresql.org.asc" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -qF "postgresql-client-18" /tmp/test_docker_project/.github/workflows/ci.yml
