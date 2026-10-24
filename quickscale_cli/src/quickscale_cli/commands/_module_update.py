@@ -23,22 +23,23 @@ from quickscale_cli.commands._module_update_identity import (
     _UpdateMigrationIdentityError,
 )
 
+import quickscale_core as _quickscale_core
 import quickscale_core.project_state_manager as _project_state_manager
-import quickscale_core.apply as _apply
-import quickscale_cli.commands.module_output as _module_output
 import quickscale_cli.commands._module_update_io as _module_update_io
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_core.manifest.loader_errors as _loader_errors
 import quickscale_core.utils.git_errors as _git_errors
-import quickscale_core.schema.config_schema as _config_schema
 import quickscale_cli.commands._module_shared as _module_shared
 import quickscale_cli.commands.contract_vintage as _contract_vintage
 import quickscale_core.config as _config
 import quickscale_core.advisory_lock as _advisory_lock
-import quickscale_core.utils.git_repo as _git_repo
 import quickscale_core.utils.git_subtree as _git_subtree
 import quickscale_cli.commands._module_embed as _module_embed
 import quickscale_cli.commands._module_update_guard as _module_update_guard
+import quickscale_cli.commands._module_update_seal as _module_update_seal
+
+
+_MODULE_UPDATE_REMOTE = "https://github.com/Experto-AI/quickscale.git"
 
 
 def _ensure_authoritative_state_for_update(
@@ -79,126 +80,6 @@ def _ensure_authoritative_state_for_update(
 
     # No state.yml at all — try quickscale.yml for project metadata.
     return manager.materialize_authoritative_state()
-
-
-def _load_update_recovery_ledger(project_path: Path) -> Any | None:
-    """Load the optional apply recovery ledger used by update guardrails.
-
-    Returns the :class:`~quickscale_core.apply.RecoveryLedger` when the file
-    exists and is valid, or ``None`` when it does not.  The ledger carries the
-    resume pointer only; applied state stays in ``.quickscale/state.yml``.
-    Malformed content raises :class:`LedgerError`, surfaced as a
-    :class:`RuntimeError`.
-    """
-    mgr = _apply.LedgerManager(project_path)
-    if not mgr.ledger_file.exists():
-        return None
-
-    try:
-        ledger = mgr.load()
-    except _apply.LedgerError as error:
-        raise RuntimeError(
-            "Failed to load .quickscale/apply-recovery.yml: "
-            f"{error}. Fix or clear the recovery snapshot before updating modules."
-        ) from error
-
-    return ledger
-
-
-def _check_local_pre_pull_guard(
-    project_path: Path,
-    module_name: str,
-    applied_state: Any,
-) -> bool:
-    """Block known-local unsafe updates before any subtree pull starts."""
-    if applied_state is not None:
-        module_state = applied_state.modules.get(module_name)
-        if module_state is None:
-            _module_output._report_local_pre_pull_guard_block(
-                module_name,
-                [
-                    "",
-                    ".quickscale/state.yml does not list this module as installed.",
-                    "Reconcile local tracking with 'quickscale apply' before updating.",
-                    "This guard uses only verified local state and does not predict remote compatibility.",
-                ],
-            )
-            return False
-
-        recovery_ledger = _load_update_recovery_ledger(project_path)
-        if recovery_ledger is not None:
-            _module_output._report_local_pre_pull_guard_block(
-                module_name,
-                [
-                    "",
-                    "Pending .quickscale/apply-recovery.yml records an unfinished apply.",
-                    "Finish the interrupted apply or clear the local recovery ledger before running 'quickscale update'.",
-                    "The recovery ledger carries no applied state; .quickscale/state.yml remains authoritative.",
-                ],
-            )
-            return False
-    else:
-        module_state = None
-
-    quickscale_config_path = project_path / "quickscale.yml"
-    if not quickscale_config_path.exists() or module_state is None:
-        return True
-
-    try:
-        desired_config = _config_schema.validate_config(
-            quickscale_config_path.read_text()
-        )
-    except Exception as error:
-        click.secho(
-            "❌ Cannot update: quickscale.yml pre-pull check failed because the local desired state could not be validated.",
-            fg="red",
-            bold=True,
-            err=True,
-        )
-        click.echo(f"Reason: {error}", err=True)
-        click.echo(
-            "💡 Fix quickscale.yml or run 'quickscale apply' to reconcile before updating.",
-            err=True,
-        )
-        return False
-
-    desired_module = desired_config.modules.get(module_name)
-    if desired_module is None:
-        _module_output._report_local_pre_pull_guard_block(
-            module_name,
-            [
-                "",
-                "quickscale.yml no longer includes this installed module.",
-                f"Run 'quickscale remove {module_name}' or reconcile desired state with 'quickscale apply' before updating.",
-                "This guard uses only verified local state and does not predict remote compatibility.",
-            ],
-        )
-        return False
-
-    desired_options = desired_module.options or {}
-    applied_options = module_state.options or {}
-    if desired_options == applied_options:
-        return True
-
-    drift_lines = [
-        "",
-        "Local desired state differs from applied module options.",
-        "Run 'quickscale apply' before updating so local module configuration is reconciled first.",
-        "Detected local-only option drift:",
-    ]
-    for option_name in sorted(set(desired_options) | set(applied_options)):
-        old_value = applied_options.get(option_name)
-        new_value = desired_options.get(option_name)
-        if old_value == new_value:
-            continue
-        drift_lines.append(
-            f"  • {module_name}.{option_name}: applied={old_value!r}, desired={new_value!r}"
-        )
-    drift_lines.append(
-        "This guard uses only verified local state and does not predict remote compatibility."
-    )
-    _module_output._report_local_pre_pull_guard_block(module_name, drift_lines)
-    return False
 
 
 def _rollback_failed_module_update(
@@ -254,10 +135,23 @@ def _report_module_update_error(name: str, error: Exception) -> None:
             "content through a fresh database.",
             err=True,
         )
+    elif isinstance(error, _module_update_seal._UpdateSealError):
+        click.echo(
+            "\n💡 An update pulls only content that matches the module's "
+            "immutable release tag for this QuickScale version. If you "
+            "maintain the release, publish the split branch and seal the tag, "
+            "then retry; otherwise update QuickScale to a released version.",
+            err=True,
+        )
 
 
 def _update_single_module(
-    name: str, info: Any, default_remote: str, no_preview: bool
+    name: str,
+    info: Any,
+    default_remote: str,
+    no_preview: bool,
+    *,
+    seal_plan: _module_update_seal._UpdateSealPlan | None = None,
 ) -> bool:
     """Update a single module via git subtree pull."""
     click.echo(f"\n📥 Updating {name} module...")
@@ -285,7 +179,9 @@ def _update_single_module(
             )
             return False
 
-        if not _check_local_pre_pull_guard(project_path, name, applied_state):
+        if not _module_update_guard._check_local_pre_pull_guard(
+            project_path, name, applied_state
+        ):
             return False
 
         # SA204(e)/(g): capture the applied migration content identity before
@@ -305,22 +201,22 @@ def _update_single_module(
             else None
         )
 
-        # Phase 2.3b: resolve the source ref once and reuse it for both
-        # the subtree pull and state persistence (CR-PLAN-004).
+        # SA319 (a): resolve the sealed tag and prove the canonical split
+        # branch tip still carries its tree before the first pull.  The
+        # command preflights the whole set and passes the plan in; a direct
+        # call resolves its own module first.  The resolved branch SHA is
+        # reused for both the subtree pull and state persistence
+        # (CR-PLAN-004), so the pull cannot drift after verification.
         try:
-            source_ref = _git_repo.resolve_remote_ref(default_remote, info.branch)
-        except _git_errors.GitError as ref_error:
-            click.secho(
-                f"❌ Failed to resolve source ref for {name}: {ref_error}",
-                fg="red",
-                err=True,
-                bold=True,
+            seal = seal_plan or _module_update_seal._resolve_update_seal(
+                default_remote,
+                name,
+                _quickscale_core.__version__,
             )
-            click.echo(
-                "💡 Check network connectivity and remote branch availability.",
-                err=True,
-            )
+        except _module_update_seal._UpdateSealError as seal_error:
+            _report_module_update_error(name, seal_error)
             return False
+        source_ref = seal.branch_sha
 
         with TemporaryDirectory(prefix="quickscale-module-update-") as temp_dir:
             try:
@@ -422,6 +318,7 @@ def _update_single_module(
                     name,
                     installed_version,
                     commit_sha=source_ref,
+                    branch=seal.branch,
                 )
 
                 _module_update_io._commit_module_update(name, info.prefix)
@@ -524,17 +421,33 @@ def _resolve_pre_update_head(project_path: Path) -> str:
         return ""
 
 
-def _update_all_modules(state: Any, *, no_preview: bool) -> tuple[list[str], list[str]]:
+def _update_all_modules(
+    state: Any,
+    *,
+    no_preview: bool,
+    seal_plans: dict[str, _module_update_seal._UpdateSealPlan] | None = None,
+) -> tuple[list[str], list[str]]:
     """Update each installed module in order; stop at the first failure."""
     failed_modules: list[str] = []
     updated_modules: list[str] = []
     for name, module_state in state.modules.items():
-        if not _update_single_module(
-            name,
-            module_state,
-            "https://github.com/Experto-AI/quickscale.git",
-            no_preview,
-        ):
+        plan = (seal_plans or {}).get(name)
+        if plan is None:
+            updated = _update_single_module(
+                name,
+                module_state,
+                _MODULE_UPDATE_REMOTE,
+                no_preview,
+            )
+        else:
+            updated = _update_single_module(
+                name,
+                module_state,
+                _MODULE_UPDATE_REMOTE,
+                no_preview,
+                seal_plan=plan,
+            )
+        if not updated:
             failed_modules.append(name)
             break
         updated_modules.append(name)
@@ -607,8 +520,11 @@ def _run_update_under_lock(
     no_preview: bool,
     confirm_contract_adoption: bool,
     allow_local_changes: bool,
-) -> tuple[list[str], list[str], bool]:
-    """Run the locked update sequence and return (failed, updated, wiring_failed)."""
+) -> tuple[list[str], list[str], bool, bool]:
+    """Run the locked update sequence.
+
+    Returns ``(failed, updated, lock_failed, wiring_failed)``.
+    """
     lock = _acquire_update_lock(project_path)
     try:
         # The hand-edit check runs under the lock, after the last read of
@@ -619,10 +535,30 @@ def _run_update_under_lock(
             project_path,
             allow_local_changes=allow_local_changes,
         )
+
+        # SA319 (a): verify every installed module's sealed tag and split
+        # branch tree before the first pull.  A failure aborts the set
+        # without mutating any module.
+        seal_plans, seal_failure = _module_update_seal._preflight_update_seals(
+            state,
+            _MODULE_UPDATE_REMOTE,
+            _quickscale_core.__version__,
+        )
+        if seal_failure is not None:
+            failed_name, seal_error = seal_failure
+            _report_module_update_error(failed_name, seal_error)
+            return [failed_name], [], False, False
+
         pre_update_head = _resolve_pre_update_head(project_path)
         failed_modules, updated_modules = _update_all_modules(
-            state, no_preview=no_preview
+            state, no_preview=no_preview, seal_plans=seal_plans
         )
+
+        # Refresh the lockfile once the whole set's dependency entries are
+        # final.  A failure is a post-pull failure and rolls the set back.
+        lock_failed = False
+        if not failed_modules:
+            lock_failed = not _module_update_io._refresh_update_lockfile(project_path)
 
         # Regenerate the managed wiring once every module pull succeeded.
         # Regeneration validates every embedded manifest against the running
@@ -630,17 +566,20 @@ def _run_update_under_lock(
         # set.  A failed regeneration restores the pre-update wiring and its
         # hash records, then aborts the command.
         wiring_failed = False
-        if not failed_modules:
+        if not failed_modules and not lock_failed:
             wiring_failed = not _regenerate_update_wiring(project_path)
 
         _record_confirmed_update_adoption(
             project_path,
             enabled=(
-                confirm_contract_adoption and not failed_modules and not wiring_failed
+                confirm_contract_adoption
+                and not failed_modules
+                and not lock_failed
+                and not wiring_failed
             ),
         )
 
-        if failed_modules or wiring_failed:
+        if failed_modules or lock_failed or wiring_failed:
             # A post-pull failure must not leave the modules committed before
             # it paired with the pre-update managed wiring.  The failed
             # module's own pull is restored too: its subtree pull committed
@@ -656,11 +595,15 @@ def _run_update_under_lock(
             )
     finally:
         lock.release()
-    return failed_modules, updated_modules, wiring_failed
+    return failed_modules, updated_modules, lock_failed, wiring_failed
 
 
 def _report_update_outcome(
-    failed_modules: list[str], updated_modules: list[str], *, wiring_failed: bool
+    failed_modules: list[str],
+    updated_modules: list[str],
+    *,
+    lock_failed: bool,
+    wiring_failed: bool,
 ) -> None:
     """Print the failure report or the success banner for a finished update."""
     if failed_modules:
@@ -678,6 +621,21 @@ def _report_update_outcome(
             click.echo(
                 "The modules updated before the failure were rolled back; "
                 "fix the failure and re-run 'quickscale update'.",
+                err=True,
+            )
+        raise click.Abort()
+
+    if lock_failed:
+        click.secho(
+            "\n❌ Module update finished without a refreshed poetry.lock",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        if updated_modules:
+            click.echo(
+                "The modules updated before the failure were rolled back; "
+                "fix the dependency error and re-run 'quickscale update'.",
                 err=True,
             )
         raise click.Abort()
@@ -731,12 +689,14 @@ def update(
 
     \b
     This command:
-      - Reads installed modules from .quickscale/config.yml
+      - Reads installed modules from .quickscale/state.yml
       - Refuses modules whose files were edited since their recorded commit,
         or whose recorded tree cannot be verified
+      - Verifies every module's sealed release tag and split-branch tree
+        before the first pull
       - Updates ONLY modules you've explicitly installed
       - Shows a diff preview before updating (unless --no-preview)
-      - Updates the installed version in config after successful update
+      - Refreshes poetry.lock after the module set's dependencies change
       - Commits each successful module update before continuing
     """
     try:
@@ -769,6 +729,7 @@ def update(
         (
             failed_modules,
             updated_modules,
+            lock_failed,
             wiring_failed,
         ) = _run_update_under_lock(
             state,
@@ -779,7 +740,10 @@ def update(
         )
 
         _report_update_outcome(
-            failed_modules, updated_modules, wiring_failed=wiring_failed
+            failed_modules,
+            updated_modules,
+            lock_failed=lock_failed,
+            wiring_failed=wiring_failed,
         )
 
     except _git_errors.GitError as e:

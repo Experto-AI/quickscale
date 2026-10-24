@@ -71,7 +71,9 @@ do not change the default identity-derived resolution.
 
 **Rule 6 — Tags follow content identity.** When a re-split produces an unchanged tree, the
 same commit carries both release-version split tags. Tag reuse follows content identity,
-not an assumption that every release changes every module.
+not an assumption that every release changes every module. The release seal check compares each
+published split branch tip's tree with its seal tag's tree; a branch that moved after sealing, or a
+seal with no branch, fails the gate.
 
 **Rule 7 — Seal enforcement is client-side and fail-closed.** Sealing uses
 check-then-act: the client samples each remote branch tip, immediately rereads

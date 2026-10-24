@@ -258,16 +258,19 @@ def _sync_state_module_version(
     version: str,
     *,
     commit_sha: str | None = None,
+    branch: str | None = None,
 ) -> None:
     """Mirror embedded module versions and provenance into applied state.
 
     Updates ``state.modules[module].version`` and, when *commit_sha* is
-    provided, ``state.modules[module].commit_sha``.  The ``embedded_at``
-    timestamp is always refreshed to reflect the current update so the
-    full provenance triple (version, commit_sha, embedded_at) stays
-    consistent.  The state file must already contain the module entry;
-    modules absent from state are silently skipped (callers should ensure
-    state is materialized first).
+    provided, ``state.modules[module].commit_sha``.  When *branch* is
+    provided, it records the tracking branch the content was pulled from, so
+    state never keeps a custom or stale ref after the update moves the module
+    onto the canonical split branch.  The ``embedded_at`` timestamp is always
+    refreshed to reflect the current update so the full provenance
+    (version, commit_sha, branch, embedded_at) stays consistent.  The state
+    file must already contain the module entry; modules absent from state are
+    silently skipped (callers should ensure state is materialized first).
     """
     state_manager = _state_schema.StateManager(project_path)
     state = state_manager.load()
@@ -277,6 +280,8 @@ def _sync_state_module_version(
     state.modules[module].version = version
     if commit_sha is not None:
         state.modules[module].commit_sha = commit_sha
+    if branch is not None:
+        state.modules[module].branch = branch
     state.modules[module].embedded_at = _datetime.datetime.now().isoformat()
     state_manager.save(state)
 
@@ -315,8 +320,9 @@ def _warn_version_drift_for_update(
     for warning in drift:
         click.echo(f"  • {warning.message}")
     click.echo(
-        "\n💡 Update will reconcile .quickscale/config.yml to the freshly "
-        "installed state-managed version. The drift is informational and not fatal.",
+        "\n💡 .quickscale/state.yml is authoritative; .quickscale/config.yml is "
+        "a compatibility input and this update does not rewrite it. The drift is "
+        "informational and not fatal.",
     )
     return drift
 
