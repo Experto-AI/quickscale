@@ -29,7 +29,7 @@ claims a "GDPR-capable" organization purge. One maintainer, very high cadence (3
 commits in twelve months), twelve modules at 0.89.0. Growth direction (roadmap): SA191d production
 cutover, SA153 first project-owned property portal, SA277 upgrade path. Stated-vs-actual gaps are
 the subject of several findings: "one source" claims coexist with hand-synced lists; the generated
-test harness cannot exercise the RLS guarantee it ships.
+test harness now runs under the RLS runtime role.
 
 **Declared architecture (from `docs/technical/decisions.md`, `module_architecture.md`,
 `plan-apply-system.md`, `module_conventions.md`, and the test docstrings):**
@@ -58,7 +58,7 @@ test harness cannot exercise the RLS guarantee it ships.
 | Q1 | A module changes an API subpath or payload while a project is live | module → user-owned theme page | existing project picks it up by apply/update without hand-editing a page | files hand-adopted per project; target unknown (roadmap says steps should trend to zero) | template freedom vs upgradability |
 | Q2 | `quickscale update` runs while a module split branch has moved and the process dies between module pulls | split branch → project git/state | project remains buildable and state matches content | recovery time and drift after crash; no declared target | update freshness vs reproducibility |
 | Q3 | 0.89 → next release deploys to a running instance | generated production topology | schema and media survive a rolling deploy and can roll back | deploy success and data retention; no SLO/SLA declared | availability vs schema change |
-| Q4 | A project-owned tenant model or endpoint ships | generated CI → tenant data | the generated suite catches a missing org filter under the runtime role | isolation regressions caught before deploy; target unknown | starter simplicity vs isolation proof |
+| Q4 | A project-owned tenant model or endpoint ships | generated CI → tenant data | the generated suite catches a missing org filter under the runtime role | isolation regressions caught by the generated two-organization lane | starter simplicity vs isolation proof |
 | Q5 | A destructive restore is exercised during an incident | backup artifact → PostgreSQL, media, env | one coherent recovery point and a safe retry | RPO/RTO unknown; restore evidence is source-level only | restore completeness vs operational simplicity |
 | Q6 | A hard crash occurs after apply checkpoint 4 | apply state / recovery ledger | rerun converges; managed-file drift stays detectable | state fields preserved; no declared target | recovery speed vs state simplicity |
 
@@ -66,12 +66,12 @@ test harness cannot exercise the RLS guarantee it ships.
 
 | Component / store | Edge kind | Owner of the invariant | Version / failure assumption |
 |---|---|---|---|
-| `quickscale_cli apply` → generator emission mapping (143 emitted paths) | call / build | `get_generator_emission_mapping` | template set is source of truth; closed-world test |
+| `quickscale_cli apply` → generator emission mapping (144 emitted paths) | call / build | `get_generator_emission_mapping` | template set is source of truth; closed-world test |
 | apply → managed files (`settings/modules.py`, `urls_modules.py`, seam `.d.ts`/`.keys.ts`, CI env, operations page, `quickscale_managed/*`) | shared state / hashes | `project_state_hashes.py` + module manifests | every managed output hash-tracked (SA316) |
 | apply → `.quickscale/state.yml` (applied state) and `.quickscale/apply-recovery.yml` (resume pointer) | shared state | `state.yml` | one applied-state owner; the ledger records progress only |
 | `quickscale update` → split branch head → `git subtree pull` → `pyproject.toml` | call / VCS | CLI + remote branch | branch is mutable; lockfile not refreshed |
 | generated boot → `start.sh` → superuser migrate → runtime role → gunicorn | call / privilege | `start.sh` + runtime settings | migrations at every boot; no pre-deploy/rollback |
-| generated request → `ClientIdentityMiddleware` → RLS GUC → module views | call / trust boundary | orgs + runtime settings | RLS only under runtime role; tests bypass |
+| generated request → `ClientIdentityMiddleware` → RLS GUC → module views | call / trust boundary | orgs + runtime settings | RLS only under runtime role; generated tests run under it |
 | `pg_dump` → local/remote artifact + sidecars (media inventory) → restore | shared state / external effect | DR engine | DB-only freeze; media/env live at restore |
 | release → split tag/branch + PyPI wheel | build / supply chain | publish/seal scripts | tag is immutable; update reads branch |
 
@@ -95,9 +95,9 @@ record.
 regenerates managed wiring, and adopts contract steps. Code at N must read state written by N−1:
 the desired-state schema stays `"1"`, applied state carries the release version plus per-module
 versions, and contract ids union forward. In-flight work: generated project requests during a rolling deploy see `start.sh` migrate
-first (F3); in-flight backups are local files with a 300 s stale heuristic (F5); queued work is
+first (F3); in-flight backups are local files with a 300 s stale heuristic (F4); queued work is
 external cron, not an in-process queue. Restore is the other lifecycle branch: it reads a database
-dump, live media, and live env at different moments (F5). No claim of safe in-flight upgrade or
+dump, live media, and live env at different moments (F4). No claim of safe in-flight upgrade or
 restore rests on a tested two-version exercise; this is residual risk.
 
 **Measurements** (filter: `--since="12 months ago"`, no merges, commits touching ≤30 files,
@@ -107,11 +107,11 @@ generated caches; synthetic subtree-split replays are ~40% of history and inflat
 classification: closeout (SA191a–e, SA299e/f, SA300b/c, SA301–SA309, SA277 a3, SA191d re-proof),
 housekeeping (roadmap/docs), and **no unlabeled-behavioral commit** — every non-doc change carries
 an `SAnnn` subject. Key censuses: twelve modules; 36 split tags (3 releases × 12); `project_contract.yml`
-**5 steps at introduction (2026-09-24) → 46 (2026-10-16) → 53 (2026-10-20) → 58 today** with 108
+**5 steps at introduction (2026-09-24) → 46 (2026-10-16) → 53 (2026-10-20) → 61 today** with 116
 adoption sub-steps; managed outputs 9, all hash-tracked (SA316); tenant
 models 22 enrolled across 6 modules with 20 `TenantModelAdmin` classes; module-contract references
 in 5 theme source files plus 2 social templates, including 17 resource-subpath literals in the three
-main contract-bearing files; 62 adoption ids per project (58 project + 4 module vintages). Ownership
+main contract-bearing files; 65 adoption ids per project (61 project + 4 module vintages). Ownership
 is heavily concentrated: a single maintainer authored essentially all recent changes; the
 load-bearing seams have no second reader.
 
@@ -132,12 +132,12 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Module wiring only in managed files | `test_emission_closed_world.py` over `get_generator_emission_mapping` | gated, closed-world | stable |
 | Managed files not hand-edited | `project_state_hashes.py` resolves the wiring, project, and every module-managed output; `status` drift | structural | **strengthened** (SA316: all module-managed outputs hash-tracked) |
 | Contract change carries a new step id | `scripts/check_project_contract_vintage.py` over emitted templates, the generator mapping, and public runtime modules | gated | **strengthened** (SA316: runtime surface watched) |
-| Project adopted declared steps | operator confirmation; `contract_vintage.py` bulk union | convention | steps 53 → 58 |
+| Project adopted declared steps | operator confirmation; `contract_vintage.py` bulk union | convention | steps 53 → 61 |
 | Module version lockstep | manifest assertion + `version_tool.sh` | gated | 40 of 43 version-bearing files checked |
 | Embedded module content identity | tag at embed; provenance drift guard at update | gated | stable; update ref is a branch tip |
 | Module migrations frozen | migration-content identity in update/restore | gated | stable |
 | Tenant RLS on shipped tables | FORCE RLS migrations, boot guard, restricted-role integration gate | structural in modules | 22/22 enrolled |
-| Generated-project tenant isolation | catalog conformance only; generated tests run as superuser with bypass | convention | gap |
+| Generated-project tenant isolation | two-organization isolation lane under the restricted runtime role | gated | **closed** (SA318) |
 | Apply state single-writer | `StateManager` + `LedgerManager`, advisory lock | structural but dual-owner | unchanged |
 | Apply resume preserves state | `ApplyExecutor` checkpoint + fault harness | gated, content not asserted | gap |
 | Production migration safety | `start.sh` boot migration | convention | unchanged |
@@ -153,8 +153,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. |
 | 2 | `module-upgrade-no-reconciler` | Module update is a mutable multi-commit operation | now | High | M | two-way | Update follows a branch tip and mutates modules without a journal or lockfile refresh. |
 | 3 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
-| 4 | `generated-isolation-unverified` | Generated projects never test tenant isolation under the runtime role | now | High | S | two-way | The generated suite bypasses the RLS guarantee it ships. |
-| 5 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
+| 4 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
 
 ## Machine-readable index
 
@@ -166,7 +165,7 @@ items:
   - {id: generated-file-ownership-unmodeled, status: open, rank: 1,
      title: "Module contracts live in user-owned generated files",
      lenses: [III, V, VII, XIX], horizon: now, confidence: High, size: M,
-     reversibility: two-way door, depends_on: [], amplifies: [generated-isolation-unverified],
+     reversibility: two-way door, depends_on: [], amplifies: [],
      anchors: [quickscale_core/src/quickscale_core/project_state_hashes.py,
                quickscale_core/src/quickscale_core/data/project_contract.yml,
                quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/pages/CrmPage.tsx],
@@ -188,16 +187,7 @@ items:
                quickscale_core/src/quickscale_core/generator/templates/start.sh.j2,
                quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2],
      first_seen: 2026-10-23, last_verified: 2026-10-23}
-  - {id: generated-isolation-unverified, status: open, rank: 4,
-     title: "Generated projects never test tenant isolation under the runtime role",
-     lenses: [II, VIII, XV, XVIII], horizon: now, confidence: High, size: S,
-     reversibility: two-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/Makefile.j2,
-               quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2,
-               quickscale_core/src/quickscale_core/runtime/settings.py,
-               quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py],
-     first_seen: 2026-10-23, last_verified: 2026-10-23}
-  - {id: backup-restore-incoherent, status: open, rank: 5,
+  - {id: backup-restore-incoherent, status: open, rank: 4,
      title: "Backups cover the database, not a coherent recovery point",
      lenses: [I, IV, XVI, XVIII], horizon: 6-18 months, confidence: High, size: L,
      reversibility: one-way door, depends_on: [], amplifies: [],
@@ -230,7 +220,7 @@ items:
 - **ID:** `generated-file-ownership-unmodeled`
 - **Rank rationale:** High × High, steep. It crosses the generator ↔ project ownership boundary;
   every module API change after 0.89 either mints an adoption step or silently breaks a page; SA153
-  is the next work item and adds exactly this surface; declared steps went 53 → 58 in three days.
+  is the next work item and adds exactly this surface; declared steps went 53 → 61 in three days.
 - **Horizon & trigger:** `now` — the next module endpoint change, or SA153 (j) coupling a
   project-owned page to a module resource.
 - **Confidence:** High — mechanism read, theme census counted, gates read, no enforcing layer found.
@@ -251,8 +241,8 @@ items:
     17 resource-subpath literals and four files declare 29 payload types.
   - `test_emission_closed_world.py:489` / `:540-550` permits "a single module reference"; it
     forbids enumerations, not resource subpaths or payload shapes.
-  - Contract steps: `project_contract.yml` has **58 step ids** and 108 adoption sub-steps; growth
-    5 → 46 → 53 → 58 since 2026-09-24. The five newest steps are all manual user-owned-file changes.
+  - Contract steps: `project_contract.yml` has **61 step ids** and 116 adoption sub-steps; growth
+    5 → 46 → 53 → 61 since 2026-09-24. The four newest steps are all manual user-owned-file changes.
   - Adoption: `contract_vintage.py:239-295` records every declared id by union, with no check that
     the user-owned file changed; `deployment_commands.py:118-127` records adoption on a clean-tree
     check alone, without regenerating or pulling anything.
@@ -272,7 +262,7 @@ items:
   gate in `apply`, `update`, and `deploy railway`, SA299's beta migration, and SA277's two-stage
   prompt. A second live project doubles the operator cost and makes "regenerate and diff" no longer
   sufficient.
-- **Detection signal:** step count per release (58 today; five added since the prior audit); any
+- **Detection signal:** step count per release (61 today; eight added since the prior audit); any
   `apply`/`update`/`deploy` refusal naming outstanding steps; user-owned theme diffs after a module
   update; a module endpoint rename producing a page 404.
 - **Steelman:** user-owned pages are the theme's customization point; routing every module call
@@ -456,70 +446,7 @@ items:
   gunicorn with `DEBUG=False`, one migrate job, and uploaded files survive a redeploy. **First step:**
   split the Compose file into a dev and a production service definition.
 
-### Finding 4: Generated projects never test tenant isolation under the runtime role
-
-- **ID:** `generated-isolation-unverified`
-- **Rank rationale:** High × Medium, steep. The generated harness bypasses the RLS guarantee it
-  ships; SA153 adds the first project-owned tenant models and endpoints, which no module suite
-  covers. A missed org filter then passes the project's own tests.
-- **Horizon & trigger:** `now` — SA153's project-owned extension, or the first generated project that
-  adds its own tenant model.
-- **Confidence:** High — Makefile, CI, pytest plugin, runtime settings, and the orgs guard were read.
-- **Context dependence:** `wrong-for-now` (dimensions: project-owned tenant models, compliance). Lives
-  in reality (B).
-- **Problem:** The generated test and CI harness runs tenant paths with
-  `QUICKSCALE_ALLOW_BYPASSRLS=1` and the superuser URL, so no generated project exercises FORCE RLS
-  or its own tenant scoping.
-- **Evidence:**
-  - `Makefile.j2:49-50` prefixes `pytest` with `QUICKSCALE_ALLOW_BYPASSRLS=1` whenever `orgs` is
-    selected (or no module list is supplied). `ci.yml.j2:102-128` runs tests, migrations, and the
-    tenant-isolation conformance check with `DATABASE_URL=postgres://postgres@localhost/postgres`
-    and the bypass flag.
-  - `pytest_plugin.py:43-50` *runs* every `bypass_rls`-marked test when the flag is `"1"`; the
-    generated default is exactly `"1"`. The generated suite has no test that connects as the
-    restricted runtime role.
-  - `runtime/settings.py:422-431` accepts the same flag in serving when `RUNTIME_DATABASE_URL` is
-    blank; `orgs/checks.py:193-196` returns `[]` for the boot guard under the same flag. A leaked
-    test setting plus a blank runtime URL silently bridges serving to the superuser URL.
-  - The repository's own gate is the counter-model: decisions `:433-443` require the integration
-    gate to run against `NOBYPASSRLS NOSUPERUSER`; the generated harness is the only one that does
-    not.
-- **Counter-evidence:** the shipped modules have strong isolation coverage in the repo (22/22 tenant
-  tables, composite FKs, RLS boundary suites, conformance command); the generated boot guard fails
-  closed when the runtime URL is absent and the flag is unset; the flag is documented as
-  non-serving. Searched for a generated `RUNTIME_DATABASE_URL` CI job, a generated tenant isolation
-  test, and a production check rejecting the flag — found none. The CI conformance command is a
-  catalog check under the superuser, not a behavioral isolation test.
-- **Why it compounds:** growth variable = **project-owned tenant models × endpoints**. Each new
-  project-owned table or query adds isolation surface the generated suite cannot see. The product's
-  extension contract encourages such models (SA153). A regression passes CI and is caught, if at
-  all, only by production RLS — which the same flag can disable.
-- **Detection signal:** a project-owned view missing an org filter passes `make test`; a tenant
-  cross-read appears only in production; an operator reports that the generated security test
-  "passes" while RLS is disabled.
-- **Steelman:** generated tests are a starter, not a compliance suite; the shipped modules carry
-  their own isolation proofs; project owners are expected to write app tests. That holds while
-  projects use only shipped modules and never enable the bypass in serving. SA153 breaks the first
-  condition; a leaked env breaks the second.
-- **Correct shape:** the generated CI/test path connects as the restricted runtime role for at least
-  one tenant-isolation suite; production refuses the bypass; project-owned tenant models are enrolled
-  in the same conformance check.
-- **Do-nothing cost:** every project-owned tenant feature ships without a structural isolation
-  check; one missed filter becomes a cross-tenant leak that the suite calls green.
-- **Options:**
-  1. **Generated isolation target**: a second CI job with `RUNTIME_DATABASE_URL` as a NOBYPASSRLS
-     role, plus a tenant-isolation test template that creates two orgs and asserts a 404/403. S/M,
-     two-way; removes the gap.
-  2. **Generate the conformance check only**; keep the unit suite superuser. S, two-way; verifies the
-     catalog but not behavior.
-  3. **Accept and document**; revocation trigger: the first project-owned tenant model.
-- **Recommendation:** option 1. **Size:** S · **Reversibility:** two-way door · **Guard:** the
-  generated CI job fails if the runtime role is absent or the test is skipped; a production check
-  rejects `QUICKSCALE_ALLOW_BYPASSRLS=1` while serving. **Acceptance check:** deleting an org filter
-  from a sample project-owned view fails the generated isolation suite. **First step:** add the
-  restricted-role CI job and the two-org test template.
-
-### Finding 5: Backups cover the database, not a coherent recovery point
+### Finding 4: Backups cover the database, not a coherent recovery point
 
 - **ID:** `backup-restore-incoherent`
 - **Rank rationale:** High × Medium, steep. The backup is the disaster path; media is read live at
@@ -618,18 +545,13 @@ rendering works.
 
 ## Fix order and interactions
 
-- **F3 and F5 share media:** F3's production storage backend reduces F5's media gap but does not
-  close it; F5 must still decide whether media is captured or explicitly external.
-- **F1 amplifies F4:** the first project-owned tenant models arrive with SA153, the same work that
-  needs managed hooks. F4 should land with or before SA153 (j).
-- **F4 is independent** of the others and can run in parallel; its CI job is also the natural place
-  to exercise F3's production profile.
-- **Ranking already reflects amplification:** F1/F2 are High × High; F3/F3/F4 are High × Medium;
-  F5 is High × Medium with a later horizon.
+- **F3 and F4 share media:** F3's production storage backend reduces F4's media gap but does not
+  close it; F4 must still decide whether media is captured or explicitly external.
+- **Ranking already reflects amplification:** F1/F2 are High × High; F3/F4 are High × Medium.
 
 ## Sound load-bearing decisions
 
-1. **Closed-world emission mapping.** `get_generator_emission_mapping` derives 143 emitted paths from
+1. **Closed-world emission mapping.** `get_generator_emission_mapping` derives 144 emitted paths from
    templates, and `test_emission_closed_world.py` derives its scan scope from that mapping, not a
    hand list. Keep this derivation; SA316 extended it to the public runtime module tree rather than
   replacing it.
@@ -639,8 +561,9 @@ rendering works.
    This is the right identity model — update should join it (F2), not abandon it.
 3. **RLS is structural in the shipped modules.** 22/22 tenant models carry FORCE RLS, the
    `TenantManager` pair, and composite tenant-equality FKs; the runtime-role boot guard fails
-   closed; the repository integration gate runs under `NOBYPASSRLS NOSUPERUSER`. Do not weaken this
-   to fix F4 — extend the generated harness to use it.
+   closed; the repository integration gate runs under `NOBYPASSRLS NOSUPERUSER`. Do not weaken this.
+   The generated two-organization lane runs under the same role and the serving refusal keeps it
+   there.
 4. **State and ledger writes are atomic and fail hard.** `StateManager.save` and `LedgerManager.save`
    use tmp + replace; malformed state raises rather than silently degrading; lock release checks
    inode, PID, and an acquisition token. Keep these properties through future state changes.
@@ -662,7 +585,7 @@ None. No team decision record accepts any open finding with a containment and re
 | `manifest-dsl-vocabulary-growth` | DSL gains a keyword per module need | a keyword added for one module | not fired: 14 top-level keys; `throttle_scopes` is generic; no manifest change in the delta. |
 | `session-advisory-lock-pooling` | Billing mutex is a session advisory lock | pooled `DATABASE_URL` | not fired: still `pg_advisory_lock` (`_locks.py:41,70`); no pooler in generated settings; `CONN_MAX_AGE=600` is per-process. |
 | `modules-english-only` | Module pages are English-only | SA153/154 needs a Spanish module page | not fired: no `gettext`/`trans` in module source; SA154 is inventory-only. |
-| `two-filesystem-lock-implementations` | `advisory_lock.py` and `dr_engine/_lock.py` | a third implementation | not fired: exactly two; the DR lock's mtime heuristic is carried under F5, not as a third lock. |
+| `two-filesystem-lock-implementations` | `advisory_lock.py` and `dr_engine/_lock.py` | a third implementation | not fired: exactly two; the DR lock's mtime heuristic is carried under F4, not as a third lock. |
 | `ci-provisioning-hand-pins` | Hand-pinned CI residue | 13th module | not fired: 12 modules; `provision_ci_postgres.sh:95` hard-asserts the count; the `backups-validation` job is still hand-written. |
 | `trigger-inputs-legacy-name` | Legacy name of the E2E allowlist | a gate skipped on it | not fired: field feeds the E2E allowlist only; validated at `_gate_registry_schema.py:481-511`; no execution path skips. |
 | `subscription-status-single-writer` | One writing module for subscription status | second provider or an outside writer | not fired: Stripe-only, one module; **prior evidence corrected** — six assignment sites in five billing files (`_subscription_checkout.py:480`, `_subscription_events.py:192`, `_subscription_mutations.py:406`, `_webhooks_checkout.py:561`, `_webhooks_invoice.py:491,569`), all inside billing. |
@@ -674,7 +597,7 @@ None. No team decision record accepts any open finding with a containment and re
 | `release-gate-version-blind` | `version_tool.sh check` does not read the two `_version.py` files; TestPyPI is `continue-on-error`; `check-module-seals` is outside `gate_registry.json` | latent: 34 of 37 `VERSION` commits also touch `_version.py`; CI still tests and builds the tag | the next release where `_version.py` and `VERSION` diverge, or a TestPyPI-only failure would have caught a defect; or a stale seal ships |
 | `cli-headless-gap` | `apply`/`update` call `click.confirm` with no `--yes`/non-interactive flag; cancel exit codes differ by command | the interactive wizard is the declared default; no CI automation requirement yet | a deployment or CI workflow needs to run apply/update unattended |
 | `node-pin-duplication` | Node/pnpm versions are literals in six generated files; no parity gate (Python/Django/Postgres are derived) | SA308 refreshes them together; a drift is a build failure, not data loss | the next Node/pnpm bump that edits fewer than all six stations |
-| `tenant-removal-coverage` | Purge covers 22 tenant tables but not NotificationMessage/deliveries, billing webhook payloads, backup artifacts, media objects, or analytics; obligations are opt-in (4 of 12 apps declare) | no erasure request or external retention obligation has been recorded; the docs call it GDPR-capable | the first erasure/export request, or a compliance commitment; then promote with F1/F5 |
+| `tenant-removal-coverage` | Purge covers 22 tenant tables but not NotificationMessage/deliveries, billing webhook payloads, backup artifacts, media objects, or analytics; obligations are opt-in (4 of 12 apps declare) | no erasure request or external retention obligation has been recorded; the docs call it GDPR-capable | the first erasure/export request, or a compliance commitment; then promote with F1/F4 |
 | `admin-tenant-authority` | `TenantModelAdmin` takes an org UUID from request parameters and queries under it; `OrganizationMembershipAdmin`/`InvitationAdmin` let staff edit memberships | the docs require tenants never to be `is_staff`; only superusers are the documented operators; conditional on a non-superuser staff account | any non-superuser staff account is created |
 | `seam-unversioned` | `window.__QUICKSCALE__` has no version; key presence is validated by a user-owned TS file; payload shapes are unvalidated | core pin is minor-range; key skew fails loudly; no skew incident recorded | the first frontend/core skew failure in a live project |
 
@@ -686,13 +609,14 @@ None. No team decision record accepts any open finding with a containment and re
 - **`manifest-dsl-vocabulary-growth`** — no per-module keyword was added; the last manifest additions
   are generic. Watchlist.
 - **`two-filesystem-lock-implementations` as a standalone finding** — the third-implementation
-  trigger has not fired; the DR lock's stale heuristic is evidence inside F5, not a separate root.
+  trigger has not fired; the DR lock's stale heuristic is evidence inside F4, not a separate root.
 - **`session-advisory-lock-pooling`** — no pooler configuration exists; a session lock is correct
   under direct connections. Watchlist.
 - **`migrate-runs-per-replica` as a standalone finding** — folded into F3; the trigger is more than
   one replica, and the live project is single-instance. The boot contract is the structural root.
-- **`allow-bypassrls-serving-undetected` as a standalone finding** — folded into F4; the production
-  escape hatch is one manifestation of a test harness that never exercises RLS.
+- **`allow-bypassrls-serving-undetected` as a standalone finding** — resolved with SA318:
+  production serving refuses the bypass, and the generated two-organization lane runs under the
+  restricted role.
 - **CLI exit-code inconsistency** — ticket-shaped: three cancellation policies, one `sys.exit(0)`
   path; no compounding root and no current automation consumer. Watchlist (`cli-headless-gap`).
 - **Node/pnpm literal duplication** — a configuration-SSOT gap; SA308 refreshes the set together.
@@ -704,7 +628,7 @@ None. No team decision record accepts any open finding with a containment and re
 - **Admin tenant authority** — conditional on a non-superuser staff account; the documented model
   is superuser-only. Watchlist (`admin-tenant-authority`).
 - **DR sidecar checksum/path containment** — requires write access to the private backup store; a
-  hardening ticket, not a structural root. It is noted in F5's evidence but not promoted.
+  hardening ticket, not a structural root. It is noted in F4's evidence but not promoted.
 - **`start.sh` second DB connection constructor** — a ticket; the role split is sound.
 - **Tech-audit S4s** (`notifications-message-status-aggregate-race`, `forms-retention-skips-null-ip-rows`,
   `beta-migrate-existing-recipient-no-dirty-guard`) — defect-shaped; owned by `tech-audit.md`, not
@@ -718,10 +642,9 @@ None. No team decision record accepts any open finding with a containment and re
   preferred option becomes 2 (keep the corrected local-development labeling and add the release
   gate), and the finding drops to a documentation/gate fix.
 - **Will SA153's project-owned extension add tenant models and migrations?** The roadmap says it adds
-  `0002+` migrations; if it also adds tenant tables, F4 and F5 both rise (F4's Medium likelihood
-  becomes High; F5's horizon moves to now).
+  `0002+` migrations; if it also adds tenant tables, F4's horizon moves to now.
 - **Is the backups engine the live project's recovery path, or is the cutover's manual `pg_dump` the
-  real path?** If the engine is unused, F5 drops to a watchlist; if it is used, its rank rises.
+  real path?** If the engine is unused, F4 drops to a watchlist; if it is used, its rank rises.
 - **Is a tenant erasure/export obligation actually contracted?** Yes → `tenant-removal-coverage`
   promotes into a finding (likely High × Medium).
 
@@ -740,6 +663,9 @@ path, or imminent data-loss path was identified beyond the structural findings a
 
 ## Reconciliation log
 
+- 2026-10-24 — SA318 closed `generated-isolation-unverified`: generated CI provisions a
+  `NOSUPERUSER/NOBYPASSRLS` role and runs the two-organization isolation template, and production
+  serving refuses `QUICKSCALE_ALLOW_BYPASSRLS=1`. The finding is removed from the open findings.
 - 2026-10-24 — SA316 closed `contract-vintage-boundary-blind`: the vintage gate watches
   `quickscale_core.runtime`'s public modules, and every `quickscale_managed` output is hash-tracked
   so a local edit is reported by `quickscale status`. The finding is removed from the open findings.

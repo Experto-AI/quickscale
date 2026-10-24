@@ -154,9 +154,9 @@ REST_FRAMEWORK["NUM_PROXIES"] = num_proxies_for(  # noqa: F405
 # Non-DB bootstrap commands (collectstatic, compilemessages) are launched
 # with QUICKSCALE_NON_DB_COMMAND when the database is not needed.
 #
-# The explicit non-serving opt-out is QUICKSCALE_ALLOW_BYPASSRLS=1 with
-# RUNTIME_DATABASE_URL="" to bridge to DATABASE_URL. It is limited to
-# dev/test and the acknowledged retired billing recovery command.
+# QUICKSCALE_ALLOW_BYPASSRLS=1 is a non-serving development and test
+# allowance only. Production serving refuses it: provide the restricted
+# RUNTIME_DATABASE_URL instead of bridging to the privileged DATABASE_URL.
 _runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
 database_url = config("DATABASE_URL", default=None)
 _privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")

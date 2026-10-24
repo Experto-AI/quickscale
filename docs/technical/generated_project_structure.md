@@ -13,6 +13,7 @@ Key rules:
 - The generated project is user-owned code.
 - `showcase_react` is the sole starter theme; no server-rendered HTML theme is offered.
 - Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json`.
+- Fresh generations with `orgs` include a `tenant-isolation` CI lane that migrates once, creates a `NOSUPERUSER NOBYPASSRLS` test role, and runs the two-organization `tests/test_tenant_isolation.py` suite; production settings refuse `QUICKSCALE_ALLOW_BYPASSRLS=1` while serving.
 - Fresh generations also ship `scripts/lint.sh` as the shared helper surface behind `make lint` and `make check`.
 - Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages.
 - Generated starter output surfaces billing as a module flag only (`modules.billing`); the generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages (restoring those entry points is separate implementation work, not a blocked item). Teams placeholder routes, navigation, cards, and flags remain excluded.

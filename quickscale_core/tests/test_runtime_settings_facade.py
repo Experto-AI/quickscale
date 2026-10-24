@@ -434,11 +434,34 @@ class TestRuntimeDatabaseSelection:
             == "postgresql://runtime:secret@db:5432/app"
         )
 
-    def test_bypass_opt_in_bridges_to_superuser_url(self) -> None:
+    def test_bypass_flag_is_refused_while_serving(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="QUICKSCALE_ALLOW_BYPASSRLS=1 is not allowed while serving",
+        ):
+            facade.resolve_runtime_database_url(
+                runtime_database_url="",
+                database_url="postgresql://super:secret@db:5432/app",
+                allow_bypass_rls=True,
+            )
+
+    def test_bypass_flag_is_refused_even_with_a_runtime_url(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="QUICKSCALE_ALLOW_BYPASSRLS=1 is not allowed while serving",
+        ):
+            facade.resolve_runtime_database_url(
+                runtime_database_url="postgresql://runtime:secret@db:5432/app",
+                database_url="postgresql://super:secret@db:5432/app",
+                allow_bypass_rls=True,
+            )
+
+    def test_privileged_command_ignores_the_bypass_flag(self) -> None:
         assert (
             facade.resolve_runtime_database_url(
                 runtime_database_url="",
                 database_url="postgresql://super:secret@db:5432/app",
+                privileged_command="migrate",
                 allow_bypass_rls=True,
             )
             == "postgresql://super:secret@db:5432/app"

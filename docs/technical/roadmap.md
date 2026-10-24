@@ -48,7 +48,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
-| SA318 | Run generated tenant-isolation tests under the runtime role | 1 | — | Optional |
 | SA319 | Update modules as one sealed-tag transaction | 3 | — | Optional |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Optional |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
@@ -57,14 +56,14 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
 | SA325 | Make module settings, defaults, messages and READMEs follow one contract | 3 | — | Optional |
 | SA326 | Wire the unwired release and security gates | 3 | — | Optional |
-| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d, SA318, SA320 | Optional |
+| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d, SA320 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA318 ─► [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
+Track 1: [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
@@ -75,7 +74,7 @@ Track 3: SA316 ─► SA319 (a → b) ─► SA322 (a → b → c)
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA153 (j) needs SA318 and SA320 (a) only, and (f) needs
+SA153 (j) needs SA320 (a) only, and (f) needs
 SA191d (production); SA320 (b/c) may finish after SA153 (j). SA277 waits for SA191d (production).
 SA191d's operator gates are idle time on Track 2, filled with SA310/SA311 and then the Optional
 module tickets. SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its
@@ -85,13 +84,13 @@ its own checks and handoff.
 **Order.** Module migration history is frozen, so a module schema change (SA310's optional
 version column, SA314's debit reference) ships as a new migration. SA153's own tables live in the
 project-owned extension as `0002+` migrations. Arch fix order holds: SA316 before SA320, SA317
-before SA319, SA318 before SA153 (j).
+before SA319.
 
 ### Track states
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA318 | yes | no: SA191d (production) for SA153 (f) | yes: SA318 |
+| 1 | SA320 (a) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA319 | yes | no: SA191d (production) for SA277 | yes: SA319 |
 
@@ -133,15 +132,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA312 — Close the generated-project and release-workflow safety defects before publication.**
 
-- [ ] **SA318 — Run generated tenant-isolation tests under the restricted runtime role.**
-
-  Closes arch `generated-isolation-unverified` (option 1). Generated CI gains a lane that migrates
-  once, creates a `NOSUPERUSER NOBYPASSRLS` runtime role, and runs a two-organization isolation test
-  template; production refuses `QUICKSCALE_ALLOW_BYPASSRLS=1` while serving. Lands before SA153 (j)
-  so the portal's tenant views are enrolled from the start.
-
-  **Acceptance:** removing an organization filter from a sample project-owned view fails the
-  generated isolation lane; the lane fails, not skips, when the role is absent (Tier 2-full).
+- [x] **SA318 — Run generated tenant-isolation tests under the restricted runtime role.**
 
 - [ ] **SA320 — Deliver module resource contracts to user-owned pages through managed hooks.**
 
@@ -181,7 +172,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and `/api/properties/` the port carried over. No public API in `listings`, no generic property
   behavior in generated projects. Module-coupled data on new pages comes through the managed hooks
   SA320 (a) generates (arch `generated-file-ownership-unmodeled`), and project-owned tenant views
-  run in SA318's isolation lane.
+  run in the generated isolation lane.
 
   **Acceptance:** the served documents (per-request head and crawler summary), the sitemap and
   robots views, and the search → detail → inquiry journey with organization isolation pass on the
@@ -189,9 +180,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices:**
   - [x] (h)
-  - [ ] (j) After SA318 and SA320 (a), close search → detail → inquiry gaps; test organization
-    isolation under the restricted role and the extension declarations, with module data accessed
-    through managed hooks (Tier 2-full).
+  - [ ] (j) After SA320 (a), close search → detail → inquiry gaps; test organization isolation
+    under the restricted role and the extension declarations, with module data accessed through
+    managed hooks (Tier 2-full).
   - [ ] (f) After (j) and SA191d (production), deploy and re-prove that journey on the live site
     with operator approval and a tested deploy-revert path (Tier 2-full).
 

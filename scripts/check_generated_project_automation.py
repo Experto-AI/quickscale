@@ -375,12 +375,10 @@ def _verify_healthcheck(project: Path, database_url: str) -> None:
             # writes (a public domain only): the probe must stay healthy
             # without a loopback ALLOWED_HOSTS entry.
             "ALLOWED_HOSTS": "probe.example.com",
-            # The documented dev/test bridge from the production settings:
-            # serving without a restricted role URL is refused unless the
-            # explicit one-shot bypass is acknowledged.
-            "RUNTIME_DATABASE_URL": "",
+            # Serve under the provisioned restricted role: production settings
+            # refuse QUICKSCALE_ALLOW_BYPASSRLS while serving.
+            "RUNTIME_DATABASE_URL": database_url,
             "DATABASE_URL": database_url,
-            "QUICKSCALE_ALLOW_BYPASSRLS": "1",
             "PYTHONPATH": str(project),
         }
     )

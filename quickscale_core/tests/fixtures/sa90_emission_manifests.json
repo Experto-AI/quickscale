@@ -44,26 +44,27 @@
       "sa258-managed-urlconf": "Regenerated 2026-10-09 \u2014 the user-owned generated URL files hold one managed include (SA258 slice c): testproject/urls.py includes <package>.urls_modules with one path() and names no module, testproject/urls_modules.py is the managed URLconf that composes the theme shell routes and the module includes through quickscale_core.runtime.urls.compose_managed_urlpatterns, and testproject/context_processors.py delegates its module context to quickscale_core.runtime.urls.installed_module_context. 3 fixture hashes updated per variant: testproject/urls.py, testproject/urls_modules.py, and testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa258-runtime-drf-composition": "Regenerated 2026-10-09 \u2014 the generated settings/base.py delegates its REST_FRAMEWORK composition to quickscale_core.runtime.settings.compose_rest_framework (SA258 slice b), so the file carries one call instead of the inline DRF defaults. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa258-runtime-seam-tag": "Regenerated 2026-10-09 \u2014 the React seam's module flags and paths render at request time through the quickscale_seam runtime template tag (SA258 slice a): templates/index.html and templates/social/{embeds,link_tree}.html load the library and call its tags, and testproject/settings/base.py registers the library through TEMPLATES options. 4 fixture hashes updated per variant: templates/index.html, templates/social/embeds.html, templates/social/link_tree.html, and testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa261": "Regenerated 2026-10-10 \u2014 SA261 moves the theme's module API bases into the runtime seam's moduleApiPaths (rule 41), the seam producers render the new key, the org help copy that spelled the API mount is rewritten, and the theme's tests pin the key. 27 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useOrgs.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, frontend/src/test/App.test.tsx, frontend/src/test/AppRoutes.test.tsx, frontend/src/test/FormRenderer.test.tsx, frontend/src/test/PublicSocialPages.test.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/layoutComponents.test.tsx, frontend/src/test/orgComponents.test.tsx, frontend/src/test/orgListPage.test.tsx, frontend/src/test/settingsPage.test.tsx, frontend/src/test/socialLinkTreeStates.test.tsx, frontend/src/test/useModules.test.tsx, frontend/src/test/useOrgNavigation.test.tsx, frontend/src/test/useOrgs.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts, templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa262-social-marker": "Regenerated 2026-10-10 \u2014 the theme's public social embeds fixture and assertion pin the stable public resolution marker (Embed metadata could not be resolved.) that a published embed now carries instead of stored resolver text. 1 fixture hash updated per variant: frontend/src/test/PublicSocialPages.test.tsx. All unrelated paths, hashes, and modes remain authoritative.",
       "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative.",
-      "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa261": "Regenerated 2026-10-10 \u2014 SA261 moves the theme's module API bases into the runtime seam's moduleApiPaths (rule 41), the seam producers render the new key, the org help copy that spelled the API mount is rewritten, and the theme's tests pin the key. 27 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useOrgs.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, frontend/src/test/App.test.tsx, frontend/src/test/AppRoutes.test.tsx, frontend/src/test/FormRenderer.test.tsx, frontend/src/test/PublicSocialPages.test.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/layoutComponents.test.tsx, frontend/src/test/orgComponents.test.tsx, frontend/src/test/orgListPage.test.tsx, frontend/src/test/settingsPage.test.tsx, frontend/src/test/socialLinkTreeStates.test.tsx, frontend/src/test/useModules.test.tsx, frontend/src/test/useOrgNavigation.test.tsx, frontend/src/test/useOrgs.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts, templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa272b": "Regenerated 2026-10-13 \u2014 the generated CI notifications webhook placeholder is a decodable Svix signing secret (SA272 slice b), so the notifications E003 startup check passes in CI. 1 fixture hash updated: react_default .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa274-crm-theme-stats": "Regenerated 2026-10-15 \u2014 the showcase_react CRM workspace's stat cards read the CRM stats endpoint (SA274): frontend/src/pages/CrmPage.tsx fetches `crm/api/stats/` through useApiData and reads the four organization totals instead of inferring counts from the bare-list responses, which always yielded 0. 1 fixture hash updated per variant: frontend/src/pages/CrmPage.tsx. All unrelated paths, hashes, and modes remain authoritative.",
       "sa276-a-managed-seam-declaration": "Regenerated 2026-10-14 \u2014 the theme's seam types become a generated, managed file (SA276 slice a): frontend/src/quickscaleSeam.d.ts renders from the shipped module set (the 11 module flags, the crm/social/analytics path names, and the orgs/billing/crm/forms API-base names), generation emits it, and quickscale apply/update regenerate it under the managed-file hash guard. New generated path in all three variants: frontend/src/quickscaleSeam.d.ts. All unrelated paths, hashes, and modes remain authoritative.",
       "sa276-b-theme-seam-consumers": "Regenerated 2026-10-14 \u2014 the theme's seam consumers read the generated seam files (SA276 slice b): frontend/src/hooks/useModules.ts imports the QuickScaleModules/QuickScaleModulePaths/QuickScaleModuleApiPaths types from the managed frontend/src/quickscaleSeam.d.ts instead of declaring them and reads the producer-resolved owner slug instead of inferring one from a crm path; frontend/src/lib/validateQuickScaleSeam.ts requires every entry of the new managed frontend/src/quickscaleSeam.keys.ts key manifest; and the theme's tests build their seam fixtures from the new frontend/src/test/seamFixtures.ts helper. New generated paths in all three variants: frontend/src/quickscaleSeam.keys.ts and frontend/src/test/seamFixtures.ts; the theme's seam-consuming hooks, validator, and test files were re-hashed. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa274-crm-theme-stats": "Regenerated 2026-10-15 \u2014 the showcase_react CRM workspace's stat cards read the CRM stats endpoint (SA274): frontend/src/pages/CrmPage.tsx fetches `crm/api/stats/` through useApiData and reads the four organization totals instead of inferring counts from the bare-list responses, which always yielded 0. 1 fixture hash updated per variant: frontend/src/pages/CrmPage.tsx. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa289": "Regenerated 2026-10-16 \u2014 the theme's useApi parser reads only the one QuickScale error shape {\"error\": {\"code\", \"message\", \"fields\"}} and no longer parses the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (SA289 slice a). 2 fixture hashes updated per variant: frontend/src/hooks/useApi.ts, frontend/src/test/useApiErrors.test.ts (all 3 variants). All unrelated paths, hashes, and modes remain authoritative.",
-      "sa289-b-theme-request-client-and-seam-paths": "Regenerated 2026-10-16 \u2014 the theme's hooks send every request through the shared apiRequest client, the SPA's blog, listings, and crm page routes, navigation, and Dashboard card links take their paths from the seam's modulePaths (which gains blog and listings entries), and the launcher pages' server-rendered document links take theirs from the new moduleDocumentPaths table (blogIndex, blogFeed, listingsIndex, crmDashboard) in every mode, so no module path is written by hand; the theme's ESLint config rejects a raw fetch( in src/hooks outside useApi.ts (SA289 slice b). 30 fixture hashes updated per variant: frontend/eslint.config.js, frontend/src/App.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/Dashboard.tsx, frontend/src/quickscaleSeam.d.ts, frontend/src/quickscaleSeam.keys.ts, the frontend/src/test suite (App, AppRoutes, FormRenderer, PublicSocialPages, RootDispatch, csrf, formFields, layoutComponents, orgComponents, orgListPage, seamFixtures, settingsPage, socialLinkTreeStates, useModules, useOrgNavigation, useOrgs, validateQuickScaleSeam), and templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa289": "Regenerated 2026-10-16 \u2014 the theme's useApi parser reads only the one QuickScale error shape {\"error\": {\"code\", \"message\", \"fields\"}} and no longer parses the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (SA289 slice a). 2 fixture hashes updated per variant: frontend/src/hooks/useApi.ts, frontend/src/test/useApiErrors.test.ts (all 3 variants). All unrelated paths, hashes, and modes remain authoritative.",
+      "sa289-b-theme-request-client-and-seam-paths": "Regenerated 2026-10-16 \u2014 the theme's hooks send every request through the shared apiRequest client, the SPA's blog, listings, and crm page routes, navigation, and Dashboard card links take their paths from the seam's modulePaths (which gains blog and listings entries), and the launcher pages' server-rendered document links take theirs from the new moduleDocumentPaths table (blogIndex, blogFeed, listingsIndex, crmDashboard) in every mode, so no module path is written by hand; the theme's ESLint config rejects a raw fetch( in src/hooks outside useApi.ts (SA289 slice b). 30 fixture hashes updated per variant: frontend/eslint.config.js, frontend/src/App.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/Dashboard.tsx, frontend/src/quickscaleSeam.d.ts, frontend/src/quickscaleSeam.keys.ts, the frontend/src/test suite (App, AppRoutes, FormRenderer, PublicSocialPages, RootDispatch, csrf, formFields, layoutComponents, orgComponents, orgListPage, seamFixtures, settingsPage, socialLinkTreeStates, useModules, useOrgNavigation, useOrgs, validateQuickScaleSeam), and templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa299d": "Regenerated 2026-10-20 \u2014 the generated project's test harness passes as rendered: pyproject.toml collects tests/ only, the Makefile test-backend target and the CI test and migration steps set QUICKSCALE_ALLOW_BYPASSRLS=1 when orgs is installed, the tenant-isolation target's prerequisite migration uses QUICKSCALE_PRIVILEGED_COMMAND=migrate, and README.md's direct pytest commands carry the same allowance. Changed per variant: README.md and pyproject.toml; react_default also .github/workflows/ci.yml and Makefile. All unrelated paths, hashes, and modes remain authoritative.",
       "sa300b": "Regenerated 2026-10-20 \u2014 the generated home E2E spec asserts the current dashboard heading and its Playwright config targets the Django-served origin, because the React starter validates window.__QUICKSCALE__ and Vite alone cannot serve an E2E target. 2 fixture hashes updated per variant: frontend/e2e/home.spec.ts and frontend/playwright.config.ts. All unrelated paths, hashes, and modes remain authoritative.",
       "sa308": "Regenerated 2026-10-23 \u2014 generated runtime pins moved to Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6; the Pillow (13), virtualenv (21.14.13), and React starter lockfile (DOMPurify 3.4.17, Vitest 4.1.12) advisory floors landed, and the generated README names the Node 24.22.1 prerequisite. 8 fixture hashes updated per variant: .github/workflows/ci.yml, Dockerfile, docker-compose.yml, frontend/package.json, frontend/pnpm-lock.yaml, pyproject.toml, README.md, <package>/settings/production.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa308-b": "Regenerated 2026-10-23 \u2014 the React starter declares its Tailwind animation plugin (`tailwindcss-animate`) as a build-only dev dependency instead of a runtime dependency, so production npm audits no longer see Tailwind's build-time `braces` and `postcss-selector-parser` chain. 2 fixture hashes updated per variant: frontend/package.json and frontend/pnpm-lock.yaml. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa327": "Regenerated 2026-10-24 \u2014 the generated project's Django floor rises to >=6.0.8 to match the module manifests (SA327). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa318": "Regenerated 2026-10-24 \u2014 the generated CI gains a tenant-isolation lane that migrates once, creates a LOGIN CREATEDB NOSUPERUSER NOBYPASSRLS role, and runs the two-organization isolation suite; the conftest registers and deselects the marker, the Makefile gains test-tenant-isolation, production.py refuses QUICKSCALE_ALLOW_BYPASSRLS while serving, and README documents the target (SA318). New path in all variants: tests/test_tenant_isolation.py; re-hashed per variant: Makefile, README.md, tests/conftest.py, testproject/settings/production.py, and .github/workflows/ci.yml in react_default. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa327": "Regenerated 2026-10-24 \u2014 the generated project's Django floor rises to >=6.0.8 to match the module manifests (SA327). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative.",
+      "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -74,6 +75,8 @@
       "html_default (showcase_html) variant removed in SA94 Phase 4.",
       "SA105: selected_modules no longer filters frontend/src output. All module files are always emitted as dormant. Runtime gating uses window.__QUICKSCALE__ flags."
     ],
+    "sa306": "Regenerated 2026-10-23 \u2014 the generated .github/workflows/ci.yml frontend-lint job no longer carries the job-level hashFiles(...) guard GitHub rejects before any job starts; the job runs unconditionally because every showcase_react generation emits frontend/package.json (SA306). 1 fixture hash updated per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
+    "sa312": "Regenerated 2026-10-24 \u2014 the generated README labels Docker Compose as the local development stack instead of production, its setup steps edit the generated .env instead of copying .env.example over it, and its storage example is space-indented; the generated .dockerignore excludes .quickscale/backups/ and transient .quickscale/*.lock files while keeping the .quickscale/wheels/ cache visible to local-wheel image builds, and .gitignore ignores /static/frontend/; the generated pyproject declares the redis client and production.py fails closed when REDIS_URL selects RedisCache without it (SA312). 5 fixture hashes updated per variant: .dockerignore, .gitignore, README.md, pyproject.toml, testproject/settings/production.py. All unrelated paths, hashes, and modes remain authoritative.",
     "variants": {
       "react_default": {
         "project_name": "testproject",
@@ -94,9 +97,7 @@
         ],
         "theme": "showcase_react"
       }
-    },
-    "sa306": "Regenerated 2026-10-23 \u2014 the generated .github/workflows/ci.yml frontend-lint job no longer carries the job-level hashFiles(...) guard GitHub rejects before any job starts; the job runs unconditionally because every showcase_react generation emits frontend/package.json (SA306). 1 fixture hash updated per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
-    "sa312": "Regenerated 2026-10-24 \u2014 the generated README labels Docker Compose as the local development stack instead of production, its setup steps edit the generated .env instead of copying .env.example over it, and its storage example is space-indented; the generated .dockerignore excludes .quickscale/backups/ and transient .quickscale/*.lock files while keeping the .quickscale/wheels/ cache visible to local-wheel image builds, and .gitignore ignores /static/frontend/; the generated pyproject declares the redis client and production.py fails closed when REDIS_URL selects RedisCache without it (SA312). 5 fixture hashes updated per variant: .dockerignore, .gitignore, README.md, pyproject.toml, testproject/settings/production.py. All unrelated paths, hashes, and modes remain authoritative."
+    }
   },
   "react_default": {
     ".dockerignore": {
@@ -121,7 +122,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "09f1e0909aa5bfc5600e2b034848e7a3eaf45f5ca582b8fd4ad9f8ac4a50bf10"
+      "sha256": "25ec287982ed6c56e9dc469ced91ac91790196fd398df25b5edfc71dcce32668"
     },
     ".gitignore": {
       "mode": "644",
@@ -137,7 +138,7 @@
     },
     "Makefile": {
       "mode": "644",
-      "sha256": "54299250e8ba5164165f1867f5f95144b8fafc01c2379ec7ff9ee6078716d91d"
+      "sha256": "acd535197910929067e3b61af891615c3ec6aff11a57ef9c5cb9fb3f195c807a"
     },
     "OPERATIONS.md": {
       "mode": "644",
@@ -145,7 +146,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "1da70af60086d96a205fe49f59472f916a451bede91cbc3730f26a50e9a4824a"
+      "sha256": "c19e6542c5946bbfa0036f82ce511de93fcedb4cca3b05b307224178c2b507f1"
     },
     "db/init.sql": {
       "mode": "644",
@@ -637,7 +638,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "ccceb933601565d63adb40a55c86849d0032ba2ca3b9bb2b90cbea4ad033eb3f"
+      "sha256": "d61f3136ee46af2b97a86858317fb099640da9c67ad67ec65b182ade19cc5516"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -661,11 +662,15 @@
     },
     "tests/conftest.py": {
       "mode": "644",
-      "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
+      "sha256": "5b583ef7c76b44c517e3763c72f97bbcd67efbd7292f12abe7afc5a16fce9bfd"
     },
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+    },
+    "tests/test_tenant_isolation.py": {
+      "mode": "644",
+      "sha256": "b447ab7600ac631e3b2cdc9d3fba2704522ee9a1c4d05783307be71e58705567"
     }
   },
   "react_empty": {
@@ -691,7 +696,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "d8e2bdfe753a064d03d91dd450e91e3916856fb87270de70bb0a8086929b6734"
+      "sha256": "9b60c85a990c50ca12b62afd3e61e266cb958ce15e08675d220460678467fdc0"
     },
     ".gitignore": {
       "mode": "644",
@@ -715,7 +720,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "1da70af60086d96a205fe49f59472f916a451bede91cbc3730f26a50e9a4824a"
+      "sha256": "5d9059588ea811c5310e488ff8c4c652e3fd302251f6c6d2f785ef88b20c2b3a"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1207,7 +1212,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "ccceb933601565d63adb40a55c86849d0032ba2ca3b9bb2b90cbea4ad033eb3f"
+      "sha256": "d61f3136ee46af2b97a86858317fb099640da9c67ad67ec65b182ade19cc5516"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -1231,11 +1236,15 @@
     },
     "tests/conftest.py": {
       "mode": "644",
-      "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
+      "sha256": "5b583ef7c76b44c517e3763c72f97bbcd67efbd7292f12abe7afc5a16fce9bfd"
     },
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+    },
+    "tests/test_tenant_isolation.py": {
+      "mode": "644",
+      "sha256": "b447ab7600ac631e3b2cdc9d3fba2704522ee9a1c4d05783307be71e58705567"
     }
   },
   "react_selected": {
@@ -1261,7 +1270,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "d8e2bdfe753a064d03d91dd450e91e3916856fb87270de70bb0a8086929b6734"
+      "sha256": "9b60c85a990c50ca12b62afd3e61e266cb958ce15e08675d220460678467fdc0"
     },
     ".gitignore": {
       "mode": "644",
@@ -1285,7 +1294,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "1da70af60086d96a205fe49f59472f916a451bede91cbc3730f26a50e9a4824a"
+      "sha256": "5d9059588ea811c5310e488ff8c4c652e3fd302251f6c6d2f785ef88b20c2b3a"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1777,7 +1786,7 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "ccceb933601565d63adb40a55c86849d0032ba2ca3b9bb2b90cbea4ad033eb3f"
+      "sha256": "d61f3136ee46af2b97a86858317fb099640da9c67ad67ec65b182ade19cc5516"
     },
     "testproject/urls.py": {
       "mode": "644",
@@ -1801,11 +1810,15 @@
     },
     "tests/conftest.py": {
       "mode": "644",
-      "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
+      "sha256": "5b583ef7c76b44c517e3763c72f97bbcd67efbd7292f12abe7afc5a16fce9bfd"
     },
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+    },
+    "tests/test_tenant_isolation.py": {
+      "mode": "644",
+      "sha256": "b447ab7600ac631e3b2cdc9d3fba2704522ee9a1c4d05783307be71e58705567"
     }
   }
 }

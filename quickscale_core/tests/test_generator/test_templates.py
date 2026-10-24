@@ -2674,20 +2674,12 @@ class TestProductionSettingsRuntimeDatabaseUrlFailClosed:
         )
 
 
-class TestProductionSettingsRuntimeDatabaseUrlBridge:
-    """Verify production settings bridge for blank RUNTIME_DATABASE_URL with bypass hatch.
+class TestProductionSettingsServingBypassRefusal:
+    """Verify production serving refuses the BYPASSRLS escape hatch (SA318).
 
-    CR-SA63-001 regression: when ``RUNTIME_DATABASE_URL`` is explicitly blank
-    (empty string, not None) and ``QUICKSCALE_ALLOW_BYPASSRLS=1`` is set in
-    the environment, production.py must select ``DATABASE_URL`` for the
-    privileged launcher command (createcachetable, etc.) instead of falling
-    through to the fail-closed ValueError.
-
-    The bridge must NOT activate for:
-      - Unset RUNTIME_DATABASE_URL (None) — normal fail-closed
-      - Blank RUNTIME_DATABASE_URL without QUICKSCALE_ALLOW_BYPASSRLS=1
-      - Blank RUNTIME_DATABASE_URL with QUICKSCALE_ALLOW_BYPASSRLS set to a
-        non-"1" value
+    ``QUICKSCALE_ALLOW_BYPASSRLS=1`` remains a non-serving development and
+    test allowance; a serving process must provide the restricted
+    ``RUNTIME_DATABASE_URL`` instead of bridging to the privileged role.
     """
 
     def _render_production_output(
@@ -2702,50 +2694,13 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
         )
         return base_output, production_output
 
-    def test_bridge_uses_database_url_when_runtime_blank_and_bypass_set(
+    def test_serving_refuses_bypass_flag_with_blank_runtime_url(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Blank RUNTIME_DATABASE_URL + QUICKSCALE_ALLOW_BYPASSRLS=1 must use DATABASE_URL."""
-        base_output, production_output = self._render_production_output(
-            jinja_env, test_context
-        )
-
-        # Set the bypass hatch and blank runtime URL
-        monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "1")
-        # Replicate what config("RUNTIME_DATABASE_URL", default=None) returns
-        # when the env var is explicitly set to blank.
-        db_url = "postgresql://postgres:postgres@localhost:5432/testproject"
-
-        namespace = _execute_rendered_settings(
-            monkeypatch=monkeypatch,
-            package_name=test_context["package_name"],
-            base_output=base_output,
-            target_output=production_output,
-            target_module_name="production",
-            config_values={
-                "SECRET_KEY": "a-valid-production-secret-key",
-                "DATABASE_URL": db_url,
-                "RUNTIME_DATABASE_URL": "",  # explicitly blank
-            },
-        )
-
-        databases = namespace["DATABASES"]
-        assert isinstance(databases, dict)
-        assert databases["default"]["URL"] == db_url, (
-            "Blank RUNTIME_DATABASE_URL + QUICKSCALE_ALLOW_BYPASSRLS=1 must "
-            "select DATABASE_URL"
-        )
-
-    def test_bridge_raises_value_error_when_runtime_blank_and_bypass_set_but_no_database_url(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Blank RUNTIME_DATABASE_URL + QUICKSCALE_ALLOW_BYPASSRLS=1 must raise if DATABASE_URL unset."""
+        """Serving with the bypass flag and a blank runtime URL must raise."""
         base_output, production_output = self._render_production_output(
             jinja_env, test_context
         )
@@ -2753,7 +2708,8 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
         monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "1")
 
         with pytest.raises(
-            ValueError, match="QUICKSCALE_ALLOW_BYPASSRLS=1 requires the superuser"
+            ValueError,
+            match="QUICKSCALE_ALLOW_BYPASSRLS=1 is not allowed while serving",
         ):
             _execute_rendered_settings(
                 monkeypatch=monkeypatch,
@@ -2763,18 +2719,20 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
                 target_module_name="production",
                 config_values={
                     "SECRET_KEY": "a-valid-production-secret-key",
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
                     "RUNTIME_DATABASE_URL": "",  # explicitly blank
-                    # DATABASE_URL deliberately not set
                 },
             )
 
-    def test_bridge_does_not_activate_when_runtime_url_unset(
+    def test_serving_refuses_bypass_flag_even_with_a_runtime_url(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Unset RUNTIME_DATABASE_URL (None) must still raise ValueError for serving."""
+        """A leaked bypass flag is refused rather than silently ignored."""
         base_output, production_output = self._render_production_output(
             jinja_env, test_context
         )
@@ -2782,7 +2740,8 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
         monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "1")
 
         with pytest.raises(
-            ValueError, match="RUNTIME_DATABASE_URL is required for runtime serving"
+            ValueError,
+            match="QUICKSCALE_ALLOW_BYPASSRLS=1 is not allowed while serving",
         ):
             _execute_rendered_settings(
                 monkeypatch=monkeypatch,
@@ -2792,78 +2751,22 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
                 target_module_name="production",
                 config_values={
                     "SECRET_KEY": "a-valid-production-secret-key",
-                    "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/testproject",
-                    # RUNTIME_DATABASE_URL deliberately not set
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                    "RUNTIME_DATABASE_URL": (
+                        "postgresql://app_role:password@db:5432/testproject"
+                    ),
                 },
             )
 
-    def test_bridge_does_not_activate_when_quickscale_allow_bypassrls_not_set(
+    def test_privileged_command_ignores_the_bypass_flag(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Blank RUNTIME_DATABASE_URL without ALLOW_BYPASSRLS must still raise ValueError."""
-        base_output, production_output = self._render_production_output(
-            jinja_env, test_context
-        )
-
-        with pytest.raises(
-            ValueError, match="RUNTIME_DATABASE_URL is required for runtime serving"
-        ):
-            _execute_rendered_settings(
-                monkeypatch=monkeypatch,
-                package_name=test_context["package_name"],
-                base_output=base_output,
-                target_output=production_output,
-                target_module_name="production",
-                config_values={
-                    "SECRET_KEY": "a-valid-production-secret-key",
-                    "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/testproject",
-                    "RUNTIME_DATABASE_URL": "",  # explicitly blank
-                    # QUICKSCALE_ALLOW_BYPASSRLS not set
-                },
-            )
-
-    def test_bridge_does_not_activate_when_bypass_value_is_not_one(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Blank RUNTIME_DATABASE_URL with ALLOW_BYPASSRLS=0 must still raise ValueError."""
-        base_output, production_output = self._render_production_output(
-            jinja_env, test_context
-        )
-
-        monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "0")
-
-        with pytest.raises(
-            ValueError, match="RUNTIME_DATABASE_URL is required for runtime serving"
-        ):
-            _execute_rendered_settings(
-                monkeypatch=monkeypatch,
-                package_name=test_context["package_name"],
-                base_output=base_output,
-                target_output=production_output,
-                target_module_name="production",
-                config_values={
-                    "SECRET_KEY": "a-valid-production-secret-key",
-                    "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/testproject",
-                    "RUNTIME_DATABASE_URL": "",  # explicitly blank
-                    "QUICKSCALE_ALLOW_BYPASSRLS": "0",
-                },
-            )
-
-    def test_bridge_does_not_activate_when_privileged_command_set_with_bypass(
-        self,
-        jinja_env: Environment,
-        test_context: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """When QUICKSCALE_PRIVILEGED_COMMAND is set, it must take priority over
-        the ALLOW_BYPASSRLS bridge (SA68 Phase 1 precedence)."""
-
+        """A privileged command still selects the superuser URL with the flag set."""
         base_output, production_output = self._render_production_output(
             jinja_env, test_context
         )
@@ -2887,17 +2790,44 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
 
         databases = namespace["DATABASES"]
         assert isinstance(databases, dict)
-        assert databases["default"]["URL"] == db_url, (
-            "Privileged command path must select DATABASE_URL over the bridge"
-        )
+        assert databases["default"]["URL"] == db_url
 
-    def test_bridge_does_not_affect_normal_runtime_url(
+    def test_non_db_command_ignores_the_bypass_flag(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When RUNTIME_DATABASE_URL has a real value, the bridge must not interfere."""
+        """A non-DB bootstrap command still uses the dummy URL with the flag set."""
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
+        )
+
+        monkeypatch.setenv("QUICKSCALE_NON_DB_COMMAND", "collectstatic")
+        monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "1")
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={"SECRET_KEY": "a-valid-production-secret-key"},
+        )
+
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == (
+            "postgresql://dummy:dummy@localhost:5432/dummy"
+        )
+
+    def test_serving_uses_the_runtime_url_without_the_flag(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The restricted runtime URL remains the serving connection."""
         base_output, production_output = self._render_production_output(
             jinja_env, test_context
         )
@@ -2920,9 +2850,36 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
 
         databases = namespace["DATABASES"]
         assert isinstance(databases, dict)
-        assert databases["default"]["URL"] == runtime_url, (
-            "Normal RUNTIME_DATABASE_URL must be used when set"
+        assert databases["default"]["URL"] == runtime_url
+
+    def test_serving_without_runtime_url_still_fails_closed(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Blank or unset runtime URL without the flag keeps the fail-closed error."""
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
         )
+
+        with pytest.raises(
+            ValueError, match="RUNTIME_DATABASE_URL is required for runtime serving"
+        ):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": "a-valid-production-secret-key",
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                    "RUNTIME_DATABASE_URL": "",
+                },
+            )
 
 
 class TestNonDbCommandExecution:

@@ -114,3 +114,81 @@ def test_ci_frontend_job_has_no_job_level_guard() -> None:
     assert "if:" not in job_header
     for command in ("pnpm lint", "pnpm type-check", "pnpm test:coverage"):
         assert command in output.split("  frontend-lint:", 1)[1]
+
+
+def test_makefile_tenant_isolation_target_requires_the_runtime_role() -> None:
+    """The behavioural isolation target runs only with a required runtime role."""
+    output = _render("Makefile.j2", selected_modules=["auth", "orgs"])
+
+    assert "test-tenant-isolation:" in output
+    assert (
+        "QUICKSCALE_REQUIRE_TENANT_ISOLATION=1 poetry run pytest "
+        "tests/test_tenant_isolation.py -m tenant_isolation -o addopts=" in output
+    )
+
+    output_without_orgs = _render("Makefile.j2", selected_modules=["auth"])
+
+    assert "test-tenant-isolation:" not in output_without_orgs
+
+
+def test_ci_tenant_isolation_lane_provisions_and_runs_the_restricted_role() -> None:
+    """The generated lane migrates once, creates the role, then runs the suite."""
+    output = _render("github/workflows/ci.yml.j2", selected_modules=["auth", "orgs"])
+
+    assert "  tenant-isolation:" in output
+    job = output.split("  tenant-isolation:", 1)[1].split("  frontend-lint:", 1)[0]
+    assert (
+        "CREATE ROLE quickscale_test_runtime LOGIN CREATEDB NOSUPERUSER "
+        "NOBYPASSRLS NOCREATEROLE;" in job
+    )
+    assert "ALTER ROLE quickscale_test_runtime" in job
+    assert (
+        "RUNTIME_DATABASE_URL: postgres://quickscale_test_runtime@localhost:5432/postgres"
+        in job
+    )
+    assert "make test-tenant-isolation" in job
+    assert "QUICKSCALE_ALLOW_BYPASSRLS" not in job
+    assert (
+        job.index("Run migrations once")
+        < job.index("Create restricted runtime role")
+        < job.index("Run two-organization isolation test")
+    )
+
+    migration_step = _ci_step(
+        job, "Run migrations once", "Create restricted runtime role"
+    )
+    assert 'RUNTIME_DATABASE_URL: ""' in migration_step
+    assert "QUICKSCALE_PRIVILEGED_COMMAND: migrate" in migration_step
+
+    output_without_orgs = _render(
+        "github/workflows/ci.yml.j2", selected_modules=["auth"]
+    )
+
+    assert "tenant-isolation:" not in output_without_orgs
+
+
+def test_generated_tenant_isolation_test_fails_when_the_role_is_absent() -> None:
+    """The rendered suite fails, rather than skips, in the required lane."""
+    output = _render("tests/test_tenant_isolation.py.j2")
+
+    compile(output, "tests/test_tenant_isolation.py", "exec")
+    assert "pytest.fail(" in output
+    assert "The lane must fail, not skip" in output
+    assert (
+        "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user"
+        in output
+    )
+    assert "user=request.user, organization=organization" in output
+    assert "organization=organization" in output
+    assert 'create(name="Org A", slug="org-a")' in output
+    assert 'create(name="Org B", slug="org-b")' in output
+
+
+def test_generated_conftest_registers_and_deselects_the_isolation_marker() -> None:
+    """The generated harness keeps the lane out of the ordinary test run."""
+    output = _render("tests/conftest.py.j2")
+
+    compile(output, "tests/conftest.py", "exec")
+    assert "pytest_collection_modifyitems" in output
+    assert "tenant_isolation" in output
+    assert "QUICKSCALE_REQUIRE_TENANT_ISOLATION" in output

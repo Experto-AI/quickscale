@@ -418,3 +418,11 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current pyproject.toml Django constraint (`>=6.0.8,<6.1.0`) and refresh poetry.lock; a project generated with the earlier floor keeps a Django range whose lower bound admits the vulnerable release until this edit."
       - "Update the embedded modules once this release's modules are available (`quickscale update --confirm-contract-adoption`) so they carry the raised Django, djangorestframework, sqlparse, certifi, and urllib3 floors, then refresh poetry.lock and re-run the generated project's test suite."
+
+  - id: sa318-generated-tenant-isolation-lane
+    minimum: "0.89.0"
+    title: "Adopt the generated tenant-isolation lane and the serving bypass refusal"
+    adoption_steps:
+      - "Compare and manually adopt the current tests/conftest.py and tests/test_tenant_isolation.py: the conftest registers the tenant_isolation marker and deselects that suite unless QUICKSCALE_REQUIRE_TENANT_ISOLATION=1 is set; the lane sets that flag alongside RUNTIME_DATABASE_URL, so the suite is selected and fails instead of skipping when the role is absent, while the ordinary test run stays deselected. The test template creates two organizations, asserts one sample project-owned view serves only its own organization, and asserts the connected role is NOSUPERUSER/NOBYPASSRLS. Adapt the sample view to the project's own tenant views."
+      - "Compare and manually adopt the current Makefile test-tenant-isolation target and .github/workflows/ci.yml tenant-isolation job: the job migrates once with the privileged command, creates a LOGIN CREATEDB NOSUPERUSER NOBYPASSRLS role, and runs make test-tenant-isolation with RUNTIME_DATABASE_URL pointing at that role; no step sets QUICKSCALE_ALLOW_BYPASSRLS."
+      - "Compare and manually adopt the current settings/production.py serving contract: QUICKSCALE_ALLOW_BYPASSRLS=1 is refused while serving, so a deployment must set RUNTIME_DATABASE_URL to the restricted runtime role; the flag remains available only to non-serving development and test commands."

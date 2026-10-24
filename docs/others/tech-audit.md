@@ -370,7 +370,6 @@ items:
      depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-24}
   - {id: orgs-role-mixin-checks-request-org, status: watchlist}
   - {id: backups-upload-restore-by-model-permission, status: watchlist}
-  - {id: allow-bypassrls-serving-undetected, status: watchlist}
   - {id: single-sync-worker-vendor-calls, status: watchlist}
   - {id: migrate-runs-per-replica, status: watchlist}
   - {id: social-config-error-served-200, status: watchlist}
@@ -1108,10 +1107,6 @@ reviewers.
 
 ## Tooling gaps
 
-- **Generated-project CI never exercises RLS under the runtime role**: `ci.yml.j2` and the generated
-  Makefile run tests with `QUICKSCALE_ALLOW_BYPASSRLS=1` and a superuser `DATABASE_URL` (arch F5).
-  Add a lane that migrates once, creates the runtime role, and runs the tenant tests under
-  `NOSUPERUSER`/`NOBYPASSRLS`; it would have caught the backup and CRM-scope regressions.
 - **No Stripe test-mode contract test**: the fake client cannot enforce provider key limits (BILL-01)
   or event ordering. Add one test-mode smoke test for subscription create and a signed-event replay.
 - **No S3 overwrite test**: the storage tests use `FileSystemStorage`, which auto-renames; add a
@@ -1142,7 +1137,6 @@ trigger. The chain pass reads this list.
 |---|---|---|---|
 | `orgs-role-mixin-checks-request-org` | `OrgRoleMixin.dispatch` checks `resolve_request_org()` while `get_organization()` prefers the URL slug | a new path sets `request.org` on `/orgs/<slug>/` for a non-superuser | not fired: the only setters remain `current_org.py`/`_api_views.py` (unchanged in the delta) |
 | `backups-upload-restore-by-model-permission` | uploaded-dump restore needs `change_backuppolicy` + `QUICKSCALE_BACKUPS_ALLOW_RESTORE=true` | that permission granted to non-superuser staff while restore is enabled | not fired: no permission change in the delta; with the runtime-role fix, revisit the trust model |
-| `allow-bypassrls-serving-undetected` | `QUICKSCALE_ALLOW_BYPASSRLS=1` + blank `RUNTIME_DATABASE_URL` silently disables RLS | any tooling/docs set it outside dev | not fired: only nightly tests, local test lanes, and docs that call it non-serving |
 | `single-sync-worker-vendor-calls` | one sync worker plus Stripe's default stalls all requests | `WEB_CONCURRENCY` > 1 in production or a vendor latency incident | not fired: `start.sh` still defaults to 1; it now amplifies `billing-webhook-status-applied-out-of-order` |
 | `migrate-runs-per-replica` | `start.sh` migrates on every boot | more than one replica | not fired: still the single-replica path |
 | `social-config-error-served-200` | DRF payload views return 200 with `str(exc)` | a new raise of `SocialConfigurationError` | not fired: 0 raises |
@@ -1224,7 +1218,10 @@ release.
 - 2026-10-24 — 13 prior watchlist items: carried (all triggers not fired; evidence in the table).
 - 2026-10-24 — `orgs-role-mixin-checks-request-org`: carried (no new `request.org` setter).
 - 2026-10-24 — `backups-upload-restore-by-model-permission`: carried (no permission change).
-- 2026-10-24 — `allow-bypassrls-serving-undetected`: carried (still dev/test only).
+- 2026-10-24 — `allow-bypassrls-serving-undetected`: **resolved** (SA318: generated production
+  serving refuses the flag; the generated isolation lane runs under the restricted runtime role).
+  This also closes the "Generated-project CI never exercises RLS under the runtime role" tooling-gap
+  entry, which is removed.
 - 2026-10-24 — `single-sync-worker-vendor-calls`: carried (default worker count still 1).
 - 2026-10-24 — `migrate-runs-per-replica`: carried (single-replica path).
 - 2026-10-24 — `social-config-error-served-200`: carried (0 raises).

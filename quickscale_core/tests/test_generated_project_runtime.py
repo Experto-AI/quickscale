@@ -1167,6 +1167,78 @@ def _create_test_database(postgres_url: str) -> None:
     conn.close()
 
 
+def _create_restricted_runtime_role(postgres_url: str, role: str) -> str:
+    """Create or refresh a NOSUPERUSER/NOBYPASSRLS serving role.
+
+    The role receives CONNECT, schema usage, and DML on every table and
+    sequence the privileged migration already created, so a production-serving
+    test can boot the generated settings through the same restricted surface a
+    deployment uses.
+    """
+    import psycopg2
+    from psycopg2 import sql
+    from urllib.parse import urlparse
+
+    parsed = urlparse(postgres_url)
+    database = parsed.path.lstrip("/")
+    password = secrets.token_urlsafe(24)
+    admin_connection = psycopg2.connect(postgres_url)
+    admin_connection.autocommit = True
+    try:
+        with admin_connection.cursor() as cursor:
+            cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+            role_exists = cursor.fetchone() is not None
+            role_sql = (
+                "ALTER ROLE {role} WITH LOGIN NOSUPERUSER NOBYPASSRLS "
+                "NOCREATEDB NOCREATEROLE PASSWORD {password}"
+                if role_exists
+                else "CREATE ROLE {role} LOGIN NOSUPERUSER NOBYPASSRLS "
+                "NOCREATEDB NOCREATEROLE PASSWORD {password}"
+            )
+            cursor.execute(
+                sql.SQL(role_sql).format(
+                    role=sql.Identifier(role),
+                    password=sql.Literal(password),
+                )
+            )
+            cursor.execute(
+                sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                    sql.Identifier(database),
+                    sql.Identifier(role),
+                )
+            )
+            cursor.execute(
+                sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(
+                    sql.Identifier(role)
+                )
+            )
+            cursor.execute(
+                sql.SQL(
+                    "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES "
+                    "IN SCHEMA public TO {}"
+                ).format(sql.Identifier(role))
+            )
+            cursor.execute(
+                sql.SQL("GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO {}").format(
+                    sql.Identifier(role)
+                )
+            )
+            cursor.execute(
+                "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = %s",
+                (role,),
+            )
+            role_attributes = cursor.fetchone()
+    finally:
+        admin_connection.close()
+
+    assert role_attributes == (False, False), (
+        f"Restricted serving role {role!r} has unexpected attributes: {role_attributes!r}"
+    )
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5432
+    return f"postgresql://{role}:{password}@{host}:{port}/{database}"
+
+
 def _postgres_connect_kwargs(
     postgres_service: dict[str, Any],
     *,
@@ -2916,8 +2988,7 @@ class TestGeneratedProjectRuntimeSmoke:
         """A generated project with DatabaseCache must run createcachetable successfully.
 
         SA63 regression: the createcachetable step must complete without
-        triggering the orgs boot guard when QUICKSCALE_ALLOW_BYPASSRLS=1
-        is set alongside RUNTIME_DATABASE_URL="".
+        triggering the orgs boot guard under the generated test settings.
 
         This test generates a minimal project, installs its Poetry
         dependencies, writes a test settings module with DatabaseCache,
@@ -2964,24 +3035,16 @@ class TestGeneratedProjectRuntimeSmoke:
         )
 
     @pytest.mark.e2e
-    def test_production_settings_createcachetable_with_orgs_bypass_hatch(
+    def test_production_settings_refuses_the_serving_bypass_hatch(
         self, tmp_path: Path, postgres_url: str
     ) -> None:
-        """Generated project with orgs module and production settings must pass
-        createcachetable through the env-var bridge (CR-SA63-002).
+        """Production serving refuses ``QUICKSCALE_ALLOW_BYPASSRLS=1`` (SA318).
 
-        This is the genuine production-settings/boot-guard e2e that the prior
-        SA63 pass missed: it embeds the orgs module, uses the actual generated
-        ``*.settings.production`` module (not ``test_smoke``), sets
-        ``RUNTIME_DATABASE_URL=""`` and ``QUICKSCALE_ALLOW_BYPASSRLS=1`` in
-        the subprocess environment, and runs ``createcachetable`` — proving
-        the complete ``start.sh``-launched path works through Django's real
-        production settings and the orgs boot guard.
-
-        The production settings bridge (CR-SA63-001) must select
-        ``DATABASE_URL`` because ``RUNTIME_DATABASE_URL`` is explicitly blank
-        and the bypass hatch is set.  The orgs boot guard must also pass
-        because ``QUICKSCALE_ALLOW_BYPASSRLS=1`` bypasses the RLS role check.
+        The bypass flag stays a non-serving development and test allowance. A
+        generated project with orgs must load its real production settings only
+        with a restricted ``RUNTIME_DATABASE_URL``; a serving boot that keeps
+        ``RUNTIME_DATABASE_URL`` blank and sets the flag fails at settings import
+        instead of bridging to the privileged role.
         """
         from quickscale_cli.commands.module_config import (
             default_module_config_from_manifest,
@@ -3064,15 +3127,12 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 6: Use the per-test database (already created by the
         # postgres_url fixture).
 
-        # Phase 7: Run createcachetable with production settings and the
-        # bridge env pair (simulating the start.sh.j2 createcachetable
-        # invocation).
-        # Build subprocess env from a copy so we can strip ambient REDIS_URL.
-        # The test must prove DatabaseCache/no-Redis path (CR-SA63-002).
+        # Phase 7: A serving boot with the bypass flag and a blank runtime URL
+        # must fail at settings import instead of bridging to DATABASE_URL.
         subprocess_env = build_isolated_poetry_env(
             {
                 "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
-                "SECRET_KEY": "qs-sa63-test-production-secret-key-not-for-real-use",
+                "SECRET_KEY": "qs-sa318-test-production-secret-key-not-for-real-use",
                 "DATABASE_URL": postgres_url,
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
@@ -3085,18 +3145,18 @@ class TestGeneratedProjectRuntimeSmoke:
         subprocess_env.pop("REDIS_URL", None)
 
         result = subprocess.run(
-            ["poetry", "run", "python", "manage.py", "createcachetable"],
+            ["poetry", "run", "python", "manage.py", "check"],
             cwd=project_path,
             capture_output=True,
             text=True,
             env=subprocess_env,
         )
-        assert result.returncode == 0, (
-            f"createcachetable under production settings with orgs module "
-            f"failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        assert result.returncode != 0, (
+            "production serving accepted QUICKSCALE_ALLOW_BYPASSRLS=1:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        assert "django_cache_table" in result.stdout or not result.stderr, (
-            "createcachetable should report success under production settings"
+        assert "QUICKSCALE_ALLOW_BYPASSRLS=1 is not allowed while serving" in (
+            result.stdout + result.stderr
         )
 
     @pytest.mark.e2e
@@ -3359,7 +3419,6 @@ class TestGeneratedProjectRuntimeSmoke:
                 "SECRET_KEY": "qs-sa160-production-csrf-test-secret-not-for-real-use",
                 "DATABASE_URL": postgres_url,
                 "RUNTIME_DATABASE_URL": "",
-                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
                     "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
@@ -3374,7 +3433,6 @@ class TestGeneratedProjectRuntimeSmoke:
             **production_environment,
             "QUICKSCALE_PRIVILEGED_COMMAND": "migrate",
         }
-        migration_environment.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
         assert migration_environment["RUNTIME_DATABASE_URL"] == ""
         migrate_result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
@@ -3393,7 +3451,6 @@ class TestGeneratedProjectRuntimeSmoke:
             **production_environment,
             "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
         }
-        cache_environment.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
         assert cache_environment["RUNTIME_DATABASE_URL"] == ""
         cache_result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "createcachetable"],
@@ -3407,6 +3464,13 @@ class TestGeneratedProjectRuntimeSmoke:
             f"production createcachetable failed:\n{cache_result.stdout}\n"
             f"{cache_result.stderr}"
         )
+
+        # Serve and create the browser credential through the same restricted
+        # runtime role a deployment uses; the superuser URL stays privileged.
+        restricted_runtime_url = _create_restricted_runtime_role(
+            postgres_url, "sa318_runtime_role"
+        )
+        production_environment["RUNTIME_DATABASE_URL"] = restricted_runtime_url
 
         frontend_path = project_path / "frontend"
         assert shutil.which("pnpm") is not None, "pnpm is required for production E2E"
@@ -3447,6 +3511,9 @@ class TestGeneratedProjectRuntimeSmoke:
         collectstatic_environment = {
             **production_environment,
             "QUICKSCALE_NON_DB_COMMAND": "collectstatic",
+            # The image build skips module startup checks because it carries no
+            # runtime credentials or database; collectstatic touches no DB.
+            "QUICKSCALE_SKIP_MODULE_CHECKS": "all",
         }
         assert "QUICKSCALE_PRIVILEGED_COMMAND" not in collectstatic_environment
         collectstatic_result = subprocess.run(
