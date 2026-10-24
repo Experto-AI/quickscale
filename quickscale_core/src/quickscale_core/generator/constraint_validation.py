@@ -14,7 +14,7 @@ relationship defined by the F7.2/F7.3 contract:
   :data:`runtime_pins.DJANGO_CONSTRAINT`.  The module lower bound is
   allowed to be tighter than the template's; it is passed in by the
   caller rather than derived, so any divergence has to be stated
-  explicitly.  As of the 6.0.7 bump the two bounds coincide.
+  explicitly.  As of the 6.0.8 bump the two bounds coincide.
 
 Each public function returns a list of human-readable drift messages
 (empty list = all constraints pass).  Callers should treat any non-empty
@@ -265,7 +265,7 @@ def check_module_django_constraints(
         Absolute path to the repository root.
     expected_django:
         The full Django constraint string that every packaged module must
-        carry (e.g. ``>=6.0.7,<6.1.0``).
+        carry (e.g. ``>=6.0.8,<6.1.0``).
 
     Returns
     -------

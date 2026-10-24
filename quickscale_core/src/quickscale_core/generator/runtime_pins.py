@@ -25,7 +25,7 @@ PYTHON_DOCKER_TAG: str = f"{PYTHON_PATCH_VERSION}-slim-bookworm"
 
 # ── Django ──────────────────────────────────────────────────────────
 # Full Poetry-compatible constraint string for ``[tool.poetry.dependencies] Django``.
-DJANGO_CONSTRAINT: str = ">=6.0.7,<6.1.0"
+DJANGO_CONSTRAINT: str = ">=6.0.8,<6.1.0"
 # The Django major.minor version used in the CI matrix.
 DJANGO_CI_MATRIX_VERSION: str = "6.0"
 
