@@ -23,7 +23,6 @@ from quickscale_core.schema.state_schema import (
 )
 import quickscale_core.project_state_hashes as _project_state_hashes
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
-from quickscale_core.apply import LedgerError, LedgerManager, RecoveryLedger
 from quickscale_core.config.module_config import (
     load_config as load_legacy_module_config,
 )
@@ -31,6 +30,8 @@ from quickscale_core.advisory_lock import (
     AdvisoryLock,
     AdvisoryLockContentionError,
 )
+import quickscale_core.utils.git_errors as _git_errors
+import quickscale_core.utils.git_naming as _git_naming
 from quickscale_cli.commands.remove_output import (
     _log_step_result,
     _show_module_not_found_error,
@@ -42,9 +43,6 @@ from quickscale_core.utils.theme_validation import (
     ThemeValidationError,
     validate_theme_preflight,
 )
-
-
-_APPLY_RECOVERY_FILENAME = "apply-recovery.yml"
 
 
 @dataclass(frozen=True)
@@ -64,10 +62,6 @@ class RemovalPlan:
     state: QuickScaleState | None
     updated_state: QuickScaleState | None
     state_needs_update: bool
-    apply_recovery_state: QuickScaleState | None
-    updated_apply_recovery_state: QuickScaleState | None
-    apply_recovery_needs_update: bool
-    apply_recovery_needs_delete: bool
     qs_config: QuickScaleConfig | None
     updated_qs_config: QuickScaleConfig | None
     config_needs_update: bool
@@ -108,40 +102,6 @@ def _load_state(
     except Exception as error:
         raise click.ClickException(
             f"Failed to load .quickscale/state.yml: {error}"
-        ) from error
-
-
-def apply_recovery_path(project_path: Path) -> Path:
-    """Return .quickscale/apply-recovery.yml path."""
-    return project_path / ".quickscale" / _APPLY_RECOVERY_FILENAME
-
-
-def _get_apply_recovery_manager(project_path: Path) -> LedgerManager:
-    """Return a LedgerManager bound to the recovery ledger file."""
-    return LedgerManager(project_path)
-
-
-def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
-    """Strictly load .quickscale/apply-recovery.yml when present.
-
-    Returns the embedded applied-state (:class:`QuickScaleState`) when the
-    recovery ledger file exists and is valid, or ``None`` when the file
-    does not exist.  Malformed content raises :class:`LedgerError` which
-    is surfaced as a :class:`click.ClickException`.
-    """
-    try:
-        mgr = _get_apply_recovery_manager(project_path)
-        ledger = mgr.load()
-        if ledger is None:
-            return None
-        return ledger.applied_state
-    except LedgerError as error:
-        raise click.ClickException(
-            f"Failed to load .quickscale/{_APPLY_RECOVERY_FILENAME}: {error}"
-        ) from error
-    except Exception as error:
-        raise click.ClickException(
-            f"Failed to load .quickscale/{_APPLY_RECOVERY_FILENAME}: {error}"
         ) from error
 
 
@@ -204,41 +164,32 @@ def _build_updated_state(
     return updated_state, removed
 
 
-def _apply_recovery_snapshot_is_obsolete(
-    recovery_state: QuickScaleState,
-    authoritative_state: QuickScaleState | None,
-) -> bool:
-    """Return whether a recovery snapshot would no longer affect apply planning."""
-    if not recovery_state.modules:
-        return True
+def _validate_module_name(module_name: str) -> None:
+    """Reject a name that is not a bare module slug.
 
-    if authoritative_state is None:
-        return False
+    The same slug rule gates split refs and module directories, so a value
+    that could traverse or escape ``modules/`` never reaches a path join.
+    """
+    try:
+        _git_naming.validate_module_name(module_name)
+    except _git_errors.GitError as error:
+        raise click.BadParameter(
+            f"invalid module name {module_name!r}: {error}",
+            param_hint="MODULE_NAME",
+        ) from error
 
-    return recovery_state.modules == authoritative_state.modules
 
-
-def _build_updated_apply_recovery_state(
-    recovery_state: QuickScaleState | None,
-    authoritative_state: QuickScaleState | None,
-    module_name: str,
-) -> tuple[QuickScaleState | None, bool, bool]:
-    """Return the updated recovery snapshot plus whether to write or clear it."""
-    if recovery_state is None:
-        return None, False, False
-
-    updated_recovery_state = copy.deepcopy(recovery_state)
-    removed = updated_recovery_state.modules.pop(module_name, None) is not None
-    if not removed:
-        return recovery_state, False, False
-
-    if _apply_recovery_snapshot_is_obsolete(
-        updated_recovery_state,
-        authoritative_state,
-    ):
-        return None, False, True
-
-    return updated_recovery_state, True, False
+def _validated_module_path(project_path: Path, module_name: str) -> Path:
+    """Return ``<project>/modules/<name>`` after pattern and containment checks."""
+    _validate_module_name(module_name)
+    modules_root = (project_path / "modules").resolve()
+    module_path = (modules_root / module_name).resolve()
+    if module_path.parent != modules_root:
+        raise click.BadParameter(
+            f"module {module_name!r} resolves outside the project's modules directory",
+            param_hint="MODULE_NAME",
+        )
+    return project_path / "modules" / module_name
 
 
 def _discover_embedded_modules(project_path: Path) -> set[str]:
@@ -344,7 +295,7 @@ def _record_mutation_snapshots(
 ) -> list[PathSnapshot]:
     """Snapshot every artifact this remove slice may mutate."""
     snapshot_targets: list[tuple[str, Path]] = [
-        ("module-dir", project_path / "modules" / module_name),
+        ("module-dir", _validated_module_path(project_path, module_name)),
         (
             "managed-settings-modules",
             project_path / plan.project_package / "settings" / "modules.py",
@@ -366,10 +317,6 @@ def _record_mutation_snapshots(
         snapshot_targets.append(("quickscale-yml", project_path / "quickscale.yml"))
     if plan.state_needs_update:
         snapshot_targets.append(("state-yml", state_manager_path(project_path)))
-    if plan.apply_recovery_needs_update or plan.apply_recovery_needs_delete:
-        snapshot_targets.append(
-            ("apply-recovery-yml", apply_recovery_path(project_path))
-        )
     if plan.legacy_tracking_needs_update:
         # F-EXCEPTION: F12.2
         # While pre-M2 compatibility tracking still exists, keep a rollback
@@ -404,54 +351,9 @@ def _update_quickscale_yml(
     config_path.write_text(generate_yaml(updated_config))
 
 
-def _update_apply_recovery_state(
-    project_path: Path,
-    updated_state: QuickScaleState | None,
-) -> None:
-    """Persist the updated apply recovery snapshot.
-
-    The existing git-index checkpoint is loaded from the on-disk recovery
-    ledger and preserved in the rewritten file.  If the on-disk ledger is
-    absent, malformed, or missing the checkpoint, the operation fails hard
-    (``LedgerError`` / ``RuntimeError``) — present recovery ledgers must
-    always carry a valid ``git_index_checkpoint``.
-
-    AF5 Phase 1: The ``resume_checkpoint`` field is carried forward from
-    the existing ledger so that AF5-era checkpoint metadata is preserved
-    across removal-triggered recovery rewrites.  AF6-era ledgers without
-    the field are handled conservatively (``None``).
-    """
-    if updated_state is None:
-        return
-
-    mgr = _get_apply_recovery_manager(project_path)
-    existing_ledger = mgr.load()
-    if existing_ledger is None:
-        raise RuntimeError(
-            "Cannot update recovery state: existing apply-recovery.yml "
-            "is absent, but the removal plan reported it needs an update."
-        )
-    ledger = RecoveryLedger(
-        applied_state=updated_state,
-        resume_checkpoint=existing_ledger.resume_checkpoint,
-        step_progress=None,
-        git_index_checkpoint=existing_ledger.git_index_checkpoint,
-    )
-    mgr.save(ledger)
-
-
-def _clear_apply_recovery_state(project_path: Path) -> None:
-    """Remove any obsolete apply recovery snapshot."""
-    recovery_path = apply_recovery_path(project_path)
-    if not recovery_path.exists():
-        return
-
-    recovery_path.unlink()
-
-
 def _remove_module_directory(project_path: Path, module_name: str) -> tuple[bool, str]:
     """Remove the module directory from the project"""
-    module_path = project_path / "modules" / module_name
+    module_path = _validated_module_path(project_path, module_name)
 
     if not module_path.exists():
         return True, f"Module directory not found (already removed): {module_path}"
@@ -520,7 +422,7 @@ def _check_module_exists(
     Returns:
         Tuple of (in_state, in_filesystem, state)
     """
-    module_path = project_path / "modules" / module_name
+    module_path = _validated_module_path(project_path, module_name)
     if state is None:
         state = state_manager.load()
 
@@ -557,7 +459,6 @@ def _build_removal_plan(
 ) -> RemovalPlan:
     """Load all required state before mutating the project."""
     state = _load_state(project_path, state_manager)
-    apply_recovery_state = _load_apply_recovery_state(project_path)
     qs_config = _load_quickscale_config(project_path)
     legacy_modules = _load_legacy_tracking(project_path)
 
@@ -567,15 +468,6 @@ def _build_removal_plan(
         raise click.ClickException(f"Python package directory not found: {package_dir}")
 
     updated_state, state_needs_update = _build_updated_state(state, module_name)
-    (
-        updated_apply_recovery_state,
-        apply_recovery_needs_update,
-        apply_recovery_needs_delete,
-    ) = _build_updated_apply_recovery_state(
-        apply_recovery_state,
-        updated_state,
-        module_name,
-    )
     updated_qs_config, config_needs_update = _build_updated_quickscale_config(
         qs_config,
         module_name,
@@ -590,10 +482,6 @@ def _build_removal_plan(
         state=state,
         updated_state=updated_state,
         state_needs_update=state_needs_update,
-        apply_recovery_state=apply_recovery_state,
-        updated_apply_recovery_state=updated_apply_recovery_state,
-        apply_recovery_needs_update=apply_recovery_needs_update,
-        apply_recovery_needs_delete=apply_recovery_needs_delete,
         qs_config=qs_config,
         updated_qs_config=updated_qs_config,
         config_needs_update=config_needs_update,
@@ -645,24 +533,6 @@ def _perform_removal_steps(
                 _update_state_for_removal(plan.updated_state, state_manager)
                 _log_step_result(True, "Updated .quickscale/state.yml", is_error=True)
 
-            if plan.apply_recovery_needs_update:
-                _update_apply_recovery_state(
-                    project_path,
-                    plan.updated_apply_recovery_state,
-                )
-                _log_step_result(
-                    True,
-                    f"Updated .quickscale/{_APPLY_RECOVERY_FILENAME}",
-                    is_error=True,
-                )
-            elif plan.apply_recovery_needs_delete:
-                _clear_apply_recovery_state(project_path)
-                _log_step_result(
-                    True,
-                    f"Cleared obsolete .quickscale/{_APPLY_RECOVERY_FILENAME}",
-                    is_error=True,
-                )
-
             success, message = _remove_module_directory(project_path, module_name)
             if not success:
                 raise RuntimeError(message)
@@ -709,8 +579,7 @@ def remove(module_name: str, force: bool, keep_data: bool) -> None:
       1. Remove the module directory from modules/
       2. Update .quickscale/state.yml
       3. Update quickscale.yml (if exists)
-      4. Update or clear .quickscale/apply-recovery.yml when needed
-      5. Regenerate managed module wiring files
+      4. Regenerate managed module wiring files
 
     \b
     ⚠️  WARNING: This may cause data loss!
@@ -740,18 +609,21 @@ def remove(module_name: str, force: bool, keep_data: bool) -> None:
         )
         raise click.Abort()
 
+    # Reject traversal or non-slug names before any state read or path join.
+    _validate_module_name(module_name)
+
     state_manager = StateManager(project_path)
     plan = _build_removal_plan(project_path, module_name, state_manager)
 
     # Check if module exists
-    module_in_state, module_in_filesystem, state = _check_module_exists(
+    module_in_state, _module_in_filesystem, state = _check_module_exists(
         project_path,
         module_name,
         state_manager,
         plan.state,
     )
 
-    if not module_in_state and not module_in_filesystem:
+    if not module_in_state:
         _show_module_not_found_error(module_name, state)
         raise click.Abort()
 

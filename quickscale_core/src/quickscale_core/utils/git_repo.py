@@ -18,8 +18,17 @@ from quickscale_core.utils.git_runner import (
 )
 
 
-def is_git_repo(path: Path | None = None, *, runner: GitRunner | None = None) -> bool:
-    """Check if current directory or specified path is a git repository"""
+def has_git_repository(
+    path: Path | None = None, *, runner: GitRunner | None = None
+) -> bool:
+    """Return whether *path* is a Git repository.
+
+    Unlike :func:`is_git_repo`, this probe distinguishes a confirmed
+    non-repository from an indeterminate result.  A missing Git executable or
+    an unexpected ``rev-parse`` failure raises :class:`GitError`, so callers
+    that gate destructive work can fail closed instead of treating an
+    unavailable probe as "not a repository".
+    """
     cwd = path or Path.cwd()
     try:
         _run_git(
@@ -31,21 +40,63 @@ def is_git_repo(path: Path | None = None, *, runner: GitRunner | None = None) ->
             runner=runner,
         )
         return True
-    except subprocess.CalledProcessError, FileNotFoundError:
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr or ""
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        if "not a git repository" in stderr.lower():
+            return False
+        raise GitError(
+            f"Failed to inspect git repository: {stderr or 'rev-parse failed'}"
+        ) from exc
+    except FileNotFoundError as exc:
+        raise GitError(
+            "git executable not found; cannot inspect repository state"
+        ) from exc
+
+
+def is_git_repo(path: Path | None = None, *, runner: GitRunner | None = None) -> bool:
+    """Check if current directory or specified path is a git repository.
+
+    An unavailable or failed probe is reported as ``False`` for backward
+    compatibility.  Mutating callers that must fail closed use
+    :func:`has_git_repository` instead.
+    """
+    try:
+        return has_git_repository(path, runner=runner)
+    except GitError:
         return False
 
 
 def is_working_directory_clean(
-    path: Path | None = None, *, runner: GitRunner | None = None
+    path: Path | None = None,
+    *,
+    runner: GitRunner | None = None,
+    include_untracked: bool = True,
 ) -> bool:
-    """Check if there are uncommitted changes in the git working directory"""
+    """Check if there are uncommitted changes in the git working directory.
+
+    Args:
+        path: Working directory to inspect; defaults to the process directory.
+        runner: Optional Git runner injection for tests.
+        include_untracked: When ``False``, only tracked modifications, staged
+            changes, and deletions count as dirty.  Callers that must preserve
+            an existing baseline's tracked files opt out of the broader default.
+
+    Raises:
+        GitError: If Git cannot report the working-tree state.
+    """
     cwd = path or Path.cwd()
     try:
         result = _run_git(
             [
                 "status",
                 "--porcelain=v1",
-                "--untracked-files=normal",
+                (
+                    "--untracked-files=normal"
+                    if include_untracked
+                    else "--untracked-files=no"
+                ),
                 "-z",
             ],
             cwd=cwd,

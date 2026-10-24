@@ -68,7 +68,7 @@ test harness now runs under the RLS runtime role.
 |---|---|---|---|
 | `quickscale_cli apply` → generator emission mapping (144 emitted paths) | call / build | `get_generator_emission_mapping` | template set is source of truth; closed-world test |
 | apply → managed files (`settings/modules.py`, `urls_modules.py`, seam `.d.ts`/`.keys.ts`, CI env, operations page, `quickscale_managed/*`) | shared state / hashes | `project_state_hashes.py` + module manifests | every managed output hash-tracked (SA316) |
-| apply → `.quickscale/state.yml` and `.quickscale/apply-recovery.yml` | shared state | two serializers | independent writes; merge rules differ |
+| apply → `.quickscale/state.yml` (applied state) and `.quickscale/apply-recovery.yml` (resume pointer) | shared state | `state.yml` | one applied-state owner; the ledger records progress only |
 | `quickscale update` → split branch head → `git subtree pull` → `pyproject.toml` | call / VCS | CLI + remote branch | branch is mutable; lockfile not refreshed |
 | generated boot → `start.sh` → superuser migrate → runtime role → gunicorn | call / privilege | `start.sh` + runtime settings | migrations at every boot; no pre-deploy/rollback |
 | generated request → `ClientIdentityMiddleware` → RLS GUC → module views | call / trust boundary | orgs + runtime settings | RLS only under runtime role; generated tests run under it |
@@ -77,14 +77,15 @@ test harness now runs under the RLS runtime role.
 
 **Critical-path walkthrough and lifecycle transition.**
 
-*Apply path.* `quickscale apply` loads `state.yml` and the recovery ledger and merges them, computes
-the delta, acquires the project lock, embeds missing modules from tags, snapshots state, regenerates
-managed wiring and records every managed output's hash, syncs env/dependencies, runs migrations,
-then finalizes state.
-The failure branch matters more than the happy path: step 4 mutates `managed_files` and checkpoints
-the pre-step-4 snapshot; a kill after it resumes at step 5 and finalizes state without hashes (F5).
-A kill during step 1 leaves subtree commits and module directories but no checkpoint; a kill during
-step 2 aborts without saving the ledger (F5). `update` has no checkpoint at all: it pulls each module
+*Apply path.* `quickscale apply` loads `state.yml` and the recovery ledger (resume pointer only),
+computes the delta, acquires the project lock, embeds missing modules from tags, writes the
+post-embed snapshot to `state.yml`, regenerates managed wiring and records every managed output's
+hash in `state.yml`, syncs env/dependencies, runs migrations, then finalizes state and clears the
+ledger.
+The failure branch matters more than the happy path: step 4 mutates `managed_files` and writes the
+live snapshot to `state.yml` before its checkpoint, so a kill after it resumes at step 5 with
+managed-file drift still detectable. A kill during step 1 leaves subtree commits and module
+directories but no checkpoint; the next run re-plans from `state.yml`. `update` has no checkpoint at all: it pulls each module
 and commits independently, so a kill leaves a mixed set (F2). External effects (subtree commits,
 `poetry install`, `migrate`, Docker/Railway) are not reversible; the ledger is the only recovery
 record.
@@ -153,7 +154,6 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | 2 | `module-upgrade-no-reconciler` | Module update is a mutable multi-commit operation | now | High | M | two-way | Update follows a branch tip and mutates modules without a journal or lockfile refresh. |
 | 3 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
 | 4 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
-| 5 | `apply-state-dual-owner` | Apply state has two full owners and a lossy resume snapshot | 6–18 months | High | M | two-way | A crash can persist state without managed-file hashes. |
 
 ## Machine-readable index
 
@@ -173,7 +173,7 @@ items:
   - {id: module-upgrade-no-reconciler, status: open, rank: 2,
      title: "Module update is a mutable multi-commit operation",
      lenses: [IV, VII, X, XIX], horizon: now, confidence: High, size: M,
-     reversibility: two-way door, depends_on: [apply-state-dual-owner], amplifies: [],
+     reversibility: two-way door, depends_on: [], amplifies: [],
      anchors: [quickscale_cli/src/quickscale_cli/commands/_module_update.py,
                quickscale_cli/src/quickscale_cli/commands/_module_embed.py,
                quickscale_core/src/quickscale_core/utils/git_repo.py],
@@ -196,15 +196,7 @@ items:
                quickscale_core/src/quickscale_core/dr_engine/_media.py,
                quickscale_core/src/quickscale_core/dr_engine/_metadata.py],
      first_seen: 2026-10-23, last_verified: 2026-10-23}
-  - {id: apply-state-dual-owner, status: open, rank: 5,
-     title: "Apply state has two full owners and a lossy resume snapshot",
-     lenses: [I, IV, X], horizon: 6-18 months, confidence: High, size: M,
-     reversibility: two-way door, depends_on: [], amplifies: [module-upgrade-no-reconciler],
-     anchors: [quickscale_cli/src/quickscale_cli/commands/_context.py,
-               quickscale_cli/src/quickscale_cli/commands/_state.py,
-               quickscale_core/src/quickscale_core/apply/executor.py,
-               quickscale_cli/src/quickscale_cli/commands/_steps.py],
-     first_seen: 2026-10-23, last_verified: 2026-10-23}
+
   - {id: core-holds-module-vocabulary, status: watchlist}
   - {id: manifest-dsl-vocabulary-growth, status: watchlist}
   - {id: session-advisory-lock-pooling, status: watchlist}
@@ -531,70 +523,6 @@ items:
   partially restored database (or a documented resumable state). **First step:** include
   project-app migration hashes and a manifest version check before touching media.
 
-### Finding 5: Apply state has two full owners and a lossy resume snapshot
-
-- **ID:** `apply-state-dual-owner`
-- **Rank rationale:** Medium × Medium, linear-to-steep. The state is the generator's contract with
-  the project; every new state field and every apply step widens the merge surface, and a crash
-  after hash capture silently disables drift detection.
-- **Horizon & trigger:** `6–18 months` — a hard crash after apply checkpoint 4, or the first observed
-  managed-file drift miss.
-- **Confidence:** High on the code path; production frequency is inferred (no crash telemetry).
-- **Context dependence:** `wrong-regardless` for the state-ownership design; likelihood scales with
-  apply failure frequency. Lives in realities (A) and (B).
-- **Problem:** Applied state has two full owners; the recovery ledger carries a pre-hash snapshot and
-  apply merges the two field-asymmetrically, so an interrupted apply can persist state without
-  managed-file hashes.
-- **Evidence:**
-  - `_context.py:250-266` loads `state.yml` and `apply-recovery.yml`, then
-    `_merge_apply_recovery_state` overlays only `last_applied` and modules (`_state.py:299-314`);
-    `state.yml`'s `managed_files` and contract steps come from one side, modules from the other.
-  - `ApplyExecutor.checkpoint_step` carries `existing.applied_state` forward unless a snapshot is
-    passed (`executor.py:270-287`). Step 4 mutates the in-memory state's `managed_files`
-    (`_state.py:128-131`) and then checkpoints without passing it (`_steps.py:313-325`), so the
-    ledger keeps the pre-step-4 snapshot.
-  - On resume, `_resume_post_embed_state` returns the ledger's snapshot when step 2 is skipped
-    (`_steps.py:253-255`); steps 3–4 are skipped by the checkpoint; finalization saves that snapshot
-    (`_finalize.py:363-371`). A crash after step 4 therefore writes a state with no managed-file
-    hashes.
-  - The legacy reconciliation documented at `_state.py:74-77` references
-    `_sync_legacy_module_config_versions`, which has no definition anywhere; `config.yml` is written
-    non-atomically (`module_config.py:184-194`) and its version is never updated (no non-test caller).
-- **Counter-evidence:** both serializers write atomically (tmp + replace); loaders fail hard on
-  malformed input; the fault-injection harness covers step boundaries; tests round-trip modules
-  through the ledger. Searched for an equality/reconciliation function, a resume test asserting
-  `managed_files`, and a definition of the named legacy sync — found none. The harness uses no-op
-  callbacks and does not assert state content.
-- **Why it compounds:** growth variable = **state fields × apply steps**. Each new field (provenance,
-  contract steps, managed files) must be threaded through both serializers and the merge; the
-  resume path already drops one. The managed-file hashes are what make drift detection possible;
-  losing them makes the next apply silently overwrite user edits. A second project doubles the
-  number of states exposed to the same path.
-- **Detection signal:** after a failed apply, `status` shows no managed-file drift for an edited
-  managed file; `state.yml` has no `managed_files`; the next apply changes a managed file with no
-  warning; operators learn to delete `.quickscale/apply-recovery.yml`.
-- **Steelman:** the ledger is a recovery aid, `state.yml` is authoritative, and resume is best-effort;
-  a full re-run recaptures hashes. That holds while crashes are rare and every recovery is followed
-  by a clean apply. The code does not enforce either condition.
-- **Correct shape:** one owner for applied state; the recovery record stores the resume pointer and
-  immutable facts, not a second full snapshot; resume mutates the authoritative state and every
-  checkpoint carries the live snapshot.
-- **Do-nothing cost:** silent drift blindness after interrupted applies; each new state field adds a
-  merge bug; the recovery mechanism becomes a source of state corruption rather than a cure.
-- **Options:**
-  1. **Single owner**: the ledger stores step progress and the resume pointer only; state comes from
-     `state.yml` on every resume. M, two-way; removes the mechanism.
-  2. **Keep snapshots, close the gap**: pass the live state on every checkpoint, add an
-     equality/reconciliation check on load, and add a resume test asserting `managed_files`. S,
-     two-way; contains but does not remove the duplication.
-  3. **Accept and document** `rm .quickscale/apply-recovery.yml` recovery. Containment: a status
-     warning when the ledger and state diverge. Revocation: an observed drift miss.
-- **Recommendation:** option 1 with option 2 as the interim. **Size:** M · **Reversibility:** two-way
-  door · **Guard:** a fault-injection test that kills after step 4, resumes, and asserts
-  `managed_files` and contract steps survive; an equality check on ledger/state. **Acceptance
-  check:** the same crash leaves a state that detects an edited managed file. **First step:** stop
-  carrying `applied_state` in the ledger; keep only the checkpoint.
-
 ## Change-cost probe
 
 **Probe A — SA153 adds a project-owned public page (next feature).** Stations: user-owned theme page,
@@ -617,12 +545,9 @@ rendering works.
 
 ## Fix order and interactions
 
-- **F5 before/with F2:** the update journal needs one state owner. Fixing F2 on top of the dual-owner
-  state would add a third writer.
 - **F3 and F4 share media:** F3's production storage backend reduces F4's media gap but does not
   close it; F4 must still decide whether media is captured or explicitly external.
-- **Ranking already reflects amplification:** F1/F2 are High × High; F3/F4 are High × Medium;
-  F5 is Medium × Medium.
+- **Ranking already reflects amplification:** F1/F2 are High × High; F3/F4 are High × Medium.
 
 ## Sound load-bearing decisions
 
@@ -641,7 +566,7 @@ rendering works.
    there.
 4. **State and ledger writes are atomic and fail hard.** `StateManager.save` and `LedgerManager.save`
    use tmp + replace; malformed state raises rather than silently degrading; lock release checks
-   inode, PID, and an acquisition token. Keep these properties through the F5 refactor.
+   inode, PID, and an acquisition token. Keep these properties through future state changes.
 5. **Split publication/seal is hardened.** Maintainer publish enforces release-authoritative
    `VERSION`, origin/local config, expected remote SHA, fast-forward ancestry, and a post-push
    tree/tag check. The user-facing update path should reuse this, not reinvent it.
@@ -776,6 +701,9 @@ watchlist **6**.
 - 2026-10-23 — prior `Questions`: second live project still hypothetical; answer unchanged.
 - 2026-10-23 — new IDs: `module-upgrade-no-reconciler`, `contract-vintage-boundary-blind`,
   `generated-deploy-topology-unmodeled`, `generated-isolation-unverified`,
-  `backup-restore-incoherent`, `apply-state-dual-owner`; new watchlist: `release-gate-version-blind`,
+  `backup-restore-incoherent`; new watchlist: `release-gate-version-blind`,
   `cli-headless-gap`, `node-pin-duplication`, `tenant-removal-coverage`, `admin-tenant-authority`,
   `seam-unversioned`.
+- 2026-10-24 — `apply-state-dual-owner`: resolved by SA317.  The recovery ledger now stores the
+  resume pointer and diagnostic progress only; `state.yml` is the single applied-state owner and
+  resume reads it.

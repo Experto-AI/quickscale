@@ -132,15 +132,21 @@ def _generate_new_project(
     qs_config: QuickScaleConfig, output_path: Path, force: bool
 ) -> None:
     """Generate project for new installations."""
+    # ProjectGenerator refuses any existing output path.  An empty directory
+    # carries nothing to preserve, so let generation target it directly.
+    if output_path.exists() and not any(output_path.iterdir()):
+        output_path.rmdir()
+
     if output_path.exists():
         quickscale_yml_path = output_path / "quickscale.yml"
         if quickscale_yml_path.exists():
             _generate_with_existing_config(
                 qs_config, output_path, quickscale_yml_path, force
             )
-        else:
-            if not _generate_project(qs_config, output_path):
-                raise click.Abort()
+        elif force:
+            _swap_generated_project(qs_config, output_path, preserve_config=None)
+        elif not _generate_project(qs_config, output_path):
+            raise click.Abort()
     else:
         if not _generate_project(qs_config, output_path):
             raise click.Abort()
@@ -156,6 +162,14 @@ def _generate_with_existing_config(
     import shutil
     import tempfile
 
+    if force:
+        _swap_generated_project(
+            qs_config,
+            output_path,
+            preserve_config=quickscale_yml_path,
+        )
+        return
+
     saved_config = quickscale_yml_path.read_text()
 
     temp_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
@@ -165,52 +179,80 @@ def _generate_with_existing_config(
         shutil.rmtree(temp_dir)
         raise click.Abort()
 
-    if force:
-        # Backup+swap+rollback: move existing content to a same-filesystem backup
-        # dir, swap staged files in, and restore the originals on failure.
-        backup_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
-        try:
-            for item in output_path.iterdir():
-                if item.name != "quickscale.yml":
-                    shutil.move(str(item), str(backup_dir / item.name))
-        except Exception:
-            # Backup phase failed — restore whatever was moved to backup
-            for item in backup_dir.iterdir():
-                shutil.move(str(item), str(output_path / item.name))
-            shutil.rmtree(backup_dir)
-            shutil.rmtree(temp_dir)
-            raise click.Abort()
-
-        try:
-            for item in temp_project.iterdir():
-                dest = output_path / item.name
-                shutil.move(str(item), str(dest))
-        except Exception:
-            # Staging swap failed — remove partially-moved files, restore originals
-            for item in list(output_path.iterdir()):
-                if item.name != "quickscale.yml":
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
-            for item in backup_dir.iterdir():
-                shutil.move(str(item), str(output_path / item.name))
-            shutil.rmtree(backup_dir)
-            shutil.rmtree(temp_dir)
-            raise click.Abort()
-
-        shutil.rmtree(backup_dir)
-    else:
-        for item in temp_project.iterdir():
-            dest = output_path / item.name
-            if dest.exists():
-                if dest.is_dir():
-                    shutil.rmtree(dest)
-                else:
-                    dest.unlink()
-            shutil.move(str(item), str(dest))
+    for item in temp_project.iterdir():
+        dest = output_path / item.name
+        if dest.exists():
+            if dest.is_dir():
+                shutil.rmtree(dest)
+            else:
+                dest.unlink()
+        shutil.move(str(item), str(dest))
 
     shutil.rmtree(temp_dir)
 
     quickscale_yml_path.write_text(saved_config)
+    click.secho(f"✅ Project generated: {output_path}", fg="green")
+
+
+def _swap_generated_project(
+    qs_config: QuickScaleConfig,
+    output_path: Path,
+    *,
+    preserve_config: Path | None,
+) -> None:
+    """Stage a fresh generation, then swap it in with full rollback.
+
+    The staged project and the backup live on the output path's filesystem so
+    every swap is a rename.  *preserve_config* names a file whose text is
+    restored after the swap (apply's user-owned ``quickscale.yml``); the
+    backup excludes it so it is never moved.
+    """
+    import shutil
+    import tempfile
+
+    preserved_name = preserve_config.name if preserve_config is not None else None
+    saved_config = preserve_config.read_text() if preserve_config is not None else None
+
+    temp_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
+    temp_project = temp_dir / qs_config.project.slug
+
+    if not _generate_project(qs_config, temp_project):
+        shutil.rmtree(temp_dir)
+        raise click.Abort()
+
+    backup_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
+    try:
+        for item in output_path.iterdir():
+            if item.name != preserved_name:
+                shutil.move(str(item), str(backup_dir / item.name))
+    except Exception:
+        # Backup phase failed — restore whatever was moved to backup.
+        for item in backup_dir.iterdir():
+            shutil.move(str(item), str(output_path / item.name))
+        shutil.rmtree(backup_dir)
+        shutil.rmtree(temp_dir)
+        raise click.Abort()
+
+    try:
+        for item in temp_project.iterdir():
+            shutil.move(str(item), str(output_path / item.name))
+    except Exception:
+        # Staging swap failed — remove partially-moved files, restore originals.
+        for item in list(output_path.iterdir()):
+            if item.name != preserved_name:
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+        for item in backup_dir.iterdir():
+            shutil.move(str(item), str(output_path / item.name))
+        shutil.rmtree(backup_dir)
+        shutil.rmtree(temp_dir)
+        raise click.Abort()
+
+    shutil.rmtree(backup_dir)
+    shutil.rmtree(temp_dir)
+
+    if preserve_config is not None and saved_config is not None:
+        preserve_config.write_text(saved_config)
     click.secho(f"✅ Project generated: {output_path}", fg="green")

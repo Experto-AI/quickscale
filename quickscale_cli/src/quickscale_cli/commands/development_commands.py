@@ -135,10 +135,7 @@ def _require_docker_compose_command() -> list[str]:
 def _validate_theme_preflight_for_up() -> None:
     """Run the read-only theme preflight and display its up remediation."""
     try:
-        validate_theme_preflight(
-            Path.cwd(),
-            allow_recovery_checkpoint=True,
-        )
+        validate_theme_preflight(Path.cwd())
     except ThemeValidationError as exc:
         exc_text = str(exc)
         click.secho(
@@ -530,11 +527,9 @@ def _run_up_services(
 @click.option("--no-cache", is_flag=True, help="Build without using cache")
 def up(build: bool, no_cache: bool) -> None:
     """Start Docker services for development."""
-    # Run read-only theme preflight before any Docker/compose/port probe.
-    # The recovery ledger (.quickscale/apply-recovery.yml) is an internal
-    # apply checkpoint that may carry a ``__checkpoint__`` placeholder
-    # theme before the real project state is saved. The validator's explicit
-    # up-only opt-in accepts that placeholder; other recovery themes fail closed.
+    # Run the read-only theme preflight before any Docker/compose/port probe.
+    # It validates desired and applied state only; the recovery ledger carries
+    # no applied state and is not a theme source.
     _validate_theme_preflight_for_up()
 
     _validate_project_and_docker()

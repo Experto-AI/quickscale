@@ -248,9 +248,14 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         raise click.Abort() from error
 
     try:
-        recovery_state = (
-            _state._load_apply_recovery_state(output_path)
+        recovery_ledger = (
+            _state._load_apply_recovery_ledger(output_path)
             if output_path.exists()
+            else None
+        )
+        legacy_state = (
+            _state._load_legacy_ledger_state(output_path)
+            if recovery_ledger is not None
             else None
         )
     except _state_schema.StateError as error:
@@ -261,8 +266,11 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         )
         raise click.Abort() from error
 
-    existing_state = _state._merge_apply_recovery_state(
-        authoritative_state, recovery_state
+    # state.yml is the single applied-state owner.  A pre-SA317 ledger's
+    # embedded snapshot is read once for planning and materialized into
+    # state.yml under the lock; the ledger itself stays a pointer.
+    existing_state = _state._merge_legacy_recovery_state(
+        authoritative_state, legacy_state, project_path=output_path
     )
 
     # Load manifests for modules (needed for config change detection)
@@ -292,7 +300,7 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         existing_state=existing_state,
         manifests=manifests,
         delta=delta,
-        has_pending_post_embed_recovery=recovery_state is not None,
+        has_pending_post_embed_recovery=recovery_ledger is not None,
         had_existing_state=authoritative_state is not None,
     )
 
@@ -366,6 +374,17 @@ def _context_had_existing_state(ctx: Any) -> bool:
     return getattr(ctx, "existing_state", None) is not None
 
 
+def _context_confirms_contract_adoption(ctx: Any) -> bool:
+    """Return the adoption flag only when it is a real bool.
+
+    Loose test doubles expose arbitrary attributes as truthy mocks; the
+    production context always carries a bool, so anything else means the
+    operator did not confirm adoption.
+    """
+    value = getattr(ctx, "confirm_contract_adoption", False)
+    return value if isinstance(value, bool) else False
+
+
 def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     """Re-read authoritative state and recompute delta after lock acquisition.
 
@@ -390,39 +409,51 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     except _state_schema.StateError:
         return  # Keep the pre-lock context; the locked path will surface errors.
 
-    # If we could not load authoritative state, keep the pre-lock context.
-    # This handles both fresh-project paths and test fixtures that use
-    # non-project directories.
-    if authoritative_state is None:
-        return
-
-    # F12.1d: malformed authoritative recovery ledger must fail hard
-    # rather than being silently treated as absent.  LedgerError
-    # (subclass of StateError) propagates to the operator.
-    recovery_state = _state._load_apply_recovery_state(ctx.output_path)
-
-    merged_state = _state._merge_apply_recovery_state(
-        authoritative_state, recovery_state
+    # F12.1d: malformed authoritative recovery ledger must fail hard rather
+    # than being silently treated as absent.  LedgerError (subclass of
+    # StateError) propagates to the operator.
+    recovery_ledger = _state._load_apply_recovery_ledger(ctx.output_path)
+    legacy_state = (
+        _state._load_legacy_ledger_state(ctx.output_path)
+        if recovery_ledger is not None
+        else None
     )
 
-    # Reload manifests for the refreshed state.
+    # A pre-SA317 ledger's snapshot is migrated into state.yml once, under the
+    # apply lock, so the ledger becomes a pointer from this point on.
+    merged_state = _state._merge_legacy_recovery_state(
+        authoritative_state, legacy_state, project_path=ctx.output_path
+    )
+    if merged_state is None:
+        return
+    if legacy_state is not None:
+        if not _state._persist_state_snapshot(ctx.output_path, merged_state):
+            raise click.ClickException(
+                "Unable to migrate a legacy apply recovery snapshot into "
+                ".quickscale/state.yml. Remove .quickscale/"
+                f"{_APPLY_RECOVERY_FILENAME} and re-run 'quickscale apply'."
+            )
+    authoritative_state = merged_state
+
+    # Reload manifests for the refreshed authoritative state.  The ledger is
+    # only a resume pointer; it never contributes applied state.
     manifests: dict[str, ModuleManifest] = {}
-    if merged_state and merged_state.modules:
+    if authoritative_state.modules:
         try:
             manifests = _config._load_module_manifests(
                 ctx.output_path,
-                list(merged_state.modules.keys()),
+                list(authoritative_state.modules.keys()),
                 strict=True,
             )
         except _loader_errors.ManifestError as error:
             _config._abort_for_manifest_error(error, command_name="apply")
 
-    delta = _delta.compute_delta(ctx.qs_config, merged_state, manifests)
+    delta = _delta.compute_delta(ctx.qs_config, authoritative_state, manifests)
 
-    ctx.existing_state = merged_state
+    ctx.existing_state = authoritative_state
     ctx.manifests = manifests
     ctx.delta = delta
-    ctx.has_pending_post_embed_recovery = recovery_state is not None
+    ctx.has_pending_post_embed_recovery = recovery_ledger is not None
     ctx.had_existing_state = True
 
 
@@ -475,10 +506,17 @@ def _enforce_apply_contract_vintage_preflight(
         return
 
     try:
-        authoritative_state = _project_state_manager.ProjectStateManager(
+        existing_state = _project_state_manager.ProjectStateManager(
             output_path
         ).load_state()
-        recovery_state = _state._load_apply_recovery_state(output_path)
+        # Validate the ledger too: a malformed resume pointer must fail before
+        # any mutation even though it owns no applied state.
+        recovery_ledger = _state._load_apply_recovery_ledger(output_path)
+        legacy_state = (
+            _state._load_legacy_ledger_state(output_path)
+            if recovery_ledger is not None
+            else None
+        )
     except _state_schema.StateError as error:
         click.secho(
             f"\n❌ Failed to load existing project state: {error}",
@@ -486,9 +524,8 @@ def _enforce_apply_contract_vintage_preflight(
             err=True,
         )
         raise click.Abort() from error
-    existing_state = _state._merge_apply_recovery_state(
-        authoritative_state,
-        recovery_state,
+    existing_state = _state._merge_legacy_recovery_state(
+        existing_state, legacy_state, project_path=output_path
     )
     if existing_state is None:
         return

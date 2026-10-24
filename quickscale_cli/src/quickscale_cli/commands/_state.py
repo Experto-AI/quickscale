@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+import yaml
 
 
 from quickscale_cli.commands._module_shared import ModuleEmbedProvenance
@@ -73,10 +74,10 @@ def _warn_version_drift_for_apply(
     """Surface module version drift between state and legacy config.
 
     Called near the start of apply so users can see drift before any
-    mutation. Drift between state and config is non-fatal: apply
-    reconciles the two at finalize time via
-    :func:`_sync_legacy_module_config_versions`. The warnings exist so
-    that operations and status can surface the gap.
+    mutation. Drift between state and config is non-fatal.  The legacy
+    ``config.yml`` is a compatibility input only; apply does not rewrite it,
+    so the warnings exist to let operations and status surface the gap until
+    the legacy file is retired.
     """
     state_manager = _project_state_manager.ProjectStateManager(project_path)
     try:
@@ -103,8 +104,9 @@ def _warn_version_drift_for_apply(
     for warning in drift:
         click.echo(f"  • {warning.message}")
     click.echo(
-        "\n💡 Apply will reconcile .quickscale/config.yml to the canonical "
-        "state-managed version. The drift is informational and not fatal.",
+        "\n💡 .quickscale/config.yml is a legacy compatibility input and is not "
+        "rewritten by apply. The drift is informational and not fatal; remove "
+        "the legacy file once consolidated state is authoritative.",
     )
     return drift
 
@@ -291,84 +293,116 @@ def _get_apply_recovery_manager(project_path: Path) -> LedgerManager:
     return _apply.LedgerManager(project_path)
 
 
-def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
-    """Load any pending post-embed recovery snapshot.
+def _load_apply_recovery_ledger(project_path: Path) -> _apply.RecoveryLedger | None:
+    """Load the pending apply recovery ledger.
 
-    Returns the embedded applied-state (:class:`QuickScaleState`) when the
-    recovery ledger file exists and is valid, or ``None`` when the file
-    does not exist.  Malformed content raises :class:`LedgerError` which
-    propagates as a ``StateError`` to existing callers.
+    The ledger carries the resume checkpoint and diagnostic progress only;
+    applied state comes from ``.quickscale/state.yml``.  Returns ``None`` when
+    the file does not exist.  Malformed content raises
+    :class:`~quickscale_core.apply.LedgerError`, which propagates as a
+    ``StateError`` to existing callers.
+    """
+    return _get_apply_recovery_manager(project_path).load()
+
+
+def _load_legacy_ledger_state(project_path: Path) -> QuickScaleState | None:
+    """Read a pre-SA317 ledger's embedded applied-state section, if present.
+
+    New ledgers carry no state.  This compatibility read exists once to
+    migrate an apply that was interrupted by a previous release into
+    ``state.yml``; the snapshot is never written back to the ledger.
     """
     mgr = _get_apply_recovery_manager(project_path)
-    ledger = mgr.load()
-    if ledger is None:
+    if not mgr.ledger_file.exists():
         return None
-    return ledger.applied_state
+    try:
+        raw = yaml.safe_load(mgr.ledger_file.read_text())
+    except yaml.YAMLError:
+        return None
+    if not isinstance(raw, dict) or "project" not in raw:
+        return None
+
+    manager = _state_schema.StateManager(project_path)
+    manager.state_file = mgr.ledger_file
+    return manager.load()
 
 
-def _merge_apply_recovery_state(
+def _merge_legacy_recovery_state(
     existing_state: QuickScaleState | None,
-    recovery_state: QuickScaleState | None,
+    legacy_state: QuickScaleState | None,
+    *,
+    project_path: Path | None = None,
 ) -> QuickScaleState | None:
-    """Overlay recovery modules onto the authoritative state for retry planning."""
-    if recovery_state is None:
+    """Overlay a legacy ledger snapshot onto authoritative state once.
+
+    Only pre-SA317 ledgers reach this path.  The merged state is materialized
+    into ``state.yml`` under the lock, after which the ledger is a pointer.
+    A module whose directory no longer exists is not resurrected from the
+    legacy snapshot (for example after ``quickscale remove``).
+    """
+    if legacy_state is None:
         return existing_state
 
+    legacy_state = copy.deepcopy(legacy_state)
+    if project_path is not None:
+        legacy_state.modules = {
+            module_name: module_state
+            for module_name, module_state in legacy_state.modules.items()
+            if (project_path / "modules" / module_name).is_dir()
+        }
+
     if existing_state is None:
-        return recovery_state
+        return legacy_state
 
     merged_state = copy.deepcopy(existing_state)
-    merged_state.project.last_applied = recovery_state.project.last_applied
-    for module_name, module_state in recovery_state.modules.items():
+    merged_state.project.last_applied = legacy_state.project.last_applied
+    for module_name, module_state in legacy_state.modules.items():
         merged_state.modules[module_name] = copy.deepcopy(module_state)
+
+    # Keep the newer record per path: an interrupted pre-SA317 run may have
+    # captured hashes after the last state.yml write, while a remove/apply may
+    # have refreshed records after the legacy snapshot.
+    for path, record in legacy_state.managed_files.items():
+        current = merged_state.managed_files.get(path)
+        if current is None or record.applied_at >= current.applied_at:
+            merged_state.managed_files[path] = copy.deepcopy(record)
     return merged_state
 
 
 def _save_apply_recovery_state(
     output_path: Path,
-    qs_config: QuickScaleConfig,
-    existing_state: QuickScaleState | None,
-    embedded_modules: list[str],
-    delta: ConfigDelta,
     *,
-    state_snapshot: QuickScaleState | None = None,
-    provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None,
     checkpoint_tree_id: str,
 ) -> bool:
-    """Persist retry context for failures that happen after embedding succeeded.
+    """Persist the resume pointer for a failed apply.
 
     The *checkpoint_tree_id* is the exact git tree id captured at the post-embed
     checkpoint so the recovery ledger records the authoritative index state
     rather than a later tree re-captured at save time.  It is **required** —
     the F12.1e contract fails hard when the checkpoint reference is unavailable.
 
-    AF5 Phase 1: AF6-era (``resume_checkpoint``-absent) ledgers are handled
-    conservatively — the new field is preserved if present and silently
-    ``None`` if absent.
+    The ledger never carries applied state; ``state.yml`` is the single owner.
+    Existing resume-checkpoint and step-progress metadata are carried forward
+    so a recovery rewrite does not discard where execution stopped.
     """
     try:
-        recovery_state = state_snapshot or _build_project_state_snapshot(
-            output_path,
-            qs_config,
-            existing_state,
-            embedded_modules,
-            delta,
-            provenance_payloads=provenance_payloads,
-        )
         mgr = _get_apply_recovery_manager(output_path)
 
-        # Carry forward any existing resume_checkpoint from the on-disk
-        # ledger so AF5 metadata is preserved across recovery rewrites.
+        # Carry forward the on-disk pointer/progress so AF5 metadata is
+        # preserved across recovery rewrites.
         existing_ledger = mgr.load()
-        resume_checkpoint = (
-            existing_ledger.resume_checkpoint if existing_ledger is not None else None
-        )
+        normalized_tree_id = checkpoint_tree_id or "pending"
 
         ledger = _apply.RecoveryLedger(
-            applied_state=recovery_state,
-            resume_checkpoint=resume_checkpoint,
-            step_progress=None,
-            git_index_checkpoint=checkpoint_tree_id,
+            resume_checkpoint=(
+                existing_ledger.resume_checkpoint
+                if existing_ledger is not None
+                else None
+            ),
+            step_progress=(
+                existing_ledger.step_progress if existing_ledger is not None else None
+            ),
+            git_index_checkpoint=normalized_tree_id,
         )
         mgr.save(ledger)
         click.secho(
@@ -389,6 +423,66 @@ def _save_apply_recovery_state(
             fg="red",
             err=True,
         )
+        return False
+
+
+def _mark_apply_in_progress(
+    output_path: Path,
+    *,
+    checkpoint_tree_id: str,
+    resume_step_id: str,
+) -> bool:
+    """Write a durable unfinished-apply marker before advancing state.yml.
+
+    The marker is the ordinary recovery ledger, pointing at the step whose
+    snapshot is about to be saved.  It ensures a crash between the state save
+    and the first checkpoint cannot make the next apply look like a no-op.
+    """
+    try:
+        mgr = _get_apply_recovery_manager(output_path)
+        existing_ledger = mgr.load()
+        normalized_tree_id = checkpoint_tree_id or "pending"
+        ledger = _apply.RecoveryLedger(
+            resume_checkpoint=_apply.ResumeCheckpoint(
+                resume_step_id=resume_step_id,
+                checkpoint_tree_id=normalized_tree_id,
+            ),
+            step_progress=(
+                existing_ledger.step_progress if existing_ledger is not None else None
+            ),
+            git_index_checkpoint=normalized_tree_id,
+        )
+        mgr.save(ledger)
+        return True
+    except (_apply.LedgerError, OSError) as e:
+        click.secho(
+            f"❌ Failed to mark apply in progress: {e}",
+            fg="red",
+            err=True,
+        )
+        return False
+    except Exception as e:
+        click.secho(
+            f"❌ Failed to mark apply in progress: {e}",
+            fg="red",
+            err=True,
+        )
+        return False
+
+
+def _persist_state_snapshot(output_path: Path, state: QuickScaleState) -> bool:
+    """Write the live applied-state snapshot to ``state.yml``.
+
+    Apply calls this at every checkpoint that changes applied state (the
+    post-embed snapshot and the managed-file hash capture) so an interrupted
+    run always leaves the authoritative store current.  The write is quiet on
+    success; finalization keeps its own success message.
+    """
+    try:
+        _state_schema.StateManager(output_path).save(state)
+        return True
+    except Exception as e:
+        click.secho(f"❌ Failed to save state: {e}", fg="red", err=True)
         return False
 
 

@@ -219,5 +219,5 @@ def test_remove_help_numbering_is_aligned(cli_runner: CliRunner) -> None:
     numbered = [
         line for line in lines if line.strip()[:2] in {"1.", "2.", "3.", "4.", "5."}
     ]
-    assert len(numbered) == 5
+    assert len(numbered) == 4
     assert len({len(line) - len(line.lstrip()) for line in numbered}) == 1

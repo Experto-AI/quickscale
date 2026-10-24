@@ -237,7 +237,7 @@ When `quickscale apply` runs on a new project:
 
 | Scenario | Behavior |
 |----------|----------|
-| Directory exists | Error + suggest `--force` or different name |
+| Directory exists | Error without `--force`; `--force` stages the new generation and swaps it in with rollback |
 | Module already embedded | Skip (no change) |
 | Immutable config changed | Error + suggest remove/re-embed |
 | Legacy or non-canonical auth keys in `quickscale.yml` | Error + show the canonical auth desired-config contract before sanitization |

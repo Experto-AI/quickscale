@@ -48,8 +48,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
-| SA317 | Give apply state one owner; close CLI command defects | 3 | — | Optional |
-| SA319 | Update modules as one sealed-tag transaction | 3 | SA317 | Optional |
+| SA319 | Update modules as one sealed-tag transaction | 3 | — | Optional |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Optional |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA322 | Make backup restore safe and its recovery point coherent | 3 | — | Optional |
@@ -68,7 +67,7 @@ Track 1: [SA316] SA320 (a) ─► SA153 (j) ─► [SA191d (production)] SA153 (
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA316 ─► SA317 (a, b) ─► SA319 (a → b) ─► SA322 (a → b → c)
+Track 3: SA316 ─► SA319 (a → b) ─► SA322 (a → b → c)
          ─► SA325 ─► SA326 ─► [SA191d (production)] SA277
      release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA316 ─► SA320 (a) ─► SA153 (j); SA191d (production) ─► SA153 (f)
@@ -93,7 +92,7 @@ before SA319.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA317 | yes | no: SA191d (production) for SA277 | yes: SA317 |
+| 3 | SA319 | yes | no: SA191d (production) for SA277 | yes: SA319 |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -322,23 +321,12 @@ update; the cutover does not wait for them.
 
 - [x] **SA316 — Extend the contract-vintage gate to the runtime surface and managed outputs.**
 
-- [ ] **SA317 — Give apply state one owner and close the CLI command defects.**
-
-  Closes arch `apply-state-dual-owner` (option 1) and tech `cli-remove-accepts-path-traversal`,
-  `cli-apply-force-never-forces`, and `beta-migrate-existing-recipient-no-dirty-guard`.
-
-  **Slices:**
-  - [ ] (a) The recovery ledger keeps the checkpoint and resume pointer only; resume reads
-    `state.yml`. A fault-injection test kills after step 4, resumes, and asserts `managed_files`
-    and contract steps survive and an edited managed file is still detected (Tier 2-full).
-  - [ ] (b) `remove` validates the module name against state and asserts the target is inside
-    `modules/`; `apply --force` stages and swaps or the flag is removed; `--existing-recipient`
-    refuses a dirty tracked recipient (Tier 2-fast).
+- [x] **SA317 — Give apply state one owner and close the CLI command defects.**
 
 - [ ] **SA319 — Update modules as one sealed-tag transaction.**
 
-  Closes arch `module-upgrade-no-reconciler` (option 1, option 2 as the transition guard). Needs
-  SA317's single state owner so the journal is not a third writer.
+  Closes arch `module-upgrade-no-reconciler` (option 1, option 2 as the transition guard). Builds
+  on SA317's single state owner so the journal is not a third writer.
 
   **Slices:**
   - [ ] (a) Update resolves and verifies the sealed `splits/<module>/<version>` tag before the

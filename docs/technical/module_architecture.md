@@ -68,8 +68,9 @@ Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: read-th
 - ✅ Hold an advisory lock (`.quickscale/<name>.lock`, exclusive-create, fail-fast)
   around every `state.yml` read/modify/write so concurrent `apply` fails closed
   instead of racing
-- ✅ Recovery state is separate: `.quickscale/apply-recovery.yml` holds the
-  saga-model apply-recovery ledger and is not part of applied state
+- ✅ Recovery state is separate: `.quickscale/apply-recovery.yml` holds only the
+  saga-model resume checkpoint and diagnostic progress; applied state stays in
+  `.quickscale/state.yml`
 
 The apply execution sequence, the delta computation, and the declarative/
 idempotent/incremental/traceable/recoverable properties they produce are described
