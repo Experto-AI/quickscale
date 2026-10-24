@@ -3865,6 +3865,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"blog": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4067,6 +4068,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"forms": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4212,6 +4214,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"analytics": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4293,6 +4296,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"billing": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4370,6 +4374,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = ["backups"]
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"backups": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4466,6 +4471,7 @@ class TestExecuteApplySteps:
         ctx.delta.has_mutable_config_changes = False
 
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = modules
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
@@ -4544,6 +4550,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"blog": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4610,6 +4617,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"auth": Mock(options={})}
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
@@ -4703,6 +4711,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"blog": Mock(options={})}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -4780,6 +4789,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"listings": Mock(options={})}
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
@@ -4860,6 +4870,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {"listings": Mock(options={})}
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
@@ -4946,6 +4957,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -5065,6 +5077,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -5145,6 +5158,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
@@ -5219,6 +5233,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
@@ -5300,6 +5315,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
@@ -5389,6 +5405,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
@@ -5480,6 +5497,7 @@ class TestExecuteApplySteps:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = True  # Docker-first project
@@ -6636,6 +6654,7 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
         ctx.delta.modules_to_add = []
         ctx.delta.has_mutable_config_changes = False
         ctx.qs_config = Mock()
+        ctx.qs_config.project.package = "myapp"
         ctx.qs_config.modules = {}
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True

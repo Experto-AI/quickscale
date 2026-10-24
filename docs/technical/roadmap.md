@@ -93,7 +93,7 @@ before SA319, SA318 before SA153 (j).
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA153 (h) | yes | no: SA191d (production) for SA153 (f) | yes: SA153 (h), SA318 |
-| 2 | SA327, then SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA327, SA191d (re-proof), SA310, SA311 |
+| 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA317 | yes | no: SA191d (production) for SA277 | yes: SA317 |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
