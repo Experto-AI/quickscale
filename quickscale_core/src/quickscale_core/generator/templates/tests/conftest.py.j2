@@ -1,9 +1,44 @@
 """Pytest configuration and fixtures for {{ project_name }} tests"""
 
+import os
+
 import pytest
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+#: Marker registered for the generated two-organization isolation suite.
+TENANT_ISOLATION_MARKER = (
+    "tenant_isolation: runs the generated two-organization isolation suite "
+    "against the restricted runtime database role"
+)
+TENANT_ISOLATION_REQUIRED_ENV_VAR = "QUICKSCALE_REQUIRE_TENANT_ISOLATION"
+
+
+def pytest_configure(config):
+    """Register the tenant-isolation marker so --strict-markers accepts it."""
+    config.addinivalue_line("markers", TENANT_ISOLATION_MARKER)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Deselect the isolation suite unless the lane explicitly requests it.
+
+    The generated tenant-isolation CI lane sets
+    QUICKSCALE_REQUIRE_TENANT_ISOLATION=1 alongside RUNTIME_DATABASE_URL, so
+    its absence fails the lane instead of silently deselecting the suite.
+    """
+    if os.environ.get(TENANT_ISOLATION_REQUIRED_ENV_VAR) == "1":
+        return
+    selected = []
+    deselected = []
+    for item in items:
+        if item.get_closest_marker("tenant_isolation"):
+            deselected.append(item)
+        else:
+            selected.append(item)
+    items[:] = selected
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
 
 
 @pytest.fixture

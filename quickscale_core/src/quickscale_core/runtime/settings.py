@@ -403,8 +403,10 @@ def resolve_runtime_database_url(
     ``QUICKSCALE_NON_DB_COMMAND`` are mutually exclusive; a privileged command
     requires an explicitly blank ``RUNTIME_DATABASE_URL`` and a superuser
     ``DATABASE_URL``; a non-DB bootstrap command may run without a database;
-    runtime serving requires ``RUNTIME_DATABASE_URL`` unless the explicit
-    ``QUICKSCALE_ALLOW_BYPASSRLS=1`` opt-out bridges to ``DATABASE_URL``.
+    runtime serving requires ``RUNTIME_DATABASE_URL`` and refuses
+    ``QUICKSCALE_ALLOW_BYPASSRLS=1``.  The bypass flag stays a non-serving
+    development and test allowance; it never bridges a serving process to the
+    privileged role.
     """
     if privileged_command and non_db_command:
         raise ValueError(
@@ -442,19 +444,19 @@ def resolve_runtime_database_url(
             )
         return database_url or NON_DB_FALLBACK_DATABASE_URL
 
+    if allow_bypass_rls:
+        # Serving never bridges to the privileged role: the flag is a
+        # non-serving development and test allowance only.
+        raise ValueError(
+            "QUICKSCALE_ALLOW_BYPASSRLS=1 is not allowed while serving. "
+            "Production serving requires RUNTIME_DATABASE_URL with the "
+            "restricted NOSUPERUSER/NOBYPASSRLS runtime role connection string. "
+            "Keep the bypass escape hatch for non-serving development and test "
+            "commands only."
+        )
+
     if runtime_database_url:
         return runtime_database_url
-
-    if runtime_database_url == "" and allow_bypass_rls:
-        # Explicit non-serving dev/test opt-out: bridge to DATABASE_URL
-        if not database_url:
-            raise ValueError(
-                "DATABASE_URL environment variable is not set or is empty. "
-                "QUICKSCALE_ALLOW_BYPASSRLS=1 requires the superuser "
-                "DATABASE_URL for privileged operations. "
-                "Ensure the database service is linked to your app service."
-            )
-        return database_url
 
     # Runtime serving: fail closed — RUNTIME_DATABASE_URL is required
     raise ValueError(

@@ -1,0 +1,117 @@
+"""Two-organization isolation for project-owned tenant views.
+
+The generated tenant-isolation CI lane runs this file as the restricted
+NOSUPERUSER/NOBYPASSRLS runtime role. ``make test`` deselects the suite;
+``make test-tenant-isolation`` requires that role and fails, rather than skips,
+when the role is absent.
+"""
+
+import json
+import os
+
+import pytest
+from decouple import config as decouple_config
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.http import Http404, JsonResponse
+from django.test import RequestFactory
+
+pytestmark = pytest.mark.tenant_isolation
+
+if "quickscale_modules_orgs" not in settings.INSTALLED_APPS:
+    pytest.skip("the orgs module is not installed", allow_module_level=True)
+
+orgs_models = pytest.importorskip("quickscale_modules_orgs.models")
+
+User = get_user_model()
+
+RUNTIME_DATABASE_URL_ENV_VAR = "RUNTIME_DATABASE_URL"
+TENANT_ISOLATION_REQUIRED_ENV_VAR = "QUICKSCALE_REQUIRE_TENANT_ISOLATION"
+
+
+def project_owned_member_directory(request, org_slug):
+    """Sample project-owned tenant view: list one organization's members.
+
+    The membership lookup and the member query are the organization filters
+    this lane protects. Replace this sample with the project's own tenant views
+    and keep the same assertions: the caller's organization is served, and
+    another organization's rows are unreachable.
+    """
+    organization = orgs_models.Organization.objects.filter(slug=org_slug).first()
+    if organization is None:
+        raise Http404("Organization not found")
+    if not orgs_models.OrganizationMembership.objects.filter(
+        user=request.user, organization=organization
+    ).exists():
+        raise Http404("Organization not found")
+    members = (
+        orgs_models.OrganizationMembership.objects.filter(organization=organization)
+        .select_related("user")
+        .order_by("user__username")
+        .values_list("user__username", flat=True)
+    )
+    return JsonResponse({"members": list(members)})
+
+
+def _configured_runtime_database_url():
+    """Return the configured runtime-role URL from the environment or .env."""
+    return os.environ.get(RUNTIME_DATABASE_URL_ENV_VAR) or decouple_config(
+        RUNTIME_DATABASE_URL_ENV_VAR, default=""
+    )
+
+
+@pytest.fixture
+def restricted_runtime_role(db):
+    """Require the restricted runtime role; fail, never skip, when absent."""
+    if not _configured_runtime_database_url():
+        if os.environ.get(TENANT_ISOLATION_REQUIRED_ENV_VAR) == "1":
+            pytest.fail(
+                "RUNTIME_DATABASE_URL is required for the tenant-isolation lane. "
+                "The lane must fail, not skip, when the restricted runtime role is absent."
+            )
+        pytest.skip("RUNTIME_DATABASE_URL is not configured")
+
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        pytest.skip("Tenant isolation runs only on PostgreSQL")
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
+        role_attributes = cursor.fetchone()
+
+    assert role_attributes is not None, "The current database role is absent from pg_roles."
+    assert role_attributes == (False, False), (
+        "Tenant isolation must run as a NOSUPERUSER/NOBYPASSRLS role, got "
+        f"rolsuper={role_attributes[0]!r}, rolbypassrls={role_attributes[1]!r}"
+    )
+
+
+@pytest.mark.django_db
+def test_project_owned_view_serves_only_its_organization(restricted_runtime_role):
+    """The sample project-owned view cannot read another organization's rows."""
+    org_a = orgs_models.Organization.objects.create(name="Org A", slug="org-a")
+    org_b = orgs_models.Organization.objects.create(name="Org B", slug="org-b")
+    user_a = User.objects.create_user(username="alice", email="alice@example.com")
+    user_b = User.objects.create_user(username="bob", email="bob@example.com")
+    orgs_models.OrganizationMembership.objects.create(
+        user=user_a,
+        organization=org_a,
+        role="owner",
+    )
+    orgs_models.OrganizationMembership.objects.create(
+        user=user_b,
+        organization=org_b,
+        role="owner",
+    )
+
+    request = RequestFactory().get("/project/members/org-a/")
+    request.user = user_a
+
+    response = project_owned_member_directory(request, "org-a")
+    assert response.status_code == 200
+    payload = json.loads(response.content)
+    assert payload["members"] == ["alice"]
+
+    with pytest.raises(Http404):
+        project_owned_member_directory(request, "org-b")

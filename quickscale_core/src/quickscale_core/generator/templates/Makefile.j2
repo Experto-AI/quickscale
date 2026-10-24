@@ -2,7 +2,7 @@
 
 FRONTEND_PACKAGE := frontend/package.json
 
-.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci{% if selected_modules is none or "orgs" in selected_modules %} check-tenant-isolation{% endif %}
+.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci{% if selected_modules is none or "orgs" in selected_modules %} check-tenant-isolation test-tenant-isolation{% endif %}
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -68,4 +68,7 @@ ci: check ## Alias for check
 check-tenant-isolation: ## Run tenant isolation conformance check
 	RUNTIME_DATABASE_URL='' QUICKSCALE_PRIVILEGED_COMMAND=migrate poetry run python manage.py migrate
 	QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --json
+
+test-tenant-isolation: ## Run the two-organization isolation test (needs a CREATEDB runtime role)
+	QUICKSCALE_REQUIRE_TENANT_ISOLATION=1 poetry run pytest tests/test_tenant_isolation.py -m tenant_isolation -o addopts=
 {% endif %}
