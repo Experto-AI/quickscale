@@ -176,6 +176,7 @@ Conventions rule 31).
 2. **Advisory lock** (`.quickscale/<name>.lock`): Exclusive-create file-based lock that serializes concurrent `apply` operations. Fail-fast contention; stale-lock inspection and manual-clear guidance only.
 3. **Legacy compatibility**: `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only — read-through imported when `state.yml` lacks consolidated sections, ignored when consolidated sections are present. Leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save.
 4. **Drift diagnostics**: `quickscale status` text and `--json` output report state consolidation status, legacy files on disk, legacy-compat active mode, per-module tracking completeness, managed-files consolidation, filesystem drift, managed-file drift, and version drift.
+5. **Update journal** (`.quickscale/update-journal.yml`): recovery intent for one `quickscale update`; it records the pre-pull commit and module targets, never applied state. The update writes `state.yml` once for the set and clears the journal after its single commit; `apply` refuses while it is pending, and the next update resumes the recorded set.
 
 **Apply logic**:
 1. Acquire advisory lock on `state.yml` (fail-fast if held)

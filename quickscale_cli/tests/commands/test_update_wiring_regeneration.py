@@ -13,6 +13,8 @@ old/new module set would otherwise fail mid-update.
 from __future__ import annotations
 import quickscale_cli.commands._module_update_guard as _module_update_guard
 import quickscale_cli.commands._module_update_io as _module_update_io
+import quickscale_cli.commands._module_update_journal as _module_update_journal
+import quickscale_cli.commands._module_update as _module_update
 import quickscale_core.project_state_manager as _project_state_manager
 
 import shutil
@@ -33,10 +35,12 @@ from quickscale_core.project_state import (
 from quickscale_core.schema.state_schema import StateError, StateManager
 from quickscale_core.utils.git_utils import GitError
 from quickscale_cli.commands._module_update_io import (
-    _commit_regenerated_managed_wiring,
+    _commit_module_update_set,
     _regenerate_and_record_managed_wiring,
 )
 from quickscale_cli.commands._module_update import update
+
+_REAL_MISSING_REQUIRED = _module_update._missing_required_module_error
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_MANIFEST_ROOT = REPO_ROOT / "quickscale_modules"
@@ -192,6 +196,18 @@ def _update_mocks(project_path: Path, module_names: tuple[str, ...] = _FIXTURE_M
         )
         # A real pull can add files; the rollback must remove them.
         (project_path / prefix / "new_pull_file.py").write_text("# added by the pull\n")
+        # ``git subtree pull`` commits its content before the next pull runs;
+        # mimic that transport commit so the project is clean between modules.
+        for command in (
+            ["git", "add", "-A", "--", prefix],
+            ["git", "commit", "-qm", f"subtree pull {module_name}"],
+        ):
+            subprocess.run(
+                command,
+                cwd=project_path,
+                check=True,
+                capture_output=True,
+            )
         return "updated"
 
     def _module_info(module_name: str) -> Mock:
@@ -276,7 +292,8 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    assert "chore: regenerate managed module wiring" in commit_messages
+    assert commit_messages[0] == "chore(modules): update installed modules"
+    assert "chore: regenerate managed module wiring" not in commit_messages
     final_count = int(
         subprocess.run(
             ["git", "rev-list", "--count", "HEAD"],
@@ -373,7 +390,11 @@ def test_record_managed_hashes_keeps_pre_consolidation_tracking(
         )
     )
 
-    _module_update_io._record_managed_wiring_hashes(project, "myapp")
+    manager = ProjectStateManager(project)
+    state = manager.load_state()
+    assert state is not None
+    _module_update_io._record_managed_wiring_hashes(state, project, "myapp")
+    manager.save_state(state)
 
     refreshed = ProjectStateManager(project).load_state()
     assert refreshed is not None
@@ -381,19 +402,21 @@ def test_record_managed_hashes_keeps_pre_consolidation_tracking(
     assert refreshed.modules["billing"].prefix == "modules/billing"
 
 
-def test_update_refuses_a_set_missing_a_requirement(
+def test_update_refuses_a_set_missing_a_requirement_before_journaling(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """An update over a set missing a required module refuses and rolls back.
+    """A required-module gap refuses before the transaction starts.
 
-    The existing project has listings without storage (the requirement this
-    release adds), so wiring regeneration would otherwise silently drop the
-    shared editor mount; the update must fail with the actionable adoption
-    step and leave the project unchanged.
+    The documented repair is ``quickscale apply``; starting a journaled
+    transaction would make apply refuse, so the gap is checked before the
+    journal and the project is unchanged.
     """
     installed = ("auth", "listings", "notifications", "orgs")
     project = _write_project(tmp_path, installed)
     monkeypatch.chdir(project)
+    monkeypatch.setattr(
+        _module_update, "_missing_required_module_error", _REAL_MISSING_REQUIRED
+    )
 
     load_config_patch, resolve_patch, pull_patch, confirm_patch, deps_patch = (
         _update_mocks(project, installed)
@@ -408,6 +431,7 @@ def test_update_refuses_a_set_missing_a_requirement(
     assert result.exit_code != 0
     assert "'listings' requires 'storage'" in result.output
     assert "quickscale apply" in result.output
+    assert _module_update_journal._update_journal_path(project).exists() is False
     state = yaml.safe_load((project / ".quickscale" / "state.yml").read_text())
     assert "storage" not in state.get("modules", {})
     assert "listings" in state.get("modules", {})
@@ -434,42 +458,65 @@ def test_regeneration_failure_restores_pre_update_wiring(
         )
         return False, "wiring conflict"
 
+    manager = ProjectStateManager(project)
+    state = manager.load_state()
+    assert state is not None
     with patch(
         "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
         side_effect=_failing_regeneration,
     ):
-        success, message = _regenerate_and_record_managed_wiring(project, "myapp")
+        success, message = _regenerate_and_record_managed_wiring(
+            project, "myapp", state
+        )
 
     assert success is False
     assert message == "wiring conflict"
     assert wiring_path.read_text() == STALE_MODULES_PY
 
 
-def test_partial_failure_rolls_back_modules_committed_before_it(
+def test_partial_failure_keeps_the_recorded_set_for_resume(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """A later module failure restores the modules committed before it.
-
-    Otherwise the successfully updated module's new code would stay paired
-    with the pre-update managed wiring, and its renamed throttle scope would
-    raise at request time.
-    """
+    """A later module failure keeps the completed pull and the journal."""
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
     # The fixture order decides which module the mock pulls first; the
     # restoration assertions must target that module, not a later one.
     first_module = _FIXTURE_MODULES[0]
-    baseline_manifest = (project / "modules" / first_module / "module.yml").read_text()
 
-    load_config_patch, _resolve_patch, pull_patch, confirm_patch, deps_patch = (
+    load_config_patch, resolve_patch, _pull_patch, confirm_patch, deps_patch = (
         _update_mocks(project)
     )
-    resolve_patch = patch(
-        "quickscale_core.utils.git_repo.resolve_remote_ref",
-        side_effect=["a" * 40, GitError("network unavailable")],
-    )
-    with load_config_patch, resolve_patch, pull_patch, confirm_patch, deps_patch:
+    pulled: list[str] = []
+
+    def _fail_second_pull(prefix: str, remote: str, branch: str, squash: bool) -> str:
+        del remote, branch, squash
+        if pulled:
+            raise GitError("network unavailable")
+        pulled.append(prefix)
+        module_name = prefix.rsplit("/", 1)[-1]
+        (project / prefix / "module.yml").write_text(
+            (MODULE_MANIFEST_ROOT / module_name / "module.yml").read_text()
+        )
+        (project / prefix / "new_pull_file.py").write_text("# added by the pull\n")
+        for command in (
+            ["git", "add", "-A", "--", prefix],
+            ["git", "commit", "-qm", f"subtree pull {module_name}"],
+        ):
+            subprocess.run(command, cwd=project, check=True, capture_output=True)
+        return "updated"
+
+    with (
+        load_config_patch,
+        resolve_patch,
+        patch(
+            "quickscale_core.utils.git_subtree.run_git_subtree_pull",
+            side_effect=_fail_second_pull,
+        ),
+        confirm_patch,
+        deps_patch,
+    ):
         result = CliRunner().invoke(
             update,
             ["--no-preview", "--acknowledge-contract-vintage"],
@@ -477,19 +524,18 @@ def test_partial_failure_rolls_back_modules_committed_before_it(
         )
 
     assert result.exit_code != 0
-    assert "rolled back" in result.output
+    assert "recorded module set is kept" in result.output
 
-    # The module updated before the failure is restored to its pre-update code,
-    # including removal of the files its pull added.
-    assert (
-        project / "modules" / first_module / "module.yml"
-    ).read_text() == baseline_manifest
-    assert not (project / "modules" / first_module / "new_pull_file.py").exists()
-    # The wiring was never regenerated, so it stays consistent with that code.
+    # The completed module stays at its pulled content; the failing module's
+    # own snapshot restore leaves it at the baseline.
+    assert (project / "modules" / first_module / "module.yml").read_text() == (
+        (MODULE_MANIFEST_ROOT / first_module / "module.yml").read_text()
+    )
+    assert (project / "modules" / first_module / "new_pull_file.py").exists()
     assert (project / "myapp" / "settings" / "modules.py").read_text() == (
         STALE_MODULES_PY
     )
-    # The rollback commit leaves a clean tree for the operator's next command.
+    assert _module_update_journal._update_journal_path(project).exists()
     status = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=project,
@@ -497,7 +543,7 @@ def test_partial_failure_rolls_back_modules_committed_before_it(
         capture_output=True,
         text=True,
     ).stdout.strip()
-    assert status == ""
+    assert status == "?? .quickscale/update-journal.yml"
     messages = subprocess.run(
         ["git", "log", "--pretty=%s", "-n", "3"],
         cwd=project,
@@ -505,52 +551,49 @@ def test_partial_failure_rolls_back_modules_committed_before_it(
         capture_output=True,
         text=True,
     ).stdout
-    assert "chore: roll back partial module update" in messages
+    assert "chore: roll back partial module update" not in messages
 
 
-def test_partial_failure_rollback_runs_under_the_update_lock(
+def test_journal_is_written_under_the_update_lock(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The partial-failure rollback runs while the advisory lock is held."""
+    """The transaction journal is written while the advisory lock is held."""
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
     observed: dict[str, bool] = {}
 
-    real_rollback = _module_update_io._roll_back_partial_module_update
-
-    def _probe(
-        project_path: Path,
-        pre_update_head: str,
-        updated_modules: list[str],
-        project_package: str | None = None,
-    ) -> None:
-        observed["lock_held"] = (project_path / ".quickscale" / "state.lock").exists()
-        real_rollback(
-            project_path,
-            pre_update_head,
-            updated_modules,
-            project_package,
-        )
-
-    load_config_patch, _resolve_patch, pull_patch, confirm_patch, deps_patch = (
+    load_config_patch, resolve_patch, _pull_patch, confirm_patch, deps_patch = (
         _update_mocks(project)
     )
-    resolve_patch = patch(
-        "quickscale_core.utils.git_repo.resolve_remote_ref",
-        side_effect=["a" * 40, GitError("network unavailable")],
-    )
+    pulled: list[str] = []
+
+    def _fail_second_pull(prefix: str, remote: str, branch: str, squash: bool) -> str:
+        del remote, branch, squash
+        if pulled:
+            raise GitError("network unavailable")
+        observed["lock_held"] = (project / ".quickscale" / "state.lock").exists()
+        pulled.append(prefix)
+        module_name = prefix.rsplit("/", 1)[-1]
+        (project / prefix / "module.yml").write_text(
+            (MODULE_MANIFEST_ROOT / module_name / "module.yml").read_text()
+        )
+        for command in (
+            ["git", "add", "-A", "--", prefix],
+            ["git", "commit", "-qm", f"subtree pull {module_name}"],
+        ):
+            subprocess.run(command, cwd=project, check=True, capture_output=True)
+        return "updated"
+
     with (
         load_config_patch,
         resolve_patch,
-        pull_patch,
+        patch(
+            "quickscale_core.utils.git_subtree.run_git_subtree_pull",
+            side_effect=_fail_second_pull,
+        ),
         confirm_patch,
         deps_patch,
-        patch.object(
-            _module_update_io,
-            "_roll_back_partial_module_update",
-            side_effect=_probe,
-        ),
     ):
         result = CliRunner().invoke(
             update,
@@ -561,17 +604,14 @@ def test_partial_failure_rollback_runs_under_the_update_lock(
     assert result.exit_code != 0
     assert observed["lock_held"] is True
     assert not (project / ".quickscale" / "state.lock").exists()
+    assert _module_update_journal._update_journal_path(project).exists()
 
 
-def test_regeneration_failure_rolls_back_updated_modules(
+def test_regeneration_failure_keeps_the_set_for_resume(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """A failed regeneration after successful pulls restores the modules.
-
-    The command must not leave the updated modules' new scope code paired
-    with the pre-update managed wiring.
-    """
+    """A failed regeneration after successful pulls keeps the journal."""
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
     baseline_manifests = {
@@ -600,40 +640,20 @@ def test_regeneration_failure_rolls_back_updated_modules(
         )
 
     assert result.exit_code != 0
-    for name, baseline in baseline_manifests.items():
-        assert (project / "modules" / name / "module.yml").read_text() == baseline
-        assert not (project / "modules" / name / "new_pull_file.py").exists()
+    assert "recorded module set is kept" in result.output
+    for name in baseline_manifests:
+        assert (project / "modules" / name / "new_pull_file.py").exists()
     assert (project / "myapp" / "settings" / "modules.py").read_text() == (
         STALE_MODULES_PY
     )
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=project,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert status == ""
-    messages = subprocess.run(
-        ["git", "log", "--pretty=%s", "-n", "3"],
-        cwd=project,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert "chore: roll back partial module update" in messages
+    assert _module_update_journal._update_journal_path(project).exists()
 
 
-def test_post_pull_phase_failure_rolls_back_updated_modules(
+def test_post_pull_phase_failure_keeps_the_set_for_resume(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """Any failure after the pulls rolls back the modules they committed.
-
-    The post-pull phase covers the state read, regeneration, hash recording,
-    and the wiring commit; an error in any of them must not leave new module
-    code paired with the pre-update managed wiring.
-    """
+    """Any failure after the pulls keeps the journal for the next run."""
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
     baseline_manifests = {
@@ -663,36 +683,17 @@ def test_post_pull_phase_failure_rolls_back_updated_modules(
 
     assert result.exit_code != 0
     assert "state read failed" in result.output
-    for name, baseline in baseline_manifests.items():
-        assert (project / "modules" / name / "module.yml").read_text() == baseline
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=project,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert status == ""
-    messages = subprocess.run(
-        ["git", "log", "--pretty=%s", "-n", "3"],
-        cwd=project,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert "chore: roll back partial module update" in messages
+    assert "recorded module set is kept" in result.output
+    for name in baseline_manifests:
+        assert (project / "modules" / name / "new_pull_file.py").exists()
+    assert _module_update_journal._update_journal_path(project).exists()
 
 
-def test_failed_wiring_commit_rolls_back_wiring_and_modules(
+def test_failed_set_commit_keeps_the_set_for_resume(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """A rejected wiring commit must not leave new wiring with old module code.
-
-    The wiring helper stages the regenerated files before committing; when
-    the commit fails, the staged new wiring must be removed by the rollback
-    rather than riding into the rollback commit.
-    """
+    """A rejected set commit keeps the journal and the staged wiring."""
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
     baseline_manifests = {
@@ -700,7 +701,10 @@ def test_failed_wiring_commit_rolls_back_wiring_and_modules(
         for name in ("billing", "forms")
     }
 
-    def _stage_then_fail(project_package: str) -> None:
+    def _stage_then_fail(
+        module_names: list[str], project_package: str, *, transaction_id=None
+    ) -> None:
+        del module_names, transaction_id
         subprocess.run(
             [
                 "git",
@@ -726,7 +730,7 @@ def test_failed_wiring_commit_rolls_back_wiring_and_modules(
         confirm_patch,
         deps_patch,
         patch(
-            "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
+            "quickscale_cli.commands._module_update_io._commit_module_update_set",
             side_effect=_stage_then_fail,
         ),
     ):
@@ -738,14 +742,11 @@ def test_failed_wiring_commit_rolls_back_wiring_and_modules(
 
     assert result.exit_code != 0
     assert "wiring commit rejected" in result.output
-    # The pre-update wiring is restored and the regenerated files are gone.
-    assert (project / "myapp" / "settings" / "modules.py").read_text() == (
-        STALE_MODULES_PY
-    )
-    assert not (project / "myapp" / "urls_modules.py").exists()
-    for name, baseline in baseline_manifests.items():
-        assert (project / "modules" / name / "module.yml").read_text() == baseline
-
+    # The transaction remains recorded; the next resume restores and redoes
+    # the tracking and wiring writes.
+    assert _module_update_journal._update_journal_path(project).exists()
+    for name in baseline_manifests:
+        assert (project / "modules" / name / "new_pull_file.py").exists()
     committed_wiring = subprocess.run(
         ["git", "show", "HEAD:myapp/settings/modules.py"],
         cwd=project,
@@ -754,69 +755,30 @@ def test_failed_wiring_commit_rolls_back_wiring_and_modules(
         text=True,
     ).stdout
     assert committed_wiring == STALE_MODULES_PY
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=project,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert status == ""
-    messages = subprocess.run(
-        ["git", "log", "--pretty=%s", "-n", "3"],
-        cwd=project,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert "chore: roll back partial module update" in messages
 
 
-def test_post_pull_state_load_failure_triggers_rollback(
+def test_post_pull_state_save_failure_keeps_the_journal(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """A StateError from the post-pull state read triggers the rollback."""
+    """A StateError from the set's single state save keeps the journal."""
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
 
-    real_load = _project_state_manager.ProjectStateManager.load_state
-    calls = {"count": 0}
-
-    def _flaky_load(self):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return real_load(self)
-        raise StateError("corrupt state")
-
-    config = Mock(
-        modules={"billing": Mock(), "forms": Mock()},
-        default_remote="https://github.com/Experto-AI/quickscale.git",
+    load_config_patch, resolve_patch, pull_patch, confirm_patch, deps_patch = (
+        _update_mocks(project)
     )
     with (
-        patch(
-            "quickscale_core.config.load_config",
-            return_value=config,
-        ),
-        patch(
-            "click.confirm",
-            return_value=True,
-        ),
-        patch(
-            "quickscale_cli.commands._module_update._update_single_module",
-            return_value=True,
-        ),
-        patch(
-            "quickscale_cli.commands._module_shared._warn_version_drift_for_update",
-            Mock(),
-        ),
+        load_config_patch,
+        resolve_patch,
+        pull_patch,
+        confirm_patch,
+        deps_patch,
         patch.object(
-            _project_state_manager.ProjectStateManager, "load_state", _flaky_load
+            _project_state_manager.ProjectStateManager,
+            "save_state",
+            side_effect=StateError("corrupt state"),
         ),
-        patch.object(
-            _module_update_io,
-            "_roll_back_partial_module_update",
-        ) as mock_rollback,
     ):
         result = CliRunner().invoke(
             update,
@@ -826,8 +788,7 @@ def test_post_pull_state_load_failure_triggers_rollback(
 
     assert result.exit_code != 0
     assert "corrupt state" in result.output
-    mock_rollback.assert_called_once()
-    assert mock_rollback.call_args.args[2] == list(_FIXTURE_MODULES)
+    assert _module_update_journal._update_journal_path(project).exists()
 
 
 def test_hash_persistence_failure_restores_wiring(
@@ -849,6 +810,9 @@ def test_hash_persistence_failure_restores_wiring(
         )
         return True, "regenerated"
 
+    manager = ProjectStateManager(project)
+    state = manager.load_state()
+    assert state is not None
     with (
         patch(
             "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
@@ -859,7 +823,9 @@ def test_hash_persistence_failure_restores_wiring(
             side_effect=RuntimeError("state save failed"),
         ),
     ):
-        success, message = _regenerate_and_record_managed_wiring(project, "myapp")
+        success, message = _regenerate_and_record_managed_wiring(
+            project, "myapp", state
+        )
 
     assert success is False
     assert message == "state save failed"
@@ -892,7 +858,7 @@ def test_wiring_commit_stages_removed_managed_directory(
 
     shutil.rmtree(managed_dir)
 
-    _commit_regenerated_managed_wiring("myapp")
+    _commit_module_update_set([], "myapp")
 
     status = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -912,11 +878,11 @@ def test_wiring_commit_stages_removed_managed_directory(
     assert "D\tmyapp/quickscale_managed/social_urls.py" in committed
 
 
-def test_commit_regenerated_managed_wiring_stages_files(
+def test_commit_module_update_set_stages_files(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The wiring commit carries the regenerated files and the hash state."""
+    """The set commit carries the regenerated files and the hash state."""
     (tmp_path / "myapp" / "settings").mkdir(parents=True)
     (tmp_path / "myapp" / "settings" / "modules.py").write_text("# managed\n")
     (tmp_path / "myapp" / "urls_modules.py").write_text("# managed urls\n")
@@ -936,7 +902,7 @@ def test_commit_regenerated_managed_wiring_stages_files(
     (tmp_path / "myapp" / "settings" / "modules.py").write_text("# regenerated\n")
     (quickscale_dir / "state.yml").write_text("modules: {}\nmanaged_files: {}\n")
 
-    _commit_regenerated_managed_wiring("myapp")
+    _commit_module_update_set([], "myapp")
 
     committed = subprocess.run(
         ["git", "show", "--name-only", "--format=", "HEAD"],

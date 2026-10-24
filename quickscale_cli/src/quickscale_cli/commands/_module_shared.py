@@ -14,6 +14,7 @@ import click
 
 import quickscale_cli.utils.auth_migration as _auth_migration
 import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_cli.commands._module_update_journal as _module_update_journal
 import quickscale_core.manifest.loader as _loader
 import quickscale_core.config as _config
 import quickscale_core.schema.state_schema as _state_schema
@@ -252,15 +253,16 @@ def _read_embedded_module_version(project_path: Path, module: str) -> str:
     return normalized or manifest.version
 
 
-def _sync_state_module_version(
-    project_path: Path,
+def _apply_state_module_version(
+    state: Any,
     module: str,
     version: str,
     *,
     commit_sha: str | None = None,
     branch: str | None = None,
-) -> None:
-    """Mirror embedded module versions and provenance into applied state.
+    timestamp: str | None = None,
+) -> bool:
+    """Mirror one module's pulled version and provenance into in-memory state.
 
     Updates ``state.modules[module].version`` and, when *commit_sha* is
     provided, ``state.modules[module].commit_sha``.  When *branch* is
@@ -268,22 +270,24 @@ def _sync_state_module_version(
     state never keeps a custom or stale ref after the update moves the module
     onto the canonical split branch.  The ``embedded_at`` timestamp is always
     refreshed to reflect the current update so the full provenance
-    (version, commit_sha, branch, embedded_at) stays consistent.  The state
-    file must already contain the module entry; modules absent from state are
-    silently skipped (callers should ensure state is materialized first).
-    """
-    state_manager = _state_schema.StateManager(project_path)
-    state = state_manager.load()
-    if state is None or module not in state.modules:
-        return
+    (version, commit_sha, branch, embedded_at) stays consistent.
 
-    state.modules[module].version = version
+    The caller owns the save.  ``quickscale update`` applies every module in
+    the set here and writes ``state.yml`` once (SA319 (b)); this helper never
+    saves on its own.  Returns ``True`` when the module entry was found and
+    updated, ``False`` when state does not list the module.
+    """
+    module_state = state.modules.get(module)
+    if module_state is None:
+        return False
+
+    module_state.version = version
     if commit_sha is not None:
-        state.modules[module].commit_sha = commit_sha
+        module_state.commit_sha = commit_sha
     if branch is not None:
-        state.modules[module].branch = branch
-    state.modules[module].embedded_at = _datetime.datetime.now().isoformat()
-    state_manager.save(state)
+        module_state.branch = branch
+    module_state.embedded_at = timestamp or _datetime.datetime.now().isoformat()
+    return True
 
 
 def _warn_version_drift_for_update(
@@ -357,7 +361,16 @@ def _validate_update_environment() -> None:
         click.echo("\n💡 Tip: This command must be run from a git repository", err=True)
         raise click.Abort()
 
-    if not _git_repo.is_working_directory_clean():
+    # A pending journal means the interrupted transaction owns the dirty
+    # paths (state, wiring, module trees).  The resume path validates them
+    # under the lock before touching anything, so the ordinary clean-tree
+    # gate must not refuse the recovery command first.
+    if _module_update_journal._update_journal_path(Path.cwd()).exists():
+        return
+
+    if not _git_repo.is_working_directory_clean(
+        ignored_paths=(str(_module_update_journal.UPDATE_JOURNAL_RELATIVE_PATH),)
+    ):
         click.secho(
             "❌ Error: Working directory has uncommitted changes",
             fg="red",

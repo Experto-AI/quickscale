@@ -54,37 +54,33 @@ def _load_update_recovery_ledger(project_path: Path) -> Any | None:
 def _check_local_pre_pull_guard(
     project_path: Path,
     module_name: str,
-    applied_state: Any,
+    module_state: Any,
 ) -> bool:
     """Block known-local unsafe updates before any subtree pull starts."""
-    if applied_state is not None:
-        module_state = applied_state.modules.get(module_name)
-        if module_state is None:
-            _module_output._report_local_pre_pull_guard_block(
-                module_name,
-                [
-                    "",
-                    ".quickscale/state.yml does not list this module as installed.",
-                    "Reconcile local tracking with 'quickscale apply' before updating.",
-                    "This guard uses only verified local state and does not predict remote compatibility.",
-                ],
-            )
-            return False
+    if module_state is None:
+        _module_output._report_local_pre_pull_guard_block(
+            module_name,
+            [
+                "",
+                ".quickscale/state.yml does not list this module as installed.",
+                "Reconcile local tracking with 'quickscale apply' before updating.",
+                "This guard uses only verified local state and does not predict remote compatibility.",
+            ],
+        )
+        return False
 
-        recovery_ledger = _load_update_recovery_ledger(project_path)
-        if recovery_ledger is not None:
-            _module_output._report_local_pre_pull_guard_block(
-                module_name,
-                [
-                    "",
-                    "Pending .quickscale/apply-recovery.yml records an unfinished apply.",
-                    "Finish the interrupted apply or clear the local recovery ledger before running 'quickscale update'.",
-                    "The recovery ledger carries no applied state; .quickscale/state.yml remains authoritative.",
-                ],
-            )
-            return False
-    else:
-        module_state = None
+    recovery_ledger = _load_update_recovery_ledger(project_path)
+    if recovery_ledger is not None:
+        _module_output._report_local_pre_pull_guard_block(
+            module_name,
+            [
+                "",
+                "Pending .quickscale/apply-recovery.yml records an unfinished apply.",
+                "Finish the interrupted apply or clear the local recovery ledger before running 'quickscale update'.",
+                "The recovery ledger carries no applied state; .quickscale/state.yml remains authoritative.",
+            ],
+        )
+        return False
 
     quickscale_config_path = project_path / "quickscale.yml"
     if not quickscale_config_path.exists() or module_state is None:

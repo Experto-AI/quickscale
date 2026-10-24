@@ -170,14 +170,24 @@ migration file while the module's version label is unchanged, and on every pull 
 applied vintage is at or after the migration-freeze release: from that release on, the applied
 migration files are the database's schema identity, so replacing one would leave it unidentified
 and an update refuses to proceed while that identity cannot be established from the embedded
-module. A refused update restores the pre-update content, and a migration file the pull adds is
-applied forward on the next `migrate`.
+module. A refused update keeps the transaction recorded and the next `quickscale update` re-checks
+the applied migration identity, so reconcile the module content before retrying; a migration file
+the pull adds is applied forward on the next `migrate`.
 
 Before the first pull, the update also resolves each module's immutable
 `splits/<module>-module/<version>` tag for the running QuickScale version and requires the split
 branch tip to carry the same tree. A missing tag or a branch that moved after sealing stops the
 update before any module is touched, so a fixed version label cannot silently change content. After
 the pulls, it refreshes `poetry.lock` once for the whole updated set.
+
+An update journals the whole set before the first pull: `.quickscale/update-journal.yml` records
+the pre-update commit and every module's target while the update writes `.quickscale/state.yml`
+once and commits the set once. If the process is killed mid-set, the next `quickscale update`
+restores the transaction's tracking files to the recorded baseline, keeps any module already at its
+target, pulls the rest, and finalizes the set; it never re-pulls an already merged split commit.
+Clear a stale `.quickscale/state.lock` first, as for any interrupted QuickScale command. While the
+journal exists, `quickscale apply` and `quickscale deploy railway` refuse and ask you to update
+first.
 
 | Project part | Changed by `quickscale update`? | Notes |
 | --- | --- | --- |

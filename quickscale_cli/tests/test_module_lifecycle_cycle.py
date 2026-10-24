@@ -27,6 +27,7 @@ from quickscale_cli.commands.apply_command import (
 )
 from quickscale_cli.commands._module_push import push
 from quickscale_cli.commands._module_update import update
+from quickscale_cli.commands._module_update_journal import _ModuleUpdateTarget
 from quickscale_cli.commands.remove_command import remove  # type: ignore[import-untyped]
 
 
@@ -1130,7 +1131,7 @@ def test_update_after_removal_only_targets_remaining_modules(
             return_value=(True, "regenerated"),
         ),
         patch(
-            "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
+            "quickscale_cli.commands._module_update_io._commit_module_update_set",
         ),
         patch(
             "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
@@ -1138,8 +1139,22 @@ def test_update_after_removal_only_targets_remaining_modules(
         ),
         patch(
             "quickscale_cli.commands._module_update._update_single_module",
-            return_value=True,
+            return_value=_ModuleUpdateTarget(
+                "blog", "0.89.0", "splits/blog-module", "a" * 40
+            ),
         ) as mock_update_single_module,
+        patch(
+            "quickscale_cli.commands._module_embed._sync_module_dependencies",
+            return_value=True,
+        ),
+        patch(
+            "quickscale_cli.commands._module_update._resolve_pre_update_head",
+            return_value="b" * 40,
+        ),
+        patch(
+            "quickscale_cli.commands._module_update._missing_required_module_error",
+            return_value=None,
+        ),
     ):
         result = runner.invoke(
             update,
@@ -1147,7 +1162,7 @@ def test_update_after_removal_only_targets_remaining_modules(
             catch_exceptions=False,
         )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     mock_update_single_module.assert_called_once()
     module_name, module_info, remote, no_preview = (
         mock_update_single_module.call_args.args
@@ -1368,7 +1383,7 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
             return_value=(True, "regenerated"),
         ),
         patch(
-            "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
+            "quickscale_cli.commands._module_update_io._commit_module_update_set",
         ),
         patch(
             "quickscale_cli.commands._module_update_guard._collect_module_content_drift",
@@ -1376,8 +1391,22 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
         ),
         patch(
             "quickscale_cli.commands._module_update._update_single_module",
-            return_value=True,
+            return_value=_ModuleUpdateTarget(
+                "blog", "0.89.0", "splits/blog-module", "a" * 40
+            ),
         ) as mock_update_single_module,
+        patch(
+            "quickscale_cli.commands._module_embed._sync_module_dependencies",
+            return_value=True,
+        ),
+        patch(
+            "quickscale_cli.commands._module_update._resolve_pre_update_head",
+            return_value="b" * 40,
+        ),
+        patch(
+            "quickscale_cli.commands._module_update._missing_required_module_error",
+            return_value=None,
+        ),
     ):
         result = runner.invoke(
             update,
@@ -1385,7 +1414,7 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
             catch_exceptions=False,
         )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     mock_update_single_module.assert_called_once()
     module_name, module_info, remote, no_preview = (
         mock_update_single_module.call_args.args
@@ -1610,9 +1639,6 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         text=True,
     )
     commit_messages = log_result.stdout.splitlines()
-    for name in module_names:
-        assert f"chore(modules): update {name} module" in commit_messages
-    assert "chore: regenerate managed module wiring" in commit_messages
-    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + (
-        len(module_names) + 1
-    )
+    assert commit_messages[0] == "chore(modules): update installed modules"
+    assert "chore: regenerate managed module wiring" not in commit_messages
+    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + 1

@@ -7,6 +7,7 @@ resolution) and the trusted publication-origin validation. Re-exported from
 """
 
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 from typing import cast
 
@@ -73,6 +74,7 @@ def is_working_directory_clean(
     *,
     runner: GitRunner | None = None,
     include_untracked: bool = True,
+    ignored_paths: Iterable[str] = (),
 ) -> bool:
     """Check if there are uncommitted changes in the git working directory.
 
@@ -82,23 +84,31 @@ def is_working_directory_clean(
         include_untracked: When ``False``, only tracked modifications, staged
             changes, and deletions count as dirty.  Callers that must preserve
             an existing baseline's tracked files opt out of the broader default.
+        ignored_paths: Repository-relative paths that are allowed to carry
+            changes or exist untracked.  ``quickscale update`` exempts its
+            crash-recovery journal here so the next run can read and resume it.
 
     Raises:
         GitError: If Git cannot report the working-tree state.
     """
     cwd = path or Path.cwd()
+    status_args = [
+        "status",
+        "--porcelain=v1",
+        ("--untracked-files=normal" if include_untracked else "--untracked-files=no"),
+        "-z",
+    ]
+    if ignored_paths:
+        status_args.extend(
+            [
+                "--",
+                ".",
+                *(f":(exclude){ignored}" for ignored in ignored_paths),
+            ]
+        )
     try:
         result = _run_git(
-            [
-                "status",
-                "--porcelain=v1",
-                (
-                    "--untracked-files=normal"
-                    if include_untracked
-                    else "--untracked-files=no"
-                ),
-                "-z",
-            ],
+            status_args,
             cwd=cwd,
             check=True,
             capture_output=True,

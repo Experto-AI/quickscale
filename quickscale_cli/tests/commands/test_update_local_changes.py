@@ -15,6 +15,7 @@ from click.testing import CliRunner, Result
 from quickscale_core import __version__ as CORE_VERSION
 from quickscale_core.utils.git_subtree import run_git_subtree_add
 from quickscale_cli.commands._module_update import update
+from quickscale_cli.commands._module_update_seal import _UpdateSealPlan
 from quickscale_cli.commands.status_command import status
 
 _MODULE_PREFIX = "modules/auth"
@@ -181,6 +182,24 @@ def _patched_update(
             patch(
                 "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value=latest_sha,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "quickscale_cli.commands._module_update_seal._preflight_update_seals",
+                return_value=(
+                    {
+                        "auth": _UpdateSealPlan(
+                            module="auth",
+                            version=CORE_VERSION,
+                            tag=f"splits/auth-module/{CORE_VERSION}",
+                            tag_sha=latest_sha,
+                            branch="splits/auth-module",
+                            branch_sha=latest_sha,
+                        )
+                    },
+                    None,
+                ),
             )
         )
         stack.enter_context(

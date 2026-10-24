@@ -175,9 +175,35 @@ def _stub_module_update_seal_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
         "quickscale_cli.commands._module_update_seal._remote_trees",
         lambda remote, first_commit, second_commit: ("sealed-tree", "sealed-tree"),
     )
+    from quickscale_cli.commands._module_update_seal import _UpdateSealPlan
+
+    def _stub_preflight(state, remote, version):
+        del remote
+        return (
+            {
+                name: _UpdateSealPlan(
+                    module=name,
+                    version=version,
+                    tag=f"splits/{name}-module/{version}",
+                    tag_sha="a" * 40,
+                    branch=f"splits/{name}-module",
+                    branch_sha="a" * 40,
+                )
+                for name in state.modules
+            },
+            None,
+        )
+
     monkeypatch.setattr(
         "quickscale_cli.commands._module_update_seal._preflight_update_seals",
-        lambda state, remote, version: ({}, None),
+        _stub_preflight,
+    )
+    # The stub plans use a fixed SHA, so the requirement preflight cannot read
+    # a target manifest.  Its production behavior has focused coverage in
+    # test_update_journal.py and test_update_wiring_regeneration.py.
+    monkeypatch.setattr(
+        "quickscale_cli.commands._module_update._missing_required_module_error",
+        lambda project_path, state, seal_plans: None,
     )
     monkeypatch.setattr(
         "quickscale_cli.commands._module_update_io._refresh_update_lockfile",

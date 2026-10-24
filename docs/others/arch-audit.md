@@ -85,19 +85,20 @@ ledger.
 The failure branch matters more than the happy path: step 4 mutates `managed_files` and writes the
 live snapshot to `state.yml` before its checkpoint, so a kill after it resumes at step 5 with
 managed-file drift still detectable. A kill during step 1 leaves subtree commits and module
-directories but no checkpoint; the next run re-plans from `state.yml`. `update` has no checkpoint at all: it pulls each module
-and commits independently, so a kill leaves a mixed set (F2). External effects (subtree commits,
-`poetry install`, `migrate`, Docker/Railway) are not reversible; the ledger is the only recovery
-record.
+directories but no checkpoint; the next run re-plans from `state.yml`. `update` journals its module set before the first pull,
+applies the set to one state write, and commits it once; a kill between pulls leaves the journal
+for the next update to restore. External effects (subtree commits, `poetry install`, `migrate`,
+Docker/Railway) are not reversible; the apply ledger and the update journal are the only recovery
+records.
 
 *Lifecycle transition.* A 0.89.0 → next-release upgrade stamps 43 version-bearing files, publishes
 12 split branches and 12 immutable tags, then an existing project updates from the branch tip,
 regenerates managed wiring, and adopts contract steps. Code at N must read state written by N−1:
 the desired-state schema stays `"1"`, applied state carries the release version plus per-module
 versions, and contract ids union forward. In-flight work: generated project requests during a rolling deploy see `start.sh` migrate
-first (F3); in-flight backups are local files with a 300 s stale heuristic (F4); queued work is
+first (F2); in-flight backups are local files with a 300 s stale heuristic (F3); queued work is
 external cron, not an in-process queue. Restore is the other lifecycle branch: it reads a database
-dump, live media, and live env at different moments (F4). No claim of safe in-flight upgrade or
+dump, live media, and live env at different moments (F3). No claim of safe in-flight upgrade or
 restore rests on a tested two-version exercise; this is residual risk.
 
 **Measurements** (filter: `--since="12 months ago"`, no merges, commits touching ≤30 files,
@@ -138,7 +139,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Module migrations frozen | migration-content identity in update/restore | gated | stable |
 | Tenant RLS on shipped tables | FORCE RLS migrations, boot guard, restricted-role integration gate | structural in modules | 22/22 enrolled |
 | Generated-project tenant isolation | two-organization isolation lane under the restricted runtime role | gated | **closed** (SA318) |
-| Apply state single-writer | `StateManager` + `LedgerManager`, advisory lock | structural but dual-owner | unchanged |
+| Apply state single-writer | `StateManager` + `LedgerManager` + update journal, advisory lock | structural | **strengthened** (SA319 (b): one state write per update set; the journal carries intent only) |
 | Apply resume preserves state | `ApplyExecutor` checkpoint + fault harness | gated, content not asserted | gap |
 | Production migration safety | `start.sh` boot migration | convention | unchanged |
 | Production media durability | docs only; storage module optional | convention | unchanged |
@@ -151,9 +152,8 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Rank | ID | Title | Horizon | Conf. | Size | Rev. | Problem |
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. |
-| 2 | `module-upgrade-no-reconciler` | Module update is a mutable multi-commit operation | now | High | M | two-way | Update proves the seal and refreshes the lock, but still mutates modules in separate commits with no journal or crash recovery. |
-| 3 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
-| 4 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
+| 2 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
+| 3 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore, project schema is excluded, and restore has no lease. |
 
 ## Machine-readable index
 
@@ -170,17 +170,7 @@ items:
                quickscale_core/src/quickscale_core/data/project_contract.yml,
                quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/pages/CrmPage.tsx],
      first_seen: 2026-07-10, last_verified: 2026-10-23}
-  - {id: module-upgrade-no-reconciler, status: open, rank: 2,
-     title: "Module update is a mutable multi-commit operation",
-     lenses: [IV, VII, X, XIX], horizon: now, confidence: High, size: M,
-     reversibility: two-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_cli/src/quickscale_cli/commands/_module_update.py,
-               quickscale_cli/src/quickscale_cli/commands/_module_update_seal.py,
-               quickscale_cli/src/quickscale_cli/commands/_module_update_io.py,
-               quickscale_cli/src/quickscale_cli/commands/_module_embed.py,
-               quickscale_core/src/quickscale_core/utils/git_repo.py],
-     first_seen: 2026-10-23, last_verified: 2026-10-24}
-  - {id: generated-deploy-topology-unmodeled, status: open, rank: 3,
+  - {id: generated-deploy-topology-unmodeled, status: open, rank: 2,
      title: "Generated production topology is prose, not an artifact",
      lenses: [IV, VI, XVI, XIX], horizon: now, confidence: High, size: M,
      reversibility: two-way door, depends_on: [], amplifies: [backup-restore-incoherent],
@@ -189,7 +179,7 @@ items:
                quickscale_core/src/quickscale_core/generator/templates/start.sh.j2,
                quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2],
      first_seen: 2026-10-23, last_verified: 2026-10-23}
-  - {id: backup-restore-incoherent, status: open, rank: 4,
+  - {id: backup-restore-incoherent, status: open, rank: 3,
      title: "Backups cover the database, not a coherent recovery point",
      lenses: [I, IV, XVI, XVIII], horizon: 6-18 months, confidence: High, size: L,
      reversibility: one-way door, depends_on: [], amplifies: [],
@@ -310,76 +300,7 @@ items:
   remove resource contracts from user-owned pages. SA153 (j, Track 1) owns the portal's
   managed-hook boundary. Completing either alone is not closure.
 
-### Finding 2: Module update commits a set without a journal
-
-- **ID:** `module-upgrade-no-reconciler`
-- **Rank rationale:** High × High, steep. Every release and every project executes this path; twelve
-  modules mean at least twelve state writes per update. The seal tree is now proven and the lock
-  refreshed, but an interrupted update is still unreconcilable without git surgery: each pull commits
-  independently and no journal records the set.
-- **Horizon & trigger:** `now` — the next interrupted `quickscale update`, or a crash between module
-  pulls.
-- **Confidence:** High — per-module commits, the absent journal, and the crash window were read end
-  to end; the sealed-tag, branch-tree, and lockfile gaps were re-read as resolved.
-- **Context dependence:** `wrong-for-now` (dimension: project count and release cadence). Lives in
-  realities (A) and (B).
-- **Problem:** Update verifies the sealed tag and refreshes `poetry.lock`, but it still mutates N
-  modules and state in separate commits with no journal, so a crash between pulls leaves a
-  half-updated project that the next command cannot reconcile without git surgery. State is written
-  once per module rather than once for the set.
-- **Evidence:**
-  - Resolved in SA319 (a): update resolves `splits/<module>-module/<version>` and proves the canonical
-    branch tip's tree equals the seal's before the first pull (`_module_update_seal.py`); a missing
-    tag or moved branch aborts without mutation. The release seal check compares the published branch
-    tip with the tag (`scripts/check_module_seals.py`).
-  - Resolved in SA319 (a): the update refreshes `poetry.lock` once after the whole set's dependency
-    entries are final, snapshots the lockfile, and restores or removes it on rollback
-    (`_module_update_io.py`).
-  - Per-module mutation: `_module_update.py` stops on the first failure; each module is committed
-    independently (`_module_update_io.py`); rollback runs only in the handled exception path and
-    warns if it fails. There is no update journal; the only ledger reference is a read-only
-    apply-recovery guard (`_module_update_guard.py`).
-  - State is loaded before the lock (`_module_update.py` `update()`), then `_run_update_under_lock`
-    acquires it; a concurrent state change between read and lock is possible.
-  - Legacy copy: `_sync_state_module_version` writes `state.yml` and refreshes `embedded_at` every
-    run (`_module_shared.py`); `config.update_module_version` has no non-test caller, so
-    `.quickscale/config.yml` never follows (the drift warning now says so).
-- **Counter-evidence:** the seal preflight is verified for the whole set before the first pull; the
-  migration-content freeze refuses rewritten migrations; maintainer split publication is hardened
-  with lease/fast-forward/tree identity; the lock refresh and rollback are real for handled
-  exceptions. Searched for an update journal, a single module-set commit, and a crash-resume test —
-  found none. Rollback is real for handled exceptions; it is not a crash recovery mechanism.
-- **Why it compounds:** growth variable = **live projects × installed modules × releases**. Every
-  update produces N commits and N state writes; each new module adds a pull and a state write. A
-  crash between pulls leaves a mixed module set, and the next command has no recorded set to resume
-  or roll back to.
-- **Detection signal:** a project needing `git reset` after an interrupted update; two projects with
-  the same module version producing different page behavior; a mixed module set after a killed
-  update.
-- **Steelman:** update-from-latest is deliberate; per-module rollback covers handled failures; a
-  single project can be re-applied or regenerated. Holds while `apply` is always run after `update`
-  and updates never crash mid-set.
-- **Correct shape:** an update is a transaction over a module **set** whose content identity is
-  immutable and recorded; one journal/checkpoint, one state write, and rollback on failure.
-- **Do-nothing cost:** a single interrupted update costs a git rescue; each update leaves N commits
-  and N state writes; a crash between modules leaves a mixed set with no recorded transaction.
-- **Options:**
-  1. **Update journal + single set commit.** Write an update journal/checkpoint, commit the module
-     set once, write state once, and resume or roll back to one coherent set. M, two-way door;
-     removes the mechanism.
-  2. **Keep per-module commits, prove the set.** Add a journal recording each module's target SHA and
-     a resume that completes or rolls back the recorded set; keep the existing per-module transport
-     commits. S/M, two-way; removes the crash-recovery gap but keeps N commits.
-  3. **Accept and document.** Keep the per-module flow, document recovery, and require `apply` after
-     update. Containment: a status warning when a mixed set is detected. Revocation: a second live
-     project.
-- **Recommendation:** option 1; option 2 remains the transition guard. **Size:** M · **Reversibility:**
-  two-way door · **Guard:** an update test that kills the process between pulls and asserts the next
-  run converges to one coherent set, plus a single state write for the set. **Acceptance check:** a
-  kill between modules resumes to one coherent set, and state matches the installed content after
-  the resume. **First step:** write the journal before the first pull.
-
-### Finding 3: Generated production topology is prose, not an artifact
+### Finding 2: Generated production topology is prose, not an artifact
 
 - **ID:** `generated-deploy-topology-unmodeled`
 - **Rank rationale:** High × Medium, steep. The generated README previously told users to run a dev
@@ -453,7 +374,7 @@ items:
   gunicorn with `DEBUG=False`, one migrate job, and uploaded files survive a redeploy. **First step:**
   split the Compose file into a dev and a production service definition.
 
-### Finding 4: Backups cover the database, not a coherent recovery point
+### Finding 3: Backups cover the database, not a coherent recovery point
 
 - **ID:** `backup-restore-incoherent`
 - **Rank rationale:** High × Medium, steep. The backup is the disaster path; media is read live at
@@ -542,7 +463,7 @@ itself assigns the managed-hook boundary to SA153.
 `pyproject.toml`, `MODULE_CATALOG`, `AUTHORITATIVE_MODULE_COUNT`, root `pyproject.toml`, `mypy.ini`
 section, module layer entry, initial split branch, split tag/seal, CI env/seam/URL rows, docs.
 Nine to fourteen hand edits, of which catalog/count, layer, and mypy are gated by consistency
-tests. Verdict: **finding evidence for F2**; the catalog gate converts a silent break into a
+tests. Verdict: **finding evidence for the module catalog surface**; the catalog gate converts a silent break into a
 build failure but does not remove the edit.
 
 **Probe D — add a module-declared environment variable (control).** Stations: `module.yml` only;
@@ -552,9 +473,9 @@ rendering works.
 
 ## Fix order and interactions
 
-- **F3 and F4 share media:** F3's production storage backend reduces F4's media gap but does not
-  close it; F4 must still decide whether media is captured or explicitly external.
-- **Ranking already reflects amplification:** F1/F2 are High × High; F3/F4 are High × Medium.
+- **F2 and F3 share media:** F2's production storage backend reduces F3's media gap but does not
+  close it; F3 must still decide whether media is captured or explicitly external.
+- **Ranking already reflects amplification:** F1 is High × High; F2/F3 are High × Medium.
 
 ## Sound load-bearing decisions
 
@@ -565,7 +486,7 @@ rendering works.
 2. **Module embed is tag-pinned and provenance-checked.** Embed resolves and peels an immutable
    `splits/<module>/<version>` tag (`_module_embed.py:323-343`); the update guard detects local edits
    against the recorded commit (`module_provenance.py`); migration content is frozen from 0.89.0.
-   This is the right identity model — update should join it (F2), not abandon it.
+   This is the right identity model — update joined it through the journaled set transaction (SA319 (b)).
 3. **RLS is structural in the shipped modules.** 22/22 tenant models carry FORCE RLS, the
    `TenantManager` pair, and composite tenant-equality FKs; the runtime-role boot guard fails
    closed; the repository integration gate runs under `NOBYPASSRLS NOSUPERUSER`. Do not weaken this.
@@ -592,7 +513,7 @@ None. No team decision record accepts any open finding with a containment and re
 | `manifest-dsl-vocabulary-growth` | DSL gains a keyword per module need | a keyword added for one module | not fired: 14 top-level keys; `throttle_scopes` is generic; no manifest change in the delta. |
 | `session-advisory-lock-pooling` | Billing mutex is a session advisory lock | pooled `DATABASE_URL` | not fired: still `pg_advisory_lock` (`_locks.py:41,70`); no pooler in generated settings; `CONN_MAX_AGE=600` is per-process. |
 | `modules-english-only` | Module pages are English-only | SA153/154 needs a Spanish module page | not fired: no `gettext`/`trans` in module source; SA154 is inventory-only. |
-| `two-filesystem-lock-implementations` | `advisory_lock.py` and `dr_engine/_lock.py` | a third implementation | not fired: exactly two; the DR lock's mtime heuristic is carried under F4, not as a third lock. |
+| `two-filesystem-lock-implementations` | `advisory_lock.py` and `dr_engine/_lock.py` | a third implementation | not fired: exactly two; the DR lock's mtime heuristic is carried under F3, not as a third lock. |
 | `ci-provisioning-hand-pins` | Hand-pinned CI residue | 13th module | not fired: 12 modules; `provision_ci_postgres.sh:95` hard-asserts the count; the `backups-validation` job is still hand-written. |
 | `trigger-inputs-legacy-name` | Legacy name of the E2E allowlist | a gate skipped on it | not fired: field feeds the E2E allowlist only; validated at `_gate_registry_schema.py:481-511`; no execution path skips. |
 | `subscription-status-single-writer` | One writing module for subscription status | second provider or an outside writer | not fired: Stripe-only, one module; **prior evidence corrected** — six assignment sites in five billing files (`_subscription_checkout.py:480`, `_subscription_events.py:192`, `_subscription_mutations.py:406`, `_webhooks_checkout.py:561`, `_webhooks_invoice.py:491,569`), all inside billing. |
@@ -604,7 +525,7 @@ None. No team decision record accepts any open finding with a containment and re
 | `release-gate-version-blind` | `version_tool.sh check` does not read the two `_version.py` files; TestPyPI is `continue-on-error`; `check-module-seals` is outside `gate_registry.json` | latent: 34 of 37 `VERSION` commits also touch `_version.py`; CI still tests and builds the tag | the next release where `_version.py` and `VERSION` diverge, or a TestPyPI-only failure would have caught a defect; or a stale seal ships |
 | `cli-headless-gap` | `apply`/`update` call `click.confirm` with no `--yes`/non-interactive flag; cancel exit codes differ by command | the interactive wizard is the declared default; no CI automation requirement yet | a deployment or CI workflow needs to run apply/update unattended |
 | `node-pin-duplication` | Node/pnpm versions are literals in six generated files; no parity gate (Python/Django/Postgres are derived) | SA308 refreshes them together; a drift is a build failure, not data loss | the next Node/pnpm bump that edits fewer than all six stations |
-| `tenant-removal-coverage` | Purge covers 22 tenant tables but not NotificationMessage/deliveries, billing webhook payloads, backup artifacts, media objects, or analytics; obligations are opt-in (4 of 12 apps declare) | no erasure request or external retention obligation has been recorded; the docs call it GDPR-capable | the first erasure/export request, or a compliance commitment; then promote with F1/F4 |
+| `tenant-removal-coverage` | Purge covers 22 tenant tables but not NotificationMessage/deliveries, billing webhook payloads, backup artifacts, media objects, or analytics; obligations are opt-in (4 of 12 apps declare) | no erasure request or external retention obligation has been recorded; the docs call it GDPR-capable | the first erasure/export request, or a compliance commitment; then promote with F1/F3 |
 | `admin-tenant-authority` | `TenantModelAdmin` takes an org UUID from request parameters and queries under it; `OrganizationMembershipAdmin`/`InvitationAdmin` let staff edit memberships | the docs require tenants never to be `is_staff`; only superusers are the documented operators; conditional on a non-superuser staff account | any non-superuser staff account is created |
 | `seam-unversioned` | `window.__QUICKSCALE__` has no version; key presence is validated by a user-owned TS file; payload shapes are unvalidated | core pin is minor-range; key skew fails loudly; no skew incident recorded | the first frontend/core skew failure in a live project |
 
@@ -616,10 +537,10 @@ None. No team decision record accepts any open finding with a containment and re
 - **`manifest-dsl-vocabulary-growth`** — no per-module keyword was added; the last manifest additions
   are generic. Watchlist.
 - **`two-filesystem-lock-implementations` as a standalone finding** — the third-implementation
-  trigger has not fired; the DR lock's stale heuristic is evidence inside F4, not a separate root.
+  trigger has not fired; the DR lock's stale heuristic is evidence inside F3, not a separate root.
 - **`session-advisory-lock-pooling`** — no pooler configuration exists; a session lock is correct
   under direct connections. Watchlist.
-- **`migrate-runs-per-replica` as a standalone finding** — folded into F3; the trigger is more than
+- **`migrate-runs-per-replica` as a standalone finding** — folded into F2; the trigger is more than
   one replica, and the live project is single-instance. The boot contract is the structural root.
 - **`allow-bypassrls-serving-undetected` as a standalone finding** — resolved with SA318:
   production serving refuses the bypass, and the generated two-organization lane runs under the
@@ -635,7 +556,7 @@ None. No team decision record accepts any open finding with a containment and re
 - **Admin tenant authority** — conditional on a non-superuser staff account; the documented model
   is superuser-only. Watchlist (`admin-tenant-authority`).
 - **DR sidecar checksum/path containment** — requires write access to the private backup store; a
-  hardening ticket, not a structural root. It is noted in F4's evidence but not promoted.
+  hardening ticket, not a structural root. It is noted in F3's evidence but not promoted.
 - **`start.sh` second DB connection constructor** — a ticket; the role split is sound.
 - **Tech-audit S4s** (`notifications-message-status-aggregate-race`, `forms-retention-skips-null-ip-rows`,
   `beta-migrate-existing-recipient-no-dirty-guard`) — defect-shaped; owned by `tech-audit.md`, not
@@ -645,13 +566,13 @@ None. No team decision record accepts any open finding with a containment and re
 
 - **Will a second generated project go live before 1.0?** Yes → F1 stays rank 1 and option 3 is
   dead; the steps × projects cost doubles immediately.
-- **Is self-hosted Compose a supported production path or a dev convenience?** If dev-only, F3's
+- **Is self-hosted Compose a supported production path or a dev convenience?** If dev-only, F2's
   preferred option becomes 2 (keep the corrected local-development labeling and add the release
   gate), and the finding drops to a documentation/gate fix.
 - **Will SA153's project-owned extension add tenant models and migrations?** The roadmap says it adds
-  `0002+` migrations; if it also adds tenant tables, F4's horizon moves to now.
+  `0002+` migrations; if it also adds tenant tables, F3's horizon moves to now.
 - **Is the backups engine the live project's recovery path, or is the cutover's manual `pg_dump` the
-  real path?** If the engine is unused, F4 drops to a watchlist; if it is used, its rank rises.
+  real path?** If the engine is unused, F3 drops to a watchlist; if it is used, its rank rises.
 - **Is a tenant erasure/export obligation actually contracted?** Yes → `tenant-removal-coverage`
   promotes into a finding (likely High × Medium).
 
@@ -714,10 +635,12 @@ watchlist **6**.
 - 2026-10-24 — `apply-state-dual-owner`: resolved by SA317.  The recovery ledger now stores the
   resume pointer and diagnostic progress only; `state.yml` is the single applied-state owner and
   resume reads it.
-- 2026-10-24 — `module-upgrade-no-reconciler`: **partially resolved** by SA319 (a). Update now
-  verifies the sealed tag and canonical branch tree for the whole set before the first pull,
-  refreshes `poetry.lock` once, and restores the lockfile on rollback. The per-module commits, the
-  absent update journal, the per-module state writes, and crash recovery remain open (slice (b)).
+- 2026-10-24 — `module-upgrade-no-reconciler`: **resolved** by SA319. Slice (a) verifies the sealed
+  tag and canonical branch tree for the whole set before the first pull and refreshes `poetry.lock`
+  once. Slice (b) records `.quickscale/update-journal.yml` before the first pull, applies the set to
+  one `state.yml` write, commits the set once, and resumes the recorded set on the next update after
+  a hard interruption without re-pulling an already merged target; `apply` and deploy refuse while
+  the journal is pending.
 - 2026-10-24 — `generated-file-ownership-unmodeled`: **still-open, slice (a) landed**. SA320 (a)
   generates `frontend/src/quickscaleSeam.hooks.ts` from each active manifest's `frontend_resources`
   section (CRM declares five subpaths and `CrmStats`), moves `CrmPage.tsx` onto it, and extends the

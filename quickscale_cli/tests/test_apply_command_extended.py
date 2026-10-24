@@ -7834,11 +7834,9 @@ class TestCallerParityAcrossProvenancePaths:
         assert module_state.embedded_at is not None
         assert module_state.embedded_at != ""
 
-    def test_update_path_resolves_source_ref_once_and_persists_triple(self, tmp_path):
+    def test_update_path_resolves_source_ref_once_and_returns_target(self, tmp_path):
         """Update path: _update_single_module resolves source_ref once and
-        persists the full triple via _sync_state_module_version."""
-        from quickscale_core.schema.state_schema import StateManager
-
+        returns the target the set's single state write records."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
@@ -7897,7 +7895,11 @@ class TestCallerParityAcrossProvenancePaths:
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
-            module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+            module_info = Mock(
+                prefix="modules/auth",
+                branch="splits/auth-module",
+                version="0.82.0",
+            )
 
             with (
                 patch(
@@ -7912,9 +7914,6 @@ class TestCallerParityAcrossProvenancePaths:
                     "quickscale_cli.commands._module_shared._read_embedded_module_version",
                     return_value="0.83.0",
                 ),
-                patch(
-                    "quickscale_cli.commands._module_update_io._commit_module_update",
-                ),
             ):
                 result = _update_single_module(
                     "auth",
@@ -7925,20 +7924,13 @@ class TestCallerParityAcrossProvenancePaths:
         finally:
             os.chdir(original_cwd)
 
-        assert result is True
+        assert result is not None
         # Source ref resolved exactly once.
         mock_resolve.assert_called_once()
-
-        # Full triple persisted from the resolved source_ref.
-        state_manager = StateManager(tmp_path)
-        updated_state = state_manager.load()
-        assert updated_state is not None
-        module_state = updated_state.modules["auth"]
-        assert module_state.commit_sha == resolved_sha
-        assert module_state.version == "0.83.0"
-        assert module_state.embedded_at is not None
-        assert module_state.embedded_at != ""
-        assert module_state.embedded_at != "2025-01-01T00:00:00"
+        # The target carries the full provenance for the set's state write.
+        assert result.commit_sha == resolved_sha
+        assert result.version == "0.83.0"
+        assert result.branch == "splits/auth-module"
 
     def test_noop_repair_resolves_source_ref_once_and_persists_triple(self, tmp_path):
         """No-op repair: _attempt_provenance_repair_if_needed resolves

@@ -13,6 +13,7 @@ records that id in ``adopted_contract_steps``; adoption is the one mechanism.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -236,16 +237,23 @@ def enforce_shipped_contract_vintage(
     )
 
 
-def record_contract_adoption(
-    state: QuickScaleState | None,
-    project_path: Path,
-) -> str | None:
-    """Record the declared project vintage after the user confirms adoption.
+@dataclass(frozen=True)
+class _ContractAdoption:
+    """The in-memory adoption outcome, reported by the caller after its save."""
 
-    Advances ``project_contract`` in ``.quickscale/state.yml`` and records
-    every declared adoption step id, so a project that has adopted every step
-    no longer needs the per-invocation acknowledgement flag and a project
-    generated before a step existed cannot pass on a shared version alone.
+    target_contract: str
+    adopted_steps: tuple[str, ...]
+    already_recorded: bool
+
+
+def apply_contract_adoption(state: QuickScaleState | None) -> _ContractAdoption | None:
+    """Apply the declared project vintage to in-memory state.
+
+    Advances ``project_contract`` and records every declared adoption step id
+    without saving, so a caller that owns one state write for a wider
+    transaction (``quickscale update``) can include the adoption in it.
+    Callers that own the save report the result with
+    :func:`report_contract_adoption`.
     """
     if state is None:
         return None
@@ -265,11 +273,11 @@ def record_contract_adoption(
         and set(declared_steps) <= set(state.project.adopted_contract_steps or ())
     )
     if already_recorded:
-        click.secho(
-            f"✅ Project contract already recorded as {current}.",
-            fg="green",
+        return _ContractAdoption(
+            target_contract=cast(str, current),
+            adopted_steps=tuple(adopted),
+            already_recorded=True,
         )
-        return current
 
     # Never move a recorded vintage backwards: a newer state read by an older
     # CLI keeps its greater contract while still recording the step ids.
@@ -281,18 +289,56 @@ def record_contract_adoption(
 
     state.project.project_contract = target_contract
     state.project.adopted_contract_steps = adopted
+    return _ContractAdoption(
+        target_contract=target_contract,
+        adopted_steps=tuple(adopted),
+        already_recorded=False,
+    )
+
+
+def report_contract_adoption(adoption: _ContractAdoption) -> str | None:
+    """Print the outcome of an adoption applied to already-saved state."""
+    if adoption.already_recorded:
+        click.secho(
+            f"✅ Project contract already recorded as {adoption.target_contract}.",
+            fg="green",
+        )
+        return adoption.target_contract
+
+    click.secho(
+        f"✅ Recorded generated-project contract adoption: {adoption.target_contract}",
+        fg="green",
+    )
+    click.echo(f"   Adopted steps: {', '.join(adoption.adopted_steps)}")
+    return adoption.target_contract
+
+
+def record_contract_adoption(
+    state: QuickScaleState | None,
+    project_path: Path,
+) -> str | None:
+    """Record the declared project vintage after the user confirms adoption.
+
+    Advances ``project_contract`` in ``.quickscale/state.yml`` and records
+    every declared adoption step id, so a project that has adopted every step
+    no longer needs the per-invocation acknowledgement flag and a project
+    generated before a step existed cannot pass on a shared version alone.
+    """
+    if state is None:
+        return None
+    adoption = apply_contract_adoption(state)
+    if adoption is None:
+        return None
+    if adoption.already_recorded:
+        return report_contract_adoption(adoption)
+
     try:
         ProjectStateManager(project_path).save_state(state)
     except Exception as error:
         raise click.ClickException(
             f"Unable to record the project contract adoption: {error}"
         ) from error
-    click.secho(
-        f"✅ Recorded generated-project contract adoption: {target_contract}",
-        fg="green",
-    )
-    click.echo(f"   Adopted steps: {', '.join(adopted)}")
-    return target_contract
+    return report_contract_adoption(adoption)
 
 
 def record_confirmed_adoption(project_path: Path, *, operation: str) -> str | None:

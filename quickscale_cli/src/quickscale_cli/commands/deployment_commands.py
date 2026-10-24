@@ -52,6 +52,7 @@ from quickscale_cli.commands._deploy_service_config import (
     runtime_database_url as runtime_database_url,
 )
 import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_cli.commands._module_update_journal as _module_update_journal
 import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_cli.utils._railway_project as _railway_project
@@ -97,6 +98,11 @@ def railway(
     - Public domain is auto-generated and ALLOWED_HOSTS is auto-configured
     """
     project_path = Path.cwd()
+    if _module_update_journal._update_journal_path(project_path).exists():
+        raise click.ClickException(
+            "An interrupted module update is pending. Run 'quickscale update' "
+            "to restore the recorded module set before deploying."
+        )
     try:
         state = _project_state_manager.ProjectStateManager(project_path).load_state()
     except (_state_schema.StateError, OSError) as error:

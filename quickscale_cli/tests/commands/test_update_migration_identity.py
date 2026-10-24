@@ -29,8 +29,10 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_core import __version__ as CORE_VERSION
+from quickscale_core.project_state_manager import ProjectStateManager
 from quickscale_core.utils.git_repo import resolve_remote_ref
 from quickscale_core.utils.git_subtree import run_git_subtree_add
+import quickscale_cli.commands._module_update as _module_update
 from quickscale_cli.commands._module_update import (
     _get_update_migration_issues,
     _is_frozen_update_vintage,
@@ -39,6 +41,7 @@ from quickscale_cli.commands._module_update import (
     update,
 )
 from quickscale_cli.commands._module_update_seal import _UpdateSealPlan
+import quickscale_cli.commands._module_update_journal as _module_update_journal
 
 _APPLIED_MIGRATION = "# applied migration content\n"
 _PULLED_MIGRATION = "# rewritten by the pull\n"
@@ -106,7 +109,13 @@ def _write_update_project(
 
 def _run_update(project_path: Path, *, pulled_version: str, pull):
     """Run the single-module update with the git and version seams patched."""
-    module_info = Mock(prefix=_MODULE_PREFIX, branch="splits/auth-module")
+    state = ProjectStateManager(project_path).load_state()
+    assert state is not None
+    module_info = Mock(
+        prefix=_MODULE_PREFIX,
+        branch="splits/auth-module",
+        version=state.modules["auth"].version,
+    )
     with (
         patch(
             "quickscale_core.utils.git_repo.resolve_remote_ref",
@@ -120,9 +129,6 @@ def _run_update(project_path: Path, *, pulled_version: str, pull):
             "quickscale_cli.commands._module_shared._read_embedded_module_version",
             return_value=pulled_version,
         ),
-        patch(
-            "quickscale_cli.commands._module_update_io._commit_module_update",
-        ) as mock_commit,
     ):
         result = _update_single_module(
             "auth",
@@ -130,7 +136,7 @@ def _run_update(project_path: Path, *, pulled_version: str, pull):
             "https://example.com/repo.git",
             no_preview=True,
         )
-    return result, mock_commit
+    return result
 
 
 @pytest.fixture
@@ -170,12 +176,10 @@ def test_equal_label_migration_edit_is_refused_and_rolled_back(
         ).write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_MODULE_VERSION, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_MODULE_VERSION, pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert (
         "applied migration content changed under the equal version label"
         " '0.71.0'" in captured.err
@@ -184,7 +188,6 @@ def test_equal_label_migration_edit_is_refused_and_rolled_back(
     assert "Reconcile the embedded module content" in captured.err
     # The rollback restored the applied content and nothing was committed.
     assert migration_path.read_text() == _APPLIED_MIGRATION
-    mock_commit.assert_not_called()
 
 
 def test_equal_label_migration_removal_is_refused_and_rolled_back(
@@ -202,15 +205,12 @@ def test_equal_label_migration_removal_is_refused_and_rolled_back(
         )
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_MODULE_VERSION, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_MODULE_VERSION, pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert "migration '0001_initial.py' is no longer present" in captured.err
     assert migration_path.read_text() == _APPLIED_MIGRATION
-    mock_commit.assert_not_called()
 
 
 def test_equal_label_unidentifiable_updated_content_is_refused(
@@ -233,17 +233,14 @@ def test_equal_label_unidentifiable_updated_content_is_refused(
         ).unlink()
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_MODULE_VERSION, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_MODULE_VERSION, pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert (
         "the updated module's migration content could not be identified" in captured.err
     )
     assert migration_path.read_text() == _APPLIED_MIGRATION
-    mock_commit.assert_not_called()
 
 
 def test_equal_label_added_migration_is_applied_forward(
@@ -264,12 +261,10 @@ def test_equal_label_added_migration_is_applied_forward(
         ).write_text("# new migration\n")
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_MODULE_VERSION, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_MODULE_VERSION, pull=_pull)
 
-    assert result is True
-    mock_commit.assert_called_once()
+    assert result is not None
+    assert result is not None
     assert (
         _migrations_dir(project) / "0002_add_field.py"
     ).read_text() == "# new migration\n"
@@ -302,10 +297,10 @@ def test_pre_freeze_label_change_keeps_the_fresh_database_path(
         ).write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(project, pulled_version="0.82.0", pull=_pull)
+    result = _run_update(project, pulled_version="0.82.0", pull=_pull)
 
-    assert result is True
-    mock_commit.assert_called_once()
+    assert result is not None
+    assert result is not None
     assert migration_path.read_text() == _PULLED_MIGRATION
 
 
@@ -330,10 +325,10 @@ def test_pre_freeze_vintage_below_the_freeze_keeps_the_fresh_database_path(
         ).write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+    result = _run_update(project, pulled_version="0.95.0", pull=_pull)
 
-    assert result is True
-    mock_commit.assert_called_once()
+    assert result is not None
+    assert result is not None
     assert migration_path.read_text() == _PULLED_MIGRATION
 
 
@@ -357,10 +352,10 @@ def test_frozen_vintage_label_change_with_a_changed_file_is_refused_and_rolled_b
         ).write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+    result = _run_update(project, pulled_version="0.95.0", pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert (
         "applied migration content changed across the version label change "
         "'0.90.0' -> '0.95.0', at or after the migration freeze vintage" in captured.err
@@ -369,7 +364,6 @@ def test_frozen_vintage_label_change_with_a_changed_file_is_refused_and_rolled_b
     assert "Reconcile the embedded module content" in captured.err
     # The rollback restored the applied content and nothing was committed.
     assert migration_path.read_text() == _APPLIED_MIGRATION
-    mock_commit.assert_not_called()
 
 
 def test_frozen_vintage_label_change_with_a_removed_file_is_refused(
@@ -387,14 +381,13 @@ def test_frozen_vintage_label_change_with_a_removed_file_is_refused(
         )
         return "updated"
 
-    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+    result = _run_update(project, pulled_version="0.95.0", pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert "across the version label change '0.90.0' -> '0.95.0'" in captured.err
     assert "migration '0001_initial.py' is no longer present" in captured.err
     assert migration_path.read_text() == _APPLIED_MIGRATION
-    mock_commit.assert_not_called()
 
 
 def test_frozen_vintage_added_migration_applies_forward(
@@ -415,10 +408,10 @@ def test_frozen_vintage_added_migration_applies_forward(
         ).write_text("# new migration\n")
         return "updated"
 
-    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+    result = _run_update(project, pulled_version="0.95.0", pull=_pull)
 
-    assert result is True
-    mock_commit.assert_called_once()
+    assert result is not None
+    assert result is not None
     assert (
         _migrations_dir(project) / "0002_add_field.py"
     ).read_text() == "# new migration\n"
@@ -444,18 +437,15 @@ def test_frozen_vintage_equal_label_still_refuses_a_rewrite(
         ).write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_FREEZE_VINTAGE, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_FREEZE_VINTAGE, pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert (
         "applied migration content changed under the equal version label '0.90.0'"
         in captured.err
     )
     assert migration_path.read_text() == _APPLIED_MIGRATION
-    mock_commit.assert_not_called()
 
 
 def test_frozen_vintage_unidentifiable_applied_identity_is_refused(
@@ -482,16 +472,15 @@ def test_frozen_vintage_unidentifiable_applied_identity_is_refused(
         (migrations_dir / "0001_initial.py").write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+    result = _run_update(project, pulled_version="0.95.0", pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert "applied migration content identity could not be established" in captured.err
     assert "frozen vintage '0.90.0'" in captured.err
     assert "Reconcile the embedded module content" in captured.err
     # The rollback restored the pre-pull tree and nothing was committed.
     assert not source_dir.exists()
-    mock_commit.assert_not_called()
 
 
 def test_frozen_vintage_equal_label_unidentifiable_identity_is_refused(
@@ -512,15 +501,12 @@ def test_frozen_vintage_equal_label_unidentifiable_identity_is_refused(
         (migrations_dir / "0001_initial.py").write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_FREEZE_VINTAGE, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_FREEZE_VINTAGE, pull=_pull)
 
     captured = capsys.readouterr()
-    assert result is False
+    assert result is None
     assert "applied migration content identity could not be established" in captured.err
     assert not source_dir.exists()
-    mock_commit.assert_not_called()
 
 
 def test_update_migration_identity_reason_contract(
@@ -570,12 +556,10 @@ def test_pre_freeze_unidentifiable_applied_identity_skips_the_guard(
         (migrations_dir / "0001_initial.py").write_text(_PULLED_MIGRATION)
         return "updated"
 
-    result, mock_commit = _run_update(
-        project, pulled_version=_MODULE_VERSION, pull=_pull
-    )
+    result = _run_update(project, pulled_version=_MODULE_VERSION, pull=_pull)
 
-    assert result is True
-    mock_commit.assert_called_once()
+    assert result is not None
+    assert result is not None
 
 
 def test_get_update_migration_issues_contract() -> None:
@@ -739,16 +723,16 @@ def _write_real_update_project(
     return project
 
 
-def test_refused_real_subtree_pull_restores_git_state(
+def test_refused_real_subtree_pull_keeps_the_journal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A refused real subtree pull must not leave the rejected content at HEAD.
+    """A refused real subtree pull keeps its transaction for a later attempt.
 
-    ``git subtree pull`` commits the pulled rewrite before the guard can
-    refuse it, so the refusal has to restore the pre-pull content as the
-    effective HEAD and commit that restoration; otherwise the rejected
-    migration stays effective and the staged reversal blocks the next update.
+    ``git subtree pull`` commits the pulled rewrite before the guard refuses
+    it.  The journal keeps the transaction open so the next update re-runs the
+    identity guard instead of recording the rejected content as a completed
+    target.
     """
     remote_dir, applied_sha = _write_split_remote(tmp_path)
     project = _write_real_update_project(tmp_path, remote_dir, applied_sha)
@@ -756,18 +740,28 @@ def test_refused_real_subtree_pull_restores_git_state(
     migration_relpath = (
         f"{_MODULE_PREFIX}/src/quickscale_modules_auth/migrations/0001_initial.py"
     )
-    applied_content = _run_git(project, "show", f"HEAD:{migration_relpath}")
-
     real_single_module_update = _update_single_module
+    local_plan = _resolve_local_source_seal(str(remote_dir), "auth", CORE_VERSION)
 
-    def _update_from_local_remote(name, info, default_remote, no_preview):
+    def _update_from_local_remote(
+        name, info, default_remote, no_preview, *, seal_plan=None, resume=False
+    ):
         del default_remote
-        return real_single_module_update(name, info, str(remote_dir), no_preview)
+        return real_single_module_update(
+            name, info, str(remote_dir), no_preview, seal_plan=seal_plan
+        )
 
     with (
         patch(
             "quickscale_cli.commands._module_update._update_single_module",
             side_effect=_update_from_local_remote,
+        ),
+        patch.object(
+            _module_update, "_missing_required_module_error", return_value=None
+        ),
+        patch(
+            "quickscale_cli.commands._module_update_seal._preflight_update_seals",
+            return_value=({"auth": local_plan}, None),
         ),
         patch(
             "quickscale_cli.commands._module_update_seal._resolve_update_seal",
@@ -788,25 +782,50 @@ def test_refused_real_subtree_pull_restores_git_state(
     )
     assert "migration '0001_initial.py' changed content" in result.output
 
-    # The rejected rewrite is not the effective committed content, and the
-    # restoration is committed so the next update starts from a clean tree.
-    assert _run_git(project, "show", f"HEAD:{migration_relpath}") == applied_content
-    assert _run_git(project, "status", "--porcelain") == ""
-    assert "chore: roll back partial module update" in _run_git(
-        project, "log", "--pretty=%s", "-n", "2"
+    # The pull committed the rejected rewrite; the open journal is what stops
+    # it from being accepted as the recorded target.
+    assert (
+        _run_git(project, "show", f"HEAD:{migration_relpath}")
+        == _PULLED_MIGRATION.strip()
+    )
+    assert _module_update_journal._update_journal_path(project).exists()
+    assert "chore: roll back partial module update" not in _run_git(
+        project, "log", "--pretty=%s", "-n", "3"
     )
 
+    # The next run re-checks the recorded target and refuses it again.
+    with (
+        patch(
+            "quickscale_cli.commands._module_update._update_single_module",
+            side_effect=_update_from_local_remote,
+        ),
+        patch(
+            "quickscale_cli.commands._module_update_seal._resolve_update_seal",
+            side_effect=_resolve_local_source_seal,
+        ),
+        patch("click.confirm", return_value=True),
+    ):
+        second = CliRunner().invoke(
+            update,
+            ["--no-preview", "--acknowledge-contract-vintage"],
+            catch_exceptions=False,
+        )
+    assert second.exit_code != 0
+    assert "applied migration content changed under the equal version label" in (
+        second.output
+    )
+    assert _module_update_journal._update_journal_path(project).exists()
 
-def test_refused_cross_release_pull_restores_git_state(
+
+def test_refused_cross_release_pull_keeps_the_journal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A post-freeze label change that rewrites an applied file is refused.
 
-    From the migration freeze vintage on, the cross-release update is the one
-    the freeze exists to make safe: the applied migration file must survive
-    byte-identical even though the version label changes, and the rejected
-    pull has to be restored as the effective HEAD like the equal-label case.
+    From the migration freeze vintage on, the applied migration file must
+    survive byte-identical even though the version label changes; the journal
+    keeps the refusal open for the operator to reconcile.
     """
     remote_dir, applied_sha = _write_split_remote(tmp_path)
     project = _write_real_update_project(
@@ -817,18 +836,28 @@ def test_refused_cross_release_pull_restores_git_state(
     migration_relpath = (
         f"{_MODULE_PREFIX}/src/quickscale_modules_auth/migrations/0001_initial.py"
     )
-    applied_content = _run_git(project, "show", f"HEAD:{migration_relpath}")
-
     real_single_module_update = _update_single_module
+    local_plan = _resolve_local_source_seal(str(remote_dir), "auth", CORE_VERSION)
 
-    def _update_from_local_remote(name, info, default_remote, no_preview):
+    def _update_from_local_remote(
+        name, info, default_remote, no_preview, *, seal_plan=None, resume=False
+    ):
         del default_remote
-        return real_single_module_update(name, info, str(remote_dir), no_preview)
+        return real_single_module_update(
+            name, info, str(remote_dir), no_preview, seal_plan=seal_plan
+        )
 
     with (
         patch(
             "quickscale_cli.commands._module_update._update_single_module",
             side_effect=_update_from_local_remote,
+        ),
+        patch.object(
+            _module_update, "_missing_required_module_error", return_value=None
+        ),
+        patch(
+            "quickscale_cli.commands._module_update_seal._preflight_update_seals",
+            return_value=({"auth": local_plan}, None),
         ),
         patch(
             "quickscale_cli.commands._module_update_seal._resolve_update_seal",
@@ -847,10 +876,11 @@ def test_refused_cross_release_pull_restores_git_state(
     assert "at or after the migration freeze vintage" in result.output
     assert "migration '0001_initial.py' changed content" in result.output
 
-    # The rejected rewrite is not the effective committed content, and the
-    # restoration is committed so the next update starts from a clean tree.
-    assert _run_git(project, "show", f"HEAD:{migration_relpath}") == applied_content
-    assert _run_git(project, "status", "--porcelain") == ""
-    assert "chore: roll back partial module update" in _run_git(
-        project, "log", "--pretty=%s", "-n", "2"
+    assert (
+        _run_git(project, "show", f"HEAD:{migration_relpath}")
+        == _PULLED_MIGRATION.strip()
+    )
+    assert _module_update_journal._update_journal_path(project).exists()
+    assert "chore: roll back partial module update" not in _run_git(
+        project, "log", "--pretty=%s", "-n", "3"
     )

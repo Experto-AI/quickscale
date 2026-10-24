@@ -85,6 +85,17 @@ one-time scaffolding.
   module, and the update refreshes `poetry.lock` once after the set's dependency
   entries change. The release seal check fails when a published split branch tip
   no longer carries its tag's tree.
+- ✅ **An update is one journaled module-set transaction.** `quickscale update`
+  writes `.quickscale/update-journal.yml` with the pre-update commit and every
+  module's verified target before the first pull, applies the set to one in-memory
+  state and writes `state.yml` once, then commits the set once and clears the
+  journal. After a hard interruption the next update restores the transaction's
+  tracking files to the recorded baseline, keeps every module already at its
+  target, pulls the rest, and finalizes the set (clearing a stale
+  `.quickscale/state.lock` first, as for any killed command), so an interrupted
+  update resumes to one coherent set instead of re-pulling an already merged
+  split commit. `quickscale apply` and `quickscale deploy railway` refuse while
+  the journal is pending.
 - ✅ **A split tag becomes permanent at PyPI publication, not at push.** Before the
   core release for that version is published, `splits/<module>-module/<version>`
   has no external consumer, so a wrong tag is corrected by deleting it and
@@ -719,9 +730,11 @@ every numbered migration file — of each shipped module's applied migrations, a
 the release that carries it. A recorded file is never rewritten in place or
 removed, and a schema change ships as a new, higher-numbered migration. The
 identity binds every release whose applied vintage is at or after this one:
-`quickscale update` refuses to replace an applied migration file and restores the
-pre-update content, and `make check-migration-freeze` holds the recorded identity
-append-only against the latest release tag. A project on an earlier release keeps
+`quickscale update` refuses to replace an applied migration file and keeps the
+transaction's journal open with the committed pull, so the next update re-checks
+the refusal; the operator reconciles the module content or moves to a fresh
+database. `make check-migration-freeze` holds the recorded identity append-only
+against the latest release tag. A project on an earlier release keeps
 the fresh-database upgrade path and may still have a migration rewritten in
 place.
 

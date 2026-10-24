@@ -39,7 +39,7 @@ System-managed; the sole authoritative applied-state store. Canonical shape, inc
 Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: read-through imported when `state.yml` lacks the consolidated sections, ignored otherwise. Leftover legacy files are ignored debris.
 
 **Constraints**:
-- ✅ Auto-generated and auto-updated by `quickscale apply`
+- ✅ Auto-generated and auto-updated by `quickscale apply` and `quickscale update`
 - ✅ Do NOT edit manually (system will overwrite)
 - ✅ Uses the same schema version string `"1"`; installed module versions stay as per-module metadata inside state
 - ✅ One file per project
@@ -69,8 +69,10 @@ Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: read-th
   around every `state.yml` read/modify/write so concurrent `apply` fails closed
   instead of racing
 - ✅ Recovery state is separate: `.quickscale/apply-recovery.yml` holds only the
-  saga-model resume checkpoint and diagnostic progress; applied state stays in
-  `.quickscale/state.yml`
+  saga-model resume checkpoint and diagnostic progress, and
+  `.quickscale/update-journal.yml` holds only an interrupted update's pre-pull
+  commit and module targets; the next update resumes that set and applied state
+  stays in `.quickscale/state.yml`
 
 The apply execution sequence, the delta computation, and the declarative/
 idempotent/incremental/traceable/recoverable properties they produce are described

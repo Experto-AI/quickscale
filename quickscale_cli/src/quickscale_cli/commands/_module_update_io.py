@@ -9,13 +9,13 @@ import shutil
 import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
 import click
 
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 
 import quickscale_core.project_state_hashes as _project_state_hashes
-import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.utils.git_errors as _git_errors
 import quickscale_core.utils.poetry_env as _poetry_env
 import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
@@ -185,6 +185,7 @@ def _commit_contract_adoption() -> None:
 def _regenerate_and_record_managed_wiring(
     project_path: Path,
     project_package: str,
+    state: Any,
 ) -> tuple[bool, str]:
     """Regenerate the managed wiring after every module pull and hash it.
 
@@ -192,10 +193,13 @@ def _regenerate_and_record_managed_wiring(
     validates every embedded manifest against the running core version, so a
     half-updated mixed-version set would fail mid-update.  The pre-update
     wiring is restored when regeneration fails — including a failure while
-    persisting the refreshed hash records — so an aborted update never leaves
-    a half-written settings file or a wiring/state mismatch.  The managed-file
-    hash records are refreshed so ``quickscale status`` does not report
-    QuickScale's own regeneration as drift.
+    recording the refreshed hash records — so an aborted update never leaves
+    a half-written settings file or a wiring/state mismatch.
+
+    The managed-file hash records are refreshed in the caller's in-memory
+    *state* and saved by the set's single ``state.yml`` write (SA319 (b)), so
+    ``quickscale status`` does not report QuickScale's own regeneration as
+    drift.
     """
     package_root = project_path / project_package
     wiring_paths = (
@@ -220,7 +224,7 @@ def _regenerate_and_record_managed_wiring(
             if not success:
                 _restore_update_snapshots(snapshots)
                 return False, message
-            _record_managed_wiring_hashes(project_path, project_package)
+            _record_managed_wiring_hashes(state, project_path, project_package)
         except Exception as error:  # noqa: BLE001 - restore before surfacing
             _restore_update_snapshots(snapshots)
             return False, str(error)
@@ -276,26 +280,18 @@ def _refresh_update_lockfile(project_path: Path) -> bool:
 
 
 def _record_managed_wiring_hashes(
+    state: Any,
     project_path: Path,
     project_package: str,
 ) -> None:
-    """Record the regenerated wiring's hashes in the authoritative state.
+    """Record the regenerated wiring's hashes in the caller's state object.
 
-    State is loaded through :class:`ProjectStateManager` so a
-    pre-consolidation project's legacy tracking metadata and hash records are
-    imported before this save materializes the consolidated sections; the
-    save itself would otherwise make the legacy files unreadable while their
-    metadata is still missing from state.
+    The caller loads state once for the whole module set and saves it once
+    (SA319 (b)); this helper only refreshes the hash records in memory.
     """
-    state_manager = _project_state_manager.ProjectStateManager(project_path)
-    state = state_manager.load_state()
-    if state is None:
-        return
-
     _project_state_hashes.record_managed_file_hashes(
         state.managed_files, project_path, project_package
     )
-    state_manager.save_state(state)
 
 
 def _git_tracks_path(path: Path) -> bool:
@@ -321,29 +317,70 @@ def _path_in_commit(project_path: Path, commit: str, path: str) -> bool:
     return bool(result.stdout.strip())
 
 
-def _commit_regenerated_managed_wiring(project_package: str) -> None:
-    """Commit regenerated managed wiring, hash records, and the refreshed lock."""
-    tracked_paths: list[str] = []
-    package_root = Path(project_package)
-    for wiring_path in (
-        package_root / "settings" / "modules.py",
-        package_root / "urls_modules.py",
-        package_root / "quickscale_managed",
-        *(
-            Path(relative)
-            for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
-        ),
-    ):
+def _commit_exists(project_path: Path, commit: str) -> bool:
+    """Return whether *commit* resolves to a commit in this repository."""
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],  # noqa: S607 - PATH-resolved executable by design
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _is_ancestor(project_path: Path, ancestor: str) -> bool:
+    """Return whether *ancestor* is reachable from the current HEAD."""
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", "merge-base", "--is-ancestor", ancestor, "HEAD"],  # noqa: S607 - PATH-resolved executable by design
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _commit_module_update_set(
+    module_names: list[str],
+    project_package: str | None,
+    *,
+    transaction_id: str | None = None,
+) -> None:
+    """Commit the whole updated module set once (SA319 (b)).
+
+    ``git subtree pull`` creates its own transport commit per module; this
+    single commit carries the set's metadata: every pulled module prefix, the
+    refreshed ``pyproject.toml``/``poetry.lock``, the surviving legacy
+    tracking file, the one authoritative ``state.yml`` write, and the
+    regenerated managed wiring and hash records.  The update journal is never
+    staged.
+    """
+    tracked_paths: list[str] = [f"modules/{name}" for name in module_names]
+    package_root = Path(project_package) if project_package else None
+    managed_paths: list[Path] = [
+        Path(".quickscale") / "config.yml",
+        Path(".quickscale") / "state.yml",
+        Path("pyproject.toml"),
+        Path("poetry.lock"),
+    ]
+    if package_root is not None:
+        managed_paths.extend(
+            [
+                package_root / "settings" / "modules.py",
+                package_root / "urls_modules.py",
+                package_root / "quickscale_managed",
+                *(
+                    Path(relative)
+                    for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
+                ),
+            ]
+        )
+    for managed_path in managed_paths:
         # A path that no longer exists but is tracked must be staged so a
         # regeneration that removes a managed file commits its deletion.
-        if wiring_path.exists() or _git_tracks_path(wiring_path):
-            tracked_paths.append(str(wiring_path))
-    state_path = Path(".quickscale") / "state.yml"
-    if state_path.exists():
-        tracked_paths.append(str(state_path))
-    lock_path = Path("poetry.lock")
-    if lock_path.exists() or _git_tracks_path(lock_path):
-        tracked_paths.append(str(lock_path))
+        if managed_path.exists() or _git_tracks_path(managed_path):
+            tracked_paths.append(str(managed_path))
     if not tracked_paths:
         return
 
@@ -356,7 +393,7 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
         )
     except subprocess.CalledProcessError as e:
         raise _git_errors.GitError(
-            f"Failed to stage regenerated managed wiring: {e.stderr}"
+            f"Failed to stage the updated module set: {e.stderr}"
         )
 
     cached_diff = subprocess.run(
@@ -365,22 +402,26 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
         text=True,
     )
     if cached_diff.returncode == 0:
+        click.echo("ℹ️  No staged module-set changes detected; skipping commit")
         return
     if cached_diff.returncode != 1:
         raise _git_errors.GitError(
-            "Failed to inspect staged changes before the wiring commit"
+            "Failed to inspect staged changes before the module-set commit"
         )
 
+    commit_message = "chore(modules): update installed modules"
+    if transaction_id:
+        commit_message += f"\n\nQS-Update-Transaction: {transaction_id}"
     try:
         subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-            ["git", "commit", "-m", "chore: regenerate managed module wiring"],  # noqa: S607 - PATH-resolved executable by design
+            ["git", "commit", "-m", commit_message],  # noqa: S607 - PATH-resolved executable by design
             check=True,
             capture_output=True,
             text=True,
         )
     except subprocess.CalledProcessError as e:
         raise _git_errors.GitError(
-            f"Failed to commit regenerated managed wiring: {e.stderr}"
+            f"Failed to commit the updated module set: {e.stderr}"
         )
 
 
@@ -389,21 +430,22 @@ def _roll_back_partial_module_update(
     pre_update_head: str,
     updated_modules: list[str],
     project_package: str | None = None,
-) -> None:
-    """Restore committed module pulls and wiring after a failed update.
+) -> bool:
+    """Restore module trees and tracking files from a pre-update commit.
 
-    ``update`` commits each module pull before continuing, so a later failure
-    would otherwise leave the earlier modules' new code paired with the
-    pre-update managed wiring.  The failing module's own pull committed too
-    and is passed in with the earlier ones, so a refusal does not leave the
-    rejected content as the effective HEAD.  Restoring the updated module
-    trees, the managed wiring, and the tracking files the update touched from
-    the commit that preceded the update keeps the project coherent; the
-    restoration is committed so the tree stays clean for the operator's next
-    command.
+    The update flow uses this with an empty module list to restore the
+    transaction's tracking files (state, legacy config, pyproject, lock, and
+    managed wiring) to the journal's baseline before it resumes a set.
+    Passing module names also restores those trees and is used by focused
+    recovery tests; the restoration is committed when it stages changes.
+
+    Returns ``True`` when the pre-update content was restored (including the
+    case where nothing needed restoring), and ``False`` when the restoration
+    failed.  A caller that holds the update journal keeps it on ``False`` so
+    the next run can retry the recovery.
     """
-    if not updated_modules or not pre_update_head:
-        return
+    if not pre_update_head:
+        return True
 
     restore_paths = [f"modules/{name}" for name in updated_modules]
     if project_package:
@@ -478,8 +520,12 @@ def _roll_back_partial_module_update(
             capture_output=True,
             text=True,
         )
+        if cached_diff.returncode == 0:
+            return True
         if cached_diff.returncode != 1:
-            return
+            raise _git_errors.GitError(
+                "Failed to inspect staged changes before the rollback commit"
+            )
         subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
             ["git", "commit", "-m", "chore: roll back partial module update"],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
@@ -487,64 +533,15 @@ def _roll_back_partial_module_update(
             capture_output=True,
             text=True,
         )
-    except subprocess.CalledProcessError as error:
+    except (subprocess.CalledProcessError, _git_errors.GitError) as error:
         click.secho(
             "⚠️  Failed to roll back the modules updated before the failure; "
-            "reconcile with 'quickscale apply' before serving.",
+            "reconcile the module set before serving.",
             fg="yellow",
             err=True,
         )
-        if error.stderr:
-            click.echo(error.stderr.strip(), err=True)
-
-
-def _commit_module_update(module_name: str, module_prefix: str) -> None:
-    """Create a commit for a successfully updated module."""
-    tracked_paths = [module_prefix]
-    config_path = Path(".quickscale") / "config.yml"
-    if config_path.exists():
-        tracked_paths.append(str(config_path))
-    state_path = Path(".quickscale") / "state.yml"
-    if state_path.exists():
-        tracked_paths.append(str(state_path))
-    pyproject_path = Path("pyproject.toml")
-    if pyproject_path.exists():
-        tracked_paths.append(str(pyproject_path))
-
-    try:
-        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-            ["git", "add", *tracked_paths],  # noqa: S607 - PATH-resolved executable by design
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise _git_errors.GitError(
-            f"Failed to stage {module_name} update commit: {e.stderr}"
-        )
-
-    cached_diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
-        capture_output=True,
-        text=True,
-    )
-
-    if cached_diff.returncode == 0:
-        click.echo(f"ℹ️  No staged changes detected for {module_name}; skipping commit")
-        return
-
-    if cached_diff.returncode != 1:
-        raise _git_errors.GitError(
-            "Failed to inspect staged changes before module update commit"
-        )
-
-    commit_message = f"chore(modules): update {module_name} module"
-    try:
-        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-            ["git", "commit", "-m", commit_message],  # noqa: S607 - PATH-resolved executable by design
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise _git_errors.GitError(f"Failed to commit {module_name} update: {e.stderr}")
+        detail = getattr(error, "stderr", "")
+        if detail:
+            click.echo(detail.strip(), err=True)
+        return False
+    return True

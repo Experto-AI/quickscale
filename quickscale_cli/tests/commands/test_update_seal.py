@@ -17,10 +17,12 @@ from quickscale_core.utils.git_tags import (
 from quickscale_cli.commands import _module_update
 from quickscale_cli.commands import _module_update_io
 from quickscale_cli.commands import _module_update_seal
+from quickscale_cli.commands import _module_update_journal
 from quickscale_cli.commands._module_update import _run_update_under_lock
-from quickscale_cli.commands._module_shared import _sync_state_module_version
+from quickscale_cli.commands._module_shared import _apply_state_module_version
+from quickscale_cli.commands._module_update_journal import _ModuleUpdateTarget
 from quickscale_cli.commands._module_update_io import (
-    _commit_regenerated_managed_wiring,
+    _commit_module_update_set,
     _refresh_update_lockfile,
 )
 from quickscale_cli.commands._module_update_seal import (
@@ -202,12 +204,17 @@ def test_preflight_failure_aborts_before_any_pull(
     )
     with (
         patch.object(_module_update, "_acquire_update_lock", return_value=Mock()),
+        patch.object(
+            _module_update,
+            "_ensure_authoritative_state_for_update",
+            return_value=state,
+        ),
         patch(
             "quickscale_cli.commands._module_update_guard._enforce_no_local_module_changes"
         ),
         patch("quickscale_core.utils.git_subtree.run_git_subtree_pull") as mock_pull,
     ):
-        failed, updated, lock_failed, wiring_failed = _run_update_under_lock(
+        outcome = _run_update_under_lock(
             state,
             Path.cwd(),
             no_preview=True,
@@ -215,18 +222,22 @@ def test_preflight_failure_aborts_before_any_pull(
             allow_local_changes=False,
         )
 
-    assert failed == ["blog"]
-    assert updated == []
-    assert lock_failed is False
-    assert wiring_failed is False
+    assert outcome.failed_modules == ["blog"]
+    assert outcome.updated_modules == []
+    assert outcome.lock_failed is False
+    assert outcome.wiring_failed is False
+    assert outcome.set_failed is None
     mock_pull.assert_not_called()
 
 
-def test_lock_failure_rolls_back_the_updated_set(
+def test_lock_failure_keeps_the_recorded_set(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     state = Mock(project=Mock(package="myapp"), modules={"auth": Mock()})
     plan = _UpdateSealPlan(_MODULE, CORE_VERSION, _TAG, "a" * 40, _BRANCH, "a" * 40)
+    target = _ModuleUpdateTarget(_MODULE, CORE_VERSION, _BRANCH, "a" * 40)
     lock = Mock()
     monkeypatch.setattr(
         _module_update_seal,
@@ -238,6 +249,11 @@ def test_lock_failure_rolls_back_the_updated_set(
     )
     with (
         patch.object(_module_update, "_acquire_update_lock", return_value=lock),
+        patch.object(
+            _module_update,
+            "_ensure_authoritative_state_for_update",
+            return_value=state,
+        ),
         patch(
             "quickscale_cli.commands._module_update_guard._enforce_no_local_module_changes"
         ),
@@ -245,14 +261,15 @@ def test_lock_failure_rolls_back_the_updated_set(
         patch.object(
             _module_update,
             "_update_all_modules",
-            return_value=([], [_MODULE]),
+            return_value=([], [target]),
+        ),
+        patch(
+            "quickscale_cli.commands._module_embed._sync_module_dependencies",
+            return_value=True,
         ),
         patch.object(_module_update_io, "_refresh_update_lockfile", return_value=False),
-        patch.object(
-            _module_update_io, "_roll_back_partial_module_update"
-        ) as mock_rollback,
     ):
-        failed, updated, lock_failed, wiring_failed = _run_update_under_lock(
+        outcome = _run_update_under_lock(
             state,
             Path.cwd(),
             no_preview=True,
@@ -260,11 +277,11 @@ def test_lock_failure_rolls_back_the_updated_set(
             allow_local_changes=False,
         )
 
-    assert failed == []
-    assert updated == [_MODULE]
-    assert lock_failed is True
-    assert wiring_failed is False
-    mock_rollback.assert_called_once()
+    assert outcome.failed_modules == []
+    assert outcome.updated_modules == [_MODULE]
+    assert outcome.lock_failed is True
+    assert outcome.wiring_failed is False
+    assert _module_update_journal._update_journal_path(tmp_path).exists()
     lock.release.assert_called_once()
 
 
@@ -320,12 +337,14 @@ def test_refresh_update_lockfile_skips_without_pyproject(tmp_path: Path) -> None
     mock_run.assert_not_called()
 
 
-def test_wiring_commit_carries_the_refreshed_lock(
+def test_set_commit_carries_the_refreshed_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "myapp" / "settings").mkdir(parents=True)
     (tmp_path / "myapp" / "settings" / "modules.py").write_text("# managed\n")
     (tmp_path / "myapp" / "urls_modules.py").write_text("# managed urls\n")
+    (tmp_path / "modules" / "auth").mkdir(parents=True)
+    (tmp_path / "modules" / "auth" / "module.yml").write_text("name: auth\n")
     quickscale_dir = tmp_path / ".quickscale"
     quickscale_dir.mkdir()
     (quickscale_dir / "state.yml").write_text("modules: {}\n")
@@ -336,14 +355,18 @@ def test_wiring_commit_carries_the_refreshed_lock(
     monkeypatch.chdir(tmp_path)
 
     (tmp_path / "poetry.lock").write_text("refreshed\n")
-    _commit_regenerated_managed_wiring("myapp")
+    (tmp_path / "modules" / "auth" / "module.yml").write_text(
+        "name: auth\nversion: '2'\n"
+    )
+    _commit_module_update_set(["auth"], "myapp")
 
     committed = _git(tmp_path, "show", "--name-only", "--format=", "HEAD").split()
     assert "poetry.lock" in committed
+    assert "modules/auth/module.yml" in committed
     assert _git(tmp_path, "status", "--porcelain") == ""
 
 
-def test_sync_state_module_version_records_the_canonical_branch(
+def test_apply_state_module_version_records_the_canonical_branch(
     tmp_path: Path,
 ) -> None:
     """An update that moves a module onto the split branch records that branch."""
@@ -376,15 +399,19 @@ def test_sync_state_module_version_records_the_canonical_branch(
         )
     )
 
-    _sync_state_module_version(
-        tmp_path,
+    from quickscale_core.schema.state_schema import StateManager
+
+    manager = StateManager(tmp_path)
+    state = manager.load()
+    assert state is not None
+    assert _apply_state_module_version(
+        state,
         "auth",
         CORE_VERSION,
         commit_sha="a" * 40,
         branch=_BRANCH,
     )
-
-    from quickscale_core.schema.state_schema import StateManager
+    manager.save(state)
 
     state = StateManager(tmp_path).load()
     assert state is not None

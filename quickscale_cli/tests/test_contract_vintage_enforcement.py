@@ -9,6 +9,7 @@ import quickscale_cli.commands._module_embed as _module_embed
 import quickscale_cli.commands._module_update as _module_update
 import quickscale_cli.commands._module_update_guard as _module_update_guard
 import quickscale_cli.commands._module_update_io as _module_update_io
+from quickscale_cli.commands._module_update_journal import _ModuleUpdateTarget
 import quickscale_core.advisory_lock as _advisory_lock
 import quickscale_cli.commands._state as _state_2
 import quickscale_cli.commands._context as _context
@@ -350,6 +351,11 @@ def test_update_records_adoption_after_module_mutations(
     project.mkdir()
     state = _state("0.87.0")
     StateManager(project).save(state)
+    for module_name in state.modules:
+        (project / "modules" / module_name).mkdir(parents=True)
+        (project / "modules" / module_name / "module.yml").write_text(
+            f"name: {module_name}\nversion: '0.89.0'\n"
+        )
     for command in (
         ["git", "init", "-q"],
         ["git", "config", "user.name", "Test User"],
@@ -361,8 +367,15 @@ def test_update_records_adoption_after_module_mutations(
 
     observed: dict[str, str] = {}
 
-    def _update(name: str, module_state: object, remote: str, no_preview: bool) -> bool:
-        del module_state, remote, no_preview
+    def _update(
+        name: str,
+        module_state: object,
+        remote: str,
+        no_preview: bool,
+        *,
+        seal_plan: object | None = None,
+    ) -> _ModuleUpdateTarget:
+        del module_state, remote, no_preview, seal_plan
         status = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=project,
@@ -371,30 +384,29 @@ def test_update_records_adoption_after_module_mutations(
             text=True,
         )
         observed[name] = status.stdout.strip()
-        return True
-
-    manager = Mock()
-    manager.load_state.return_value = state
+        module = state.modules[name]
+        return _ModuleUpdateTarget(
+            name,
+            module.version or "0.89.0",
+            module.branch or f"splits/{name}-module",
+            "a" * 40,
+        )
 
     monkeypatch.chdir(project)
     monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
-    monkeypatch.setattr(
-        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
-    )
     monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
         _module_shared, "_validate_module_readiness", Mock(return_value=True)
     )
     monkeypatch.setattr(_module_update, "_update_single_module", _update)
     monkeypatch.setattr(
-        _module_update_io,
-        "_regenerate_and_record_managed_wiring",
-        lambda *args, **kwargs: (True, "regenerated"),
+        "quickscale_cli.commands._module_embed._sync_module_dependencies",
+        lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
         _module_update_io,
-        "_commit_regenerated_managed_wiring",
-        lambda *args, **kwargs: None,
+        "_regenerate_and_record_managed_wiring",
+        lambda *args, **kwargs: (True, "regenerated"),
     )
     monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=Mock()))
     monkeypatch.setattr("click.confirm", Mock(return_value=True))
@@ -403,8 +415,10 @@ def test_update_records_adoption_after_module_mutations(
         _module_update.update, ["--no-preview", "--confirm-contract-adoption"]
     )
 
-    assert result.exit_code == 0
-    assert observed["orgs"] == ""
+    assert result.exit_code == 0, result.output
+    # The journal is the only untracked artifact while the pulls run; the
+    # adoption itself is written only after every pull.
+    assert all("update-journal.yml" in line for line in observed["orgs"].splitlines())
     reloaded = ProjectStateManager(project).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
@@ -424,7 +438,7 @@ def test_update_records_adoption_after_module_mutations(
         capture_output=True,
         text=True,
     )
-    assert log.stdout.strip() == "chore: record generated-project contract adoption"
+    assert log.stdout.strip() == "chore(modules): update installed modules"
 
 
 def test_confirmed_update_completes_with_two_pre_id_embedded_vintages(
@@ -473,25 +487,35 @@ def test_confirmed_update_completes_with_two_pre_id_embedded_vintages(
         subprocess.run(command, cwd=project, check=True, capture_output=True, text=True)
 
     sync_results: list[bool] = []
+    real_sync = _module_embed._sync_module_dependencies
 
-    def _update(name: str, module_state: object, remote: str, no_preview: bool) -> bool:
-        del module_state, remote, no_preview
-        # Mirror the real update sequence: after each pull the dependency
-        # sync reads every installed module's embedded manifest.
-        sync_results.append(
-            _module_embed._sync_module_dependencies(
-                project, {"backups": {}, "social": {}}
-            )
+    def _record_sync(project_path: Path, options: dict[str, object]) -> bool:
+        result = real_sync(project_path, options)
+        sync_results.append(result)
+        return result
+
+    def _update(
+        name: str,
+        module_state: object,
+        remote: str,
+        no_preview: bool,
+        *,
+        seal_plan: object | None = None,
+    ) -> _ModuleUpdateTarget:
+        del module_state, remote, no_preview, seal_plan
+        module = state.modules[name]
+        return _ModuleUpdateTarget(
+            name,
+            module.version or "0.89.0",
+            module.branch or f"splits/{name}-module",
+            "a" * 40,
         )
-        return True
-
-    manager = Mock()
-    manager.load_state.return_value = state
 
     monkeypatch.chdir(project)
     monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
     monkeypatch.setattr(
-        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
+        "quickscale_cli.commands._module_embed._sync_module_dependencies",
+        _record_sync,
     )
     monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
@@ -505,7 +529,7 @@ def test_confirmed_update_completes_with_two_pre_id_embedded_vintages(
     )
     monkeypatch.setattr(
         _module_update_io,
-        "_commit_regenerated_managed_wiring",
+        "_commit_module_update_set",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=Mock()))
@@ -516,7 +540,8 @@ def test_confirmed_update_completes_with_two_pre_id_embedded_vintages(
     )
 
     assert result.exit_code == 0, result.output
-    assert sync_results == [True, True]
+    # The set's dependency sync runs once, after both pulls.
+    assert sync_results == [True]
     reloaded = ProjectStateManager(project).load_state()
     assert reloaded is not None
     recorded = set(reloaded.project.adopted_contract_steps or ())
@@ -530,7 +555,11 @@ def test_update_billing_names_the_sa201_throttling_step(
     state = _state("0.87.0", modules=("billing", "orgs"))
     manager = Mock()
     manager.load_state.return_value = state
-    update_module = Mock(return_value=True)
+    update_module = Mock(
+        return_value=_ModuleUpdateTarget(
+            "auth", "0.89.0", "splits/auth-module", "a" * 40
+        )
+    )
 
     monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
     monkeypatch.setattr(
@@ -557,21 +586,33 @@ def test_update_confirm_contract_adoption_records_and_proceeds(
     project = tmp_path / "example"
     project.mkdir()
     state = _state("0.87.0")
-    manager = Mock()
-    manager.load_state.return_value = state
-    update_module = Mock(return_value=True)
+    StateManager(project).save(state)
+    module_name = next(iter(state.modules))
+    (project / "modules" / module_name).mkdir(parents=True)
+    (project / "modules" / module_name / "module.yml").write_text(
+        f"name: {module_name}\nversion: '0.89.0'\n"
+    )
+    update_module = Mock(
+        return_value=_ModuleUpdateTarget(
+            module_name, "0.89.0", f"splits/{module_name}-module", "a" * 40
+        )
+    )
     lock = Mock()
 
     monkeypatch.chdir(project)
     monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
-    monkeypatch.setattr(
-        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
-    )
     monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
         _module_shared, "_validate_module_readiness", Mock(return_value=True)
     )
     monkeypatch.setattr(_module_update, "_update_single_module", update_module)
+    monkeypatch.setattr(
+        _module_update, "_resolve_pre_update_head", lambda path: "b" * 40
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands._module_embed._sync_module_dependencies",
+        lambda *args, **kwargs: True,
+    )
     monkeypatch.setattr(
         _module_update_io,
         "_regenerate_and_record_managed_wiring",
@@ -579,7 +620,7 @@ def test_update_confirm_contract_adoption_records_and_proceeds(
     )
     monkeypatch.setattr(
         _module_update_io,
-        "_commit_regenerated_managed_wiring",
+        "_commit_module_update_set",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=lock))
@@ -590,10 +631,8 @@ def test_update_confirm_contract_adoption_records_and_proceeds(
         _module_update.update, ["--no-preview", "--confirm-contract-adoption"]
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert update_module.call_count == 1
-    assert state.project.project_contract == "0.89.0"
-    assert state.project.adopted_contract_steps == list(_RECORDED_STEP_IDS)
     reloaded = ProjectStateManager(project).load_state()
     assert reloaded is not None
     assert reloaded.project.project_contract == "0.89.0"
@@ -1182,15 +1221,21 @@ def test_status_keeps_unknown_orphan_as_drift(
 )
 def test_update_enforces_vintage_before_module_mutation(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     project_contract: str | None,
     adopted_steps: tuple[str, ...],
     acknowledged: bool,
     expected_exit: int,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     state = _state(project_contract, adopted_steps=adopted_steps)
     manager = Mock()
     manager.load_state.return_value = state
-    update_module = Mock(return_value=True)
+    update_module = Mock(
+        return_value=_ModuleUpdateTarget(
+            "auth", "0.89.0", "splits/auth-module", "a" * 40
+        )
+    )
     lock = Mock()
 
     monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
@@ -1213,13 +1258,20 @@ def test_update_enforces_vintage_before_module_mutation(
     )
     monkeypatch.setattr(_module_update, "_update_single_module", update_module)
     monkeypatch.setattr(
+        _module_update, "_resolve_pre_update_head", lambda path: "b" * 40
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands._module_embed._sync_module_dependencies",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
         _module_update_io,
         "_regenerate_and_record_managed_wiring",
         lambda *args, **kwargs: (True, "regenerated"),
     )
     monkeypatch.setattr(
         _module_update_io,
-        "_commit_regenerated_managed_wiring",
+        "_commit_module_update_set",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=lock))

@@ -28,6 +28,7 @@ from quickscale_cli.commands._types import ApplyContext, _APPLY_RECOVERY_FILENAM
 
 import quickscale_cli.commands._config as _config
 import quickscale_cli.commands._generation as _generation
+import quickscale_cli.commands._module_update_journal as _module_update_journal
 import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_cli.commands._state as _state
@@ -504,6 +505,23 @@ def _enforce_apply_contract_vintage_preflight(
     """Refuse incompatible existing projects before config normalization writes."""
     if not output_path.exists():
         return
+
+    # An update journal means a module-set transaction was interrupted.  Apply
+    # would finalize state over the mixed set and the next update would then
+    # undo it by restoring the journal's pre-update content, so recover first.
+    if _module_update_journal._update_journal_path(output_path).exists():
+        click.secho(
+            "\n❌ An interrupted module update is pending.",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        click.echo(
+            "💡 Run 'quickscale update' to restore or finish the recorded module "
+            "set before applying.",
+            err=True,
+        )
+        raise click.Abort()
 
     try:
         existing_state = _project_state_manager.ProjectStateManager(

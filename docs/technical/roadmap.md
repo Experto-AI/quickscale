@@ -45,7 +45,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
-| SA319 | Update modules as one sealed-tag transaction | 3 | — | Optional |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Optional |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA322 | Make backup restore safe and its recovery point coherent | 3 | — | Optional |
@@ -64,7 +63,7 @@ Track 1: SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA319 (b) ─► SA322 (a → b → c)
+Track 3: SA322 (a → b → c)
          ─► SA325 ─► SA326 ─► [SA191d (production)] SA277
      release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA153 (j); SA191d (production) ─► SA153 (f)
@@ -87,7 +86,7 @@ project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA319 (b) (in progress) | yes | no: SA191d (production) for SA277 | yes: — |
+| 3 | SA322 (a) | yes | no: SA191d (production) for SA277 | yes: SA319 (b) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -300,14 +299,7 @@ update; the cutover does not wait for them.
 
 ### Track 3 — upgrade path, generator state and backups
 
-- [ ] **SA319 — Update modules as one sealed-tag transaction.**
-
-  Closes arch `module-upgrade-no-reconciler` (option 1, option 2 as the transition guard); the
-  journal writes through apply state's single owner.
-
-  **Slices:**
-  - [ ] (b) An update journal commits the module set once with one state write; a test
-    that kills between modules resumes to one coherent set (Tier 2-full).
+- [x] **SA319 — Update modules as one sealed-tag transaction.**
 
 - [ ] **SA322 — Make backup restore safe and its recovery point coherent.**
 

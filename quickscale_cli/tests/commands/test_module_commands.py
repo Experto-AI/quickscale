@@ -2,7 +2,14 @@
 
 from pathlib import Path
 import datetime as _datetime
+import subprocess
 import quickscale_cli.commands._module_shared as _module_shared
+import quickscale_cli.commands._module_update as _module_update
+import quickscale_cli.commands._module_update_guard as _module_update_guard
+import quickscale_cli.commands._module_update_io as _module_update_io
+import quickscale_cli.commands._module_update_seal as _module_update_seal
+import quickscale_cli.commands._module_update_journal as _module_update_journal
+import quickscale_core.project_state_manager as _project_state_manager
 from unittest.mock import Mock, patch
 
 import click
@@ -23,18 +30,18 @@ from quickscale_cli.commands._module_shared import (
     APPLY_MODULE_EXECUTION_MODE,
     _check_auth_module_migrations,
     _resolve_embedded_module_install_path,
-    _sync_state_module_version,
+    _apply_state_module_version,
     _validate_git_environment,
     _validate_module_not_exists,
     _validate_remote_branch,
     _validate_update_environment,
     ModuleEmbedProvenance,
 )
-from quickscale_cli.commands._module_update_io import _commit_module_update
+from quickscale_cli.commands._module_update_io import _commit_module_update_set
+from quickscale_cli.commands._module_update_journal import _ModuleUpdateTarget
 from quickscale_cli.commands._module_embed import (
     _install_module_dependencies,
     _perform_module_embed,
-    _sync_module_dependencies,
     embed_module,
 )
 from quickscale_cli.commands.module_output import _print_installation_error
@@ -1663,34 +1670,28 @@ class TestUpdateSingleModule:
         quickscale_dir.mkdir()
         (quickscale_dir / "state.yml").write_text(state_contents)
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        from quickscale_cli.commands._module_update import _run_update_under_lock
+        from quickscale_core.schema.state_schema import StateError
 
         with (
             patch(
                 "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version"
-            ) as mock_sync_state,
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update"
-            ) as mock_commit,
+            patch.object(
+                _module_shared, "_validate_update_environment", return_value=None
+            ),
+            pytest.raises(StateError, match=expected_fragment),
         ):
-            result = _update_single_module(
-                "auth",
-                module_info,
-                "https://example.com/repo.git",
-                no_preview=False,
+            _run_update_under_lock(
+                Mock(modules={}),
+                tmp_path,
+                no_preview=True,
+                confirm_contract_adoption=False,
+                allow_local_changes=False,
             )
 
-        captured = capsys.readouterr()
-
-        assert result is False
-        assert "Failed to load .quickscale/state.yml" in captured.err
-        assert expected_fragment in captured.err
         mock_pull.assert_not_called()
-        mock_sync_state.assert_not_called()
-        mock_commit.assert_not_called()
 
     def test_update_local_guard_blocks_before_subtree_pull_on_option_drift(
         self,
@@ -1741,18 +1742,19 @@ class TestUpdateSingleModule:
             + "\n"
         )
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/blog", branch="splits/blog-module")
+        module_info = Mock(
+            prefix="modules/blog",
+            branch="splits/blog-module",
+            options={"rss_enabled": True},
+        )
 
         with (
             patch(
                 "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
             patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version"
-            ) as mock_sync_state,
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update"
-            ) as mock_commit,
+                "quickscale_cli.commands._module_shared._apply_state_module_version"
+            ) as mock_apply_state,
         ):
             result = _update_single_module(
                 "blog",
@@ -1763,13 +1765,12 @@ class TestUpdateSingleModule:
 
         captured = capsys.readouterr()
 
-        assert result is False
+        assert result is None
         assert "Pre-pull local guard blocked update for blog" in captured.err
         assert "quickscale apply" in captured.err
         assert "blog.rss_enabled" in captured.err
         mock_pull.assert_not_called()
-        mock_sync_state.assert_not_called()
-        mock_commit.assert_not_called()
+        mock_apply_state.assert_not_called()
 
     def test_update_restores_pre_pull_snapshot_after_post_pull_failure(
         self,
@@ -1826,19 +1827,6 @@ class TestUpdateSingleModule:
             )
             return "updated"
 
-        def _fake_sync_state_module_version(
-            project_path: Path,
-            module_name: str,
-            version: str,
-            *,
-            commit_sha: str | None = None,
-            branch: str | None = None,
-        ) -> None:
-            del module_name, commit_sha, branch
-            (project_path / ".quickscale" / "state.yml").write_text(
-                original_state.replace('version: "0.71.0"', f'version: "{version}"', 1)
-            )
-
         with (
             patch(
                 "quickscale_core.utils.git_repo.resolve_remote_ref",
@@ -1850,16 +1838,10 @@ class TestUpdateSingleModule:
             ),
             patch(
                 "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                return_value="0.82.0",
+                side_effect=ManifestError(
+                    "Manifest file not found: modules/auth/module.yml", "auth"
+                ),
             ),
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-                side_effect=_fake_sync_state_module_version,
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-                side_effect=Exception("commit failed after staging"),
-            ) as mock_commit,
         ):
             result = _update_single_module(
                 "auth",
@@ -1868,8 +1850,7 @@ class TestUpdateSingleModule:
                 no_preview=True,
             )
 
-        assert result is False
-        mock_commit.assert_called_once()
+        assert result is None
         assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
         assert (
             legacy_config_path.read_text()
@@ -1956,14 +1937,11 @@ class TestUpdateSingleModule:
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-            ) as spy_sync_state,
+                "quickscale_cli.commands._module_shared._apply_state_module_version",
+            ) as spy_apply_state,
             patch(
                 "quickscale_cli.commands._module_embed._sync_module_dependencies",
             ) as spy_sync_deps,
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ) as spy_commit,
         ):
             result = _update_single_module(
                 "auth",
@@ -1974,13 +1952,12 @@ class TestUpdateSingleModule:
 
         # The update must fail (ModuleVersionMismatchError triggers
         # rollback).
-        assert result is False
+        assert result is None
 
         # No downstream commit, state sync, or dependency continuation
         # when non-canonical version is detected by the real
         # _read_embedded_module_version before those paths.
-        spy_commit.assert_not_called()
-        spy_sync_state.assert_not_called()
+        spy_apply_state.assert_not_called()
         spy_sync_deps.assert_not_called()
 
         # Verify all tracked files were restored from snapshot.
@@ -1994,8 +1971,7 @@ class TestUpdateSingleModule:
     @patch(
         "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands._module_update_io._commit_module_update")
-    @patch("quickscale_cli.commands._module_shared._sync_state_module_version")
+    @patch("quickscale_cli.commands._module_shared._apply_state_module_version")
     @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
         "quickscale_core.utils.git_repo.resolve_remote_ref",
@@ -2007,8 +1983,7 @@ class TestUpdateSingleModule:
         mock_pull,
         mock_resolve,
         mock_read_version,
-        mock_sync_state,
-        mock_commit,
+        mock_apply_state,
         mock_ensure_state,
     ):
         """Test successful module update."""
@@ -2021,24 +1996,23 @@ class TestUpdateSingleModule:
             "auth", module_info, "https://example.com/repo.git", no_preview=False
         )
 
-        assert result is True
+        assert result is not None
+        assert result.commit_sha == "a" * 40
+        assert result.version == "0.82.0"
         # CR-M5-P3-005: subtree pull must use the resolved SHA, not the
         # branch name, so the pulled content is bound to the exact commit
-        # that was persisted to state.yml.
+        # recorded as the target.
         mock_pull.assert_called_once_with(
             prefix="modules/auth",
             remote="https://example.com/repo.git",
             branch="a" * 40,
             squash=True,
         )
-        assert mock_sync_state.call_args.args[:2] == (Path.cwd(), "auth")
-        mock_commit.assert_called_once_with("auth", "modules/auth")
 
     @patch(
         "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands._module_update_io._commit_module_update")
-    @patch("quickscale_cli.commands._module_shared._sync_state_module_version")
+    @patch("quickscale_cli.commands._module_shared._apply_state_module_version")
     @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
         "quickscale_core.utils.git_repo.resolve_remote_ref",
@@ -2050,8 +2024,7 @@ class TestUpdateSingleModule:
         mock_pull,
         mock_resolve,
         mock_read_version,
-        mock_sync_state,
-        mock_commit,
+        mock_apply_state,
         mock_ensure_state,
     ):
         """Test update with preview disabled."""
@@ -2064,9 +2037,8 @@ class TestUpdateSingleModule:
             "blog", module_info, "https://example.com/repo.git", no_preview=True
         )
 
-        assert result is True
+        assert result is not None
         mock_pull.assert_called_once()
-        mock_commit.assert_called_once_with("blog", "modules/blog")
 
     @patch(
         "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
@@ -2093,7 +2065,7 @@ class TestUpdateSingleModule:
             "auth", module_info, "https://example.com/repo.git", no_preview=False
         )
 
-        assert result is False
+        assert result is None
 
     @patch(
         "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
@@ -2115,13 +2087,12 @@ class TestUpdateSingleModule:
         result = _update_single_module(
             "auth", module_info, "https://example.com/repo.git", no_preview=False
         )
-        assert result is False
+        assert result is None
 
     @patch(
         "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands._module_update_io._commit_module_update")
-    @patch("quickscale_cli.commands._module_shared._sync_state_module_version")
+    @patch("quickscale_cli.commands._module_shared._apply_state_module_version")
     @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
         "quickscale_core.utils.git_repo.resolve_remote_ref",
@@ -2133,8 +2104,7 @@ class TestUpdateSingleModule:
         mock_pull,
         mock_resolve,
         mock_read_version,
-        mock_sync_state,
-        mock_commit,
+        mock_apply_state,
         mock_ensure_state,
     ):
         """CR-M5-P3-005 regression: subtree pull must bind to the resolved SHA.
@@ -2153,31 +2123,32 @@ class TestUpdateSingleModule:
             "auth", module_info, "https://example.com/repo.git", no_preview=True
         )
 
-        assert result is True
+        assert result is not None
         # The subtree pull must receive the resolved SHA, not the branch name.
         pull_kwargs = mock_pull.call_args
         assert pull_kwargs.kwargs["branch"] == "b" * 40
         assert pull_kwargs.kwargs["branch"] != "splits/auth-module"
-        # The commit_sha persisted to state must also be the resolved SHA.
-        sync_call_kwargs = mock_sync_state.call_args.kwargs
-        assert sync_call_kwargs["commit_sha"] == "b" * 40
+        # The target carries the same resolved SHA for the set's state write.
+        assert result.commit_sha == "b" * 40
 
 
-class TestCommitModuleUpdate:
-    """Tests for _commit_module_update function."""
+class TestCommitModuleUpdateSet:
+    """Tests for the single module-set commit helper."""
 
     @patch("subprocess.run")
-    def test_commit_module_update_commits_changes(
+    def test_commit_module_update_set_commits_changes(
         self,
         mock_run,
         tmp_path,
         monkeypatch,
     ):
-        """Test commit helper stages paths and commits when changes exist."""
+        """The set commit stages the module set and the tracking files."""
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
         (quickscale_dir / "config.yml").write_text("modules: {}\n")
         (quickscale_dir / "state.yml").write_text("modules: {}\n")
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry]\n")
+        (tmp_path / "poetry.lock").write_text("lock\n")
         monkeypatch.chdir(tmp_path)
 
         mock_run.side_effect = [
@@ -2186,16 +2157,20 @@ class TestCommitModuleUpdate:
             Mock(returncode=0),  # git commit
         ]
 
-        _commit_module_update("auth", "modules/auth")
+        _commit_module_update_set(["auth"], None)
 
         add_call = mock_run.call_args_list[0]
         assert add_call.kwargs["check"] is True
         assert add_call.args[0] == [
             "git",
             "add",
+            "-A",
+            "--",
             "modules/auth",
             ".quickscale/config.yml",
             ".quickscale/state.yml",
+            "pyproject.toml",
+            "poetry.lock",
         ]
 
         commit_call = mock_run.call_args_list[2]
@@ -2204,18 +2179,26 @@ class TestCommitModuleUpdate:
             "git",
             "commit",
             "-m",
-            "chore(modules): update auth module",
+            "chore(modules): update installed modules",
         ]
 
     @patch("subprocess.run")
-    def test_commit_module_update_skips_when_no_changes(self, mock_run):
-        """Test commit helper returns early when no staged changes exist."""
+    def test_commit_module_update_set_skips_when_no_changes(
+        self, mock_run, tmp_path, monkeypatch
+    ):
+        """The set commit returns early when no staged changes exist."""
+        (tmp_path / ".quickscale").mkdir()
+        (tmp_path / ".quickscale" / "config.yml").write_text("modules: {}\n")
+        (tmp_path / ".quickscale" / "state.yml").write_text("modules: {}\n")
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry]\n")
+        (tmp_path / "poetry.lock").write_text("lock\n")
+        monkeypatch.chdir(tmp_path)
         mock_run.side_effect = [
             Mock(returncode=0),  # git add
             Mock(returncode=0),  # git diff --cached --quiet (no changes)
         ]
 
-        _commit_module_update("listings", "modules/listings")
+        _commit_module_update_set(["listings"], None)
 
         assert len(mock_run.call_args_list) == 2
 
@@ -2231,9 +2214,7 @@ class TestUpdateCommand:
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
     @patch("click.confirm")
-    @patch(
-        "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring"
-    )
+    @patch("quickscale_cli.commands._module_update_io._commit_module_update_set")
     @patch(
         "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
         return_value=(True, "regenerated"),
@@ -2241,15 +2222,21 @@ class TestUpdateCommand:
     def test_update_allows_billing_module_through_standard_readiness_path(
         self,
         mock_regenerate,
-        mock_commit_wiring,
+        mock_commit_set,
         mock_confirm,
         mock_validate,
         mock_manager_cls,
         mock_update,
         mock_collect,
+        tmp_path,
+        monkeypatch,
     ):
         """Billing updates should no longer abort on a stale readiness override."""
+        monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
+        mock_update.return_value = _ModuleUpdateTarget(
+            "billing", "0.70.0", "splits/billing-module", "a" * 40
+        )
         module_state = Mock(
             version="0.70.0",
             prefix="modules/billing",
@@ -2270,7 +2257,16 @@ class TestUpdateCommand:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(update, ["--no-preview"])
+        with (
+            patch(
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
+                return_value=True,
+            ),
+            patch.object(
+                _module_update, "_resolve_pre_update_head", return_value="b" * 40
+            ),
+        ):
+            result = runner.invoke(update, ["--no-preview"])
 
         assert result.exit_code == 0
         assert "internal packaged Phase 1 foundation" not in result.output
@@ -2287,9 +2283,7 @@ class TestUpdateCommand:
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
     @patch("click.confirm")
-    @patch(
-        "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring"
-    )
+    @patch("quickscale_cli.commands._module_update_io._commit_module_update_set")
     @patch(
         "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
         return_value=(True, "regenerated"),
@@ -2297,15 +2291,21 @@ class TestUpdateCommand:
     def test_successful_update(
         self,
         mock_regenerate,
-        mock_commit_wiring,
+        mock_commit_set,
         mock_confirm,
         mock_validate,
         mock_manager_cls,
         mock_update,
         mock_collect,
+        tmp_path,
+        monkeypatch,
     ):
         """Test successful update of installed modules."""
+        monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
+        mock_update.return_value = _ModuleUpdateTarget(
+            "auth", "0.70.0", "splits/auth-module", "a" * 40
+        )
         module_state = Mock(
             version="v0.70.0",
             prefix="modules/auth",
@@ -2323,7 +2323,16 @@ class TestUpdateCommand:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(update, ["--no-preview"])
+        with (
+            patch(
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
+                return_value=True,
+            ),
+            patch.object(
+                _module_update, "_resolve_pre_update_head", return_value="b" * 40
+            ),
+        ):
+            result = runner.invoke(update, ["--no-preview"])
 
         assert result.exit_code == 0
 
@@ -2335,17 +2344,18 @@ class TestUpdateCommand:
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
     @patch("click.confirm")
-    @patch("quickscale_cli.commands._module_update_io._roll_back_partial_module_update")
     def test_update_stops_and_aborts_on_module_failure(
         self,
-        mock_rollback,
         mock_confirm,
         mock_validate,
         mock_manager_cls,
         mock_update,
         mock_collect,
+        tmp_path,
+        monkeypatch,
     ):
         """Test update aborts when a module fails to update."""
+        monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
         auth_state = Mock(
             version="v0.70.0",
@@ -2365,20 +2375,23 @@ class TestUpdateCommand:
             modules={"auth": auth_state, "listings": listings_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
-        mock_update.side_effect = [True, False]
+        mock_update.side_effect = [
+            _ModuleUpdateTarget("auth", "0.70.0", "splits/auth-module", "a" * 40),
+            None,
+        ]
 
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(update, ["--no-preview"])
+        with patch.object(
+            _module_update, "_resolve_pre_update_head", return_value="b" * 40
+        ):
+            result = runner.invoke(update, ["--no-preview"])
 
         assert result.exit_code != 0
         assert "Module update stopped due to failure" in result.output
+        assert "recorded module set is kept" in result.output
         assert "Unexpected error" not in result.output
-        mock_rollback.assert_called_once()
-        # The failing module's own pull may have committed before its
-        # failure, so the rollback covers it too.
-        assert mock_rollback.call_args.args[2] == ["auth", "listings"]
 
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
@@ -2524,9 +2537,7 @@ class TestUpdateVersionDriftWarning:
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
     @patch("click.confirm")
-    @patch(
-        "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring"
-    )
+    @patch("quickscale_cli.commands._module_update_io._commit_module_update_set")
     @patch(
         "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
         return_value=(True, "regenerated"),
@@ -2534,14 +2545,17 @@ class TestUpdateVersionDriftWarning:
     def test_update_emits_drift_warning_via_warn_helper(
         self,
         mock_regenerate,
-        mock_commit_wiring,
+        mock_commit_set,
         mock_confirm,
         mock_validate,
         mock_manager_cls,
         mock_update,
         mock_collect,
+        tmp_path,
+        monkeypatch,
     ):
         """Update should still run when drift is detected (drift is non-fatal)."""
+        monkeypatch.chdir(tmp_path)
         mock_confirm.return_value = True
         module_state = Mock(
             version="v0.70.0",
@@ -2556,7 +2570,9 @@ class TestUpdateVersionDriftWarning:
             modules={"auth": module_state},
         )
         mock_manager_cls.return_value.load_state.return_value = state
-        mock_update.return_value = True
+        mock_update.return_value = _ModuleUpdateTarget(
+            "auth", "0.70.0", "splits/auth-module", "a" * 40
+        )
 
         from click.testing import CliRunner
 
@@ -2567,7 +2583,16 @@ class TestUpdateVersionDriftWarning:
             return_value=[],
         ) as mock_warn:
             runner = CliRunner()
-            result = runner.invoke(update, ["--no-preview"])
+            with (
+                patch(
+                    "quickscale_cli.commands._module_embed._sync_module_dependencies",
+                    return_value=True,
+                ),
+                patch.object(
+                    _module_update, "_resolve_pre_update_head", return_value="b" * 40
+                ),
+            ):
+                result = runner.invoke(update, ["--no-preview"])
 
         assert result.exit_code == 0
         mock_warn.assert_called_once()
@@ -2778,27 +2803,26 @@ class TestPushCommand:
 
 
 # ---------------------------------------------------------------------------
-# Phase 2.3b: update-path provenance persistence and safeguards
+# Phase 2.3b / SA319 (b): update-path provenance persistence and safeguards
 # ---------------------------------------------------------------------------
 
 
 class TestUpdatePathProvenancePersistence:
-    """Tests for Phase 2.3b update-path commit_sha persistence."""
+    """Provenance targets and authoritatively materialized state."""
 
-    def test_update_persists_commit_sha_from_resolved_source_ref(
+    def test_update_returns_the_resolved_source_ref_target(
         self,
         tmp_path,
         monkeypatch,
     ):
-        """Update must persist the resolved source ref as commit_sha in state.yml."""
+        """The pulled module yields the target the set's state write records."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
-        state_path = quickscale_dir / "state.yml"
-        state_path.write_text(
+        (quickscale_dir / "state.yml").write_text(
             "\n".join(
                 [
                     'version: "1"',
@@ -2806,8 +2830,6 @@ class TestUpdatePathProvenancePersistence:
                     "  slug: myproject",
                     "  package: myproject",
                     "  theme: showcase_react",
-                    '  created_at: "2025-01-01T00:00:00"',
-                    '  last_applied: "2025-01-01T00:00:00"',
                     "modules:",
                     "  auth:",
                     "    name: auth",
@@ -2821,12 +2843,13 @@ class TestUpdatePathProvenancePersistence:
             )
             + "\n"
         )
-        # Provide pyproject.toml so dependency sync can load it
         (tmp_path / "pyproject.toml").write_text(
             '[tool.poetry.dependencies]\npython = "^3.14"\n'
         )
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+        module_info = Mock(
+            prefix="modules/auth", branch="splits/auth-module", version="0.71.0"
+        )
 
         expected_sha = "a" * 40
 
@@ -2850,9 +2873,6 @@ class TestUpdatePathProvenancePersistence:
                 "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ),
         ):
             result = _update_single_module(
                 "auth",
@@ -2861,14 +2881,9 @@ class TestUpdatePathProvenancePersistence:
                 no_preview=True,
             )
 
-        assert result is True
-
-        # Verify commit_sha was persisted to state.yml.
-        import yaml
-
-        persisted = yaml.safe_load(state_path.read_text())
-        assert persisted["modules"]["auth"]["commit_sha"] == expected_sha
-        assert persisted["modules"]["auth"]["version"] == "0.82.0"
+        assert result is not None
+        assert result.commit_sha == expected_sha
+        assert result.version == "0.82.0"
 
     def test_update_aborts_when_authoritative_metadata_unavailable(
         self,
@@ -2876,26 +2891,28 @@ class TestUpdatePathProvenancePersistence:
         monkeypatch,
         capsys,
     ):
-        """Update must abort before git mutation when project metadata cannot be derived."""
-        # No state.yml, no quickscale.yml — metadata cannot be derived.
+        """The set aborts before git mutation when metadata cannot be derived."""
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        from quickscale_cli.commands._module_update import _run_update_under_lock
 
         with (
             patch("quickscale_core.utils.git_repo.resolve_remote_ref") as mock_resolve,
             patch(
                 "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
+            patch.object(_module_update, "_acquire_update_lock", return_value=Mock()),
+            pytest.raises(click.Abort),
         ):
-            result = _update_single_module(
-                "auth",
-                module_info,
-                "https://example.com/repo.git",
+            _run_update_under_lock(
+                Mock(modules={}),
+                tmp_path,
                 no_preview=True,
+                confirm_contract_adoption=False,
+                allow_local_changes=False,
             )
 
         captured = capsys.readouterr()
-        assert result is False
         assert "authoritative project metadata" in captured.err
         mock_resolve.assert_not_called()
         mock_pull.assert_not_called()
@@ -2903,20 +2920,12 @@ class TestUpdatePathProvenancePersistence:
     def test_update_materializes_config_only_state_before_provenance(
         self,
         tmp_path,
-        monkeypatch,
     ):
-        """Config-only projects must materialize state.yml before provenance persistence.
-
-        CR-M5-P3-006: materialization requires an existing state.yml with
-        authoritative timestamps.  This test provides a pre-M2 state.yml
-        (with timestamps but no consolidated module tracking) so that
-        materialization can proceed.
-        """
+        """Config-only projects materialize state.yml before provenance writes."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
 
-        # quickscale.yml provides project metadata and includes the module.
         (tmp_path / "quickscale.yml").write_text(
             "version: '1'\n"
             "project:\n"
@@ -2926,9 +2935,6 @@ class TestUpdatePathProvenancePersistence:
             "modules:\n"
             "  auth: {}\n"
         )
-
-        # Pre-M2 state.yml with authoritative timestamps but no consolidated
-        # module tracking — the scenario that triggers materialization.
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
         (quickscale_dir / "state.yml").write_text(
@@ -2940,7 +2946,6 @@ class TestUpdatePathProvenancePersistence:
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
-        # Legacy config.yml provides module tracking.
         (quickscale_dir / "config.yml").write_text(
             "default_remote: https://github.com/Experto-AI/quickscale.git\n"
             "modules:\n"
@@ -2950,70 +2955,26 @@ class TestUpdatePathProvenancePersistence:
             "    installed_version: '0.71.0'\n"
             "    installed_at: '2025-01-01'\n"
         )
-        # Provide pyproject.toml so dependency sync can load it
-        (tmp_path / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+
+        from quickscale_cli.commands._module_update import (
+            _ensure_authoritative_state_for_update,
         )
-        monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
-        expected_sha = "b" * 40
+        state = _ensure_authoritative_state_for_update(tmp_path)
 
-        def _fake_subtree_pull(*, prefix, remote, branch, squash):
-            del remote, branch, squash
-            (tmp_path / prefix / "module.yml").write_text(
-                'name: auth\nversion: "0.82.0"\n'
-            )
-            return "updated"
-
-        with (
-            patch(
-                "quickscale_core.utils.git_repo.resolve_remote_ref",
-                return_value=expected_sha,
-            ),
-            patch(
-                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
-                side_effect=_fake_subtree_pull,
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                return_value="0.82.0",
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ),
-        ):
-            result = _update_single_module(
-                "auth",
-                module_info,
-                "https://example.com/repo.git",
-                no_preview=True,
-            )
-
-        assert result is True
-
-        # Verify state.yml was materialized and contains provenance.
-        import yaml
-
-        state_path = quickscale_dir / "state.yml"
-        assert state_path.exists()
-        persisted = yaml.safe_load(state_path.read_text())
+        assert state is not None
+        persisted = yaml.safe_load((quickscale_dir / "state.yml").read_text())
         assert persisted["project"]["slug"] == "myproject"
-        assert persisted["project"]["package"] == "myproject"
-        assert persisted["project"]["theme"] == "showcase_react"
-        # Timestamps preserved from the original state.yml.
         assert persisted["project"]["created_at"] == "2024-06-15T10:30:00"
         assert persisted["project"]["last_applied"] == "2024-12-01T14:45:00"
         assert "auth" in persisted["modules"]
-        assert persisted["modules"]["auth"]["commit_sha"] == expected_sha
-        assert persisted["modules"]["auth"]["version"] == "0.82.0"
 
     def test_update_resolves_source_ref_once_and_reuses_it(
         self,
         tmp_path,
         monkeypatch,
     ):
-        """The resolved source ref must be used for both pull and persistence."""
+        """The resolved source ref is used for the pull and the target record."""
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
         (quickscale_dir / "state.yml").write_text(
@@ -3039,12 +3000,13 @@ class TestUpdatePathProvenancePersistence:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
-        # Provide pyproject.toml so dependency sync can load it
         (tmp_path / "pyproject.toml").write_text(
             '[tool.poetry.dependencies]\npython = "^3.14"\n'
         )
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+        module_info = Mock(
+            prefix="modules/auth", branch="splits/auth-module", version="0.71.0"
+        )
 
         expected_sha = "c" * 40
 
@@ -3056,17 +3018,11 @@ class TestUpdatePathProvenancePersistence:
             patch(
                 "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 return_value="updated",
-            ),
+            ) as mock_pull,
             patch(
                 "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-            ) as mock_sync,
         ):
             result = _update_single_module(
                 "auth",
@@ -3075,13 +3031,12 @@ class TestUpdatePathProvenancePersistence:
                 no_preview=True,
             )
 
-        assert result is True
+        assert result is not None
+        assert result.commit_sha == expected_sha
         mock_resolve.assert_called_once_with(
             "https://example.com/repo.git", "splits/auth-module"
         )
-        # Verify the same SHA was passed to _sync_state_module_version.
-        mock_sync.assert_called_once()
-        assert mock_sync.call_args.kwargs["commit_sha"] == expected_sha
+        assert mock_pull.call_args.kwargs["branch"] == expected_sha
 
     def test_update_aborts_when_source_ref_cannot_be_resolved(
         self,
@@ -3113,7 +3068,9 @@ class TestUpdatePathProvenancePersistence:
             + "\n"
         )
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+        module_info = Mock(
+            prefix="modules/auth", branch="splits/auth-module", version="0.71.0"
+        )
 
         from quickscale_core.utils.git_utils import GitError
 
@@ -3134,27 +3091,91 @@ class TestUpdatePathProvenancePersistence:
             )
 
         captured = capsys.readouterr()
-        assert result is False
+        assert result is None
         assert "resolve source ref" in captured.err
         mock_pull.assert_not_called()
 
 
 # ============================================================================
-# SA9.1-REV-002/003: update-path dependency sync — rollback, commit,
-# and option-passing
+# SA9.1-REV-002/003: update-path dependency sync — rollback and option passing
 # ============================================================================
 
 
 class TestUpdatePathDependencySync:
-    """Tests for update-path dependency sync behavior (SA9.1-REV-001/002/003)."""
+    """Set-level dependency sync behavior (SA9.1-REV-001/002/003)."""
+
+    @staticmethod
+    def _state(modules: dict[str, Mock]) -> Mock:
+        return Mock(project=Mock(package="myproject"), modules=modules)
+
+    def _run_set(
+        self,
+        tmp_path: Path,
+        state: Mock,
+        targets: list[_ModuleUpdateTarget],
+        *,
+        sync_return: bool = True,
+        sync_mock: Mock | None = None,
+    ):
+        from quickscale_cli.commands._module_update import _run_update_under_lock
+
+        plans = {
+            name: Mock(
+                module=name,
+                version=target.version,
+                branch=target.branch,
+                branch_sha=target.commit_sha,
+            )
+            for name, target in zip(state.modules, targets, strict=True)
+        }
+        sync = sync_mock or Mock(return_value=sync_return)
+        with (
+            patch.object(_module_update, "_acquire_update_lock", return_value=Mock()),
+            patch.object(
+                _module_update,
+                "_ensure_authoritative_state_for_update",
+                return_value=state,
+            ),
+            patch.object(_module_update_guard, "_enforce_no_local_module_changes"),
+            patch.object(
+                _module_update_seal,
+                "_preflight_update_seals",
+                return_value=(plans, None),
+            ),
+            patch.object(
+                _module_update, "_resolve_pre_update_head", return_value="b" * 40
+            ),
+            patch.object(
+                _module_update, "_update_all_modules", return_value=([], targets)
+            ),
+            patch(
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
+                sync,
+            ),
+            patch.object(
+                _module_update_io, "_refresh_update_lockfile", return_value=True
+            ),
+            patch.object(
+                _module_update, "_regenerate_update_wiring", return_value=True
+            ),
+            patch.object(_project_state_manager.ProjectStateManager, "save_state"),
+            patch.object(_module_update_io, "_commit_module_update_set") as mock_commit,
+        ):
+            outcome = _run_update_under_lock(
+                state,
+                tmp_path,
+                no_preview=True,
+                confirm_contract_adoption=False,
+                allow_local_changes=False,
+            )
+        return outcome, sync, mock_commit
 
     def test_pyproject_toml_restored_on_post_pull_rollback(
         self,
         tmp_path,
         monkeypatch,
     ):
-        """pyproject.toml should be restored from snapshot when a post-pull
-        failure triggers a full update rollback (SA9.1-REV-002)."""
+        """pyproject.toml is restored from the snapshot on a post-pull failure."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         module_manifest = module_dir / "module.yml"
@@ -3162,8 +3183,6 @@ class TestUpdatePathDependencySync:
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
-        config_path = quickscale_dir / "config.yml"
-        config_path.write_text("modules:\n  auth:\n    installed_version: 0.71.0\n")
         state_path = quickscale_dir / "state.yml"
         original_state = (
             "version: '1'\n"
@@ -3182,14 +3201,14 @@ class TestUpdatePathDependencySync:
             "    options: {}\n"
         )
         state_path.write_text(original_state)
-
-        # Create a pyproject.toml that will be modified by dependency sync
         pyproject_path = tmp_path / "pyproject.toml"
         original_pyproject = '[tool.poetry.dependencies]\npython = "^3.14"\n'
         pyproject_path.write_text(original_pyproject)
 
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+        module_info = Mock(
+            prefix="modules/auth", branch="splits/auth-module", version="0.71.0"
+        )
 
         def _fake_subtree_pull(*, prefix, remote, branch, squash):
             del remote, branch, squash
@@ -3197,10 +3216,6 @@ class TestUpdatePathDependencySync:
                 'name: auth\nversion: "0.82.0"\n'
             )
             return "updated"
-
-        def _fake_read_version(project_path, module_name):
-            del project_path, module_name
-            return "0.82.0"
 
         with (
             patch(
@@ -3213,11 +3228,9 @@ class TestUpdatePathDependencySync:
             ),
             patch(
                 "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                side_effect=_fake_read_version,
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-                side_effect=Exception("commit failed"),
+                side_effect=ManifestError(
+                    "Manifest file not found: modules/auth/module.yml", "auth"
+                ),
             ),
         ):
             result = _update_single_module(
@@ -3227,325 +3240,102 @@ class TestUpdatePathDependencySync:
                 no_preview=True,
             )
 
-        assert result is False
-        # pyproject.toml should be restored to its original content
+        assert result is None
         assert pyproject_path.read_text() == original_pyproject
-        # Module manifest should also be restored
         assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
         assert state_path.read_text() == original_state
 
-    def test_sync_module_dependencies_failure_triggers_rollback(
+    def test_sync_module_dependencies_failure_keeps_the_journal(
         self,
         tmp_path,
-        monkeypatch,
-        capsys,
     ):
-        """A _sync_module_dependencies failure should trigger full rollback
-        and return False, not silently continue (SA9.1-REV-002)."""
-        quickscale_dir = tmp_path / ".quickscale"
-        quickscale_dir.mkdir()
-        (quickscale_dir / "state.yml").write_text(
-            "version: '1'\n"
-            "project:\n"
-            "  slug: myproject\n"
-            "  package: myproject\n"
-            "  theme: showcase_react\n"
-            "  created_at: '2025-01-01T00:00:00'\n"
-            "  last_applied: '2025-01-01T00:00:00'\n"
-            "modules:\n"
-            "  auth:\n"
-            "    name: auth\n"
-            "    version: '0.71.0'\n"
-            "    commit_sha: 'abc123'\n"
-            "    embedded_at: '2025-01-01T00:00:00'\n"
-            "    options: {}\n"
-        )
-
+        """A dependency-sync failure is reported and the journal is kept."""
+        monkeypatch = pytest.MonkeyPatch()
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
-
-        with (
-            patch(
-                "quickscale_cli.commands._module_embed._sync_module_dependencies",
-                return_value=False,
-            ),
-            patch(
-                "quickscale_core.utils.git_repo.resolve_remote_ref",
-                return_value="a" * 40,
-            ),
-            patch(
-                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
-                return_value="updated",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                return_value="0.82.0",
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-            ),
-        ):
-            result = _update_single_module(
-                "auth",
-                module_info,
-                "https://example.com/repo.git",
-                no_preview=True,
+        try:
+            state = self._state({"auth": Mock(version="0.71.0", options={})})
+            target = _ModuleUpdateTarget(
+                "auth", "0.82.0", "splits/auth-module", "a" * 40
             )
+            outcome, sync, _ = self._run_set(
+                tmp_path, state, [target], sync_return=False
+            )
+        finally:
+            monkeypatch.undo()
 
-        captured = capsys.readouterr()
-        assert result is False
-        assert "Failed to sync dependency entries" in captured.err
-
-    def test_invalid_explicit_wheelhouse_is_reported_for_update_selection(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        """Update's dependency adapter must propagate boundary validation errors."""
-        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
-        (tmp_path / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        assert outcome.set_failed == (
+            "Failed to sync dependency entries for the updated module set"
         )
-        module_dir = tmp_path / "modules" / "auth"
-        module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text(
-            f'name: auth\nversion: "{CORE_VERSION}"\ndependencies:\n'
-            "  - django-allauth>=0.63.0\n"
-        )
-        (module_dir / "pyproject.toml").write_text(
-            '[project]\nname = "quickscale-module-auth"\n\n'
-            '[tool.poetry.dependencies]\npython = "^3.14"\n'
-            'django-allauth = ">=65.14.1,<66.0.0"\n'
-        )
-
-        result = _sync_module_dependencies(tmp_path, {"auth": {}})
-
-        assert result is False
-        assert "QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse" in (
-            capsys.readouterr().err
-        )
+        sync.assert_called_once()
+        assert _module_update_journal._update_journal_path(tmp_path).exists()
 
     def test_module_options_passed_into_dependency_sync(
         self,
         tmp_path,
-        monkeypatch,
     ):
-        """Module options from applied state should be passed through to
-        dependency sync during update (SA9.1-REV-003)."""
-        quickscale_dir = tmp_path / ".quickscale"
-        quickscale_dir.mkdir()
-        (quickscale_dir / "state.yml").write_text(
-            "version: '1'\n"
-            "project:\n"
-            "  slug: myproject\n"
-            "  package: myproject\n"
-            "  theme: showcase_react\n"
-            "  created_at: '2025-01-01T00:00:00'\n"
-            "  last_applied: '2025-01-01T00:00:00'\n"
-            "modules:\n"
-            "  auth:\n"
-            "    name: auth\n"
-            "    version: '0.71.0'\n"
-            "    commit_sha: 'abc123'\n"
-            "    embedded_at: '2025-01-01T00:00:00'\n"
-            "    options: {}\n"
-        )
-
+        """The set flow passes every applied module's options to the sync."""
+        monkeypatch = pytest.MonkeyPatch()
         monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
-
-        with (
-            patch(
-                "quickscale_cli.commands._module_embed._sync_module_dependencies"
-            ) as mock_sync,
-            patch(
-                "quickscale_core.utils.git_repo.resolve_remote_ref",
-                return_value="a" * 40,
-            ),
-            patch(
-                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
-                return_value="updated",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                return_value="0.82.0",
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-            ),
-        ):
-            mock_sync.return_value = True
-            result = _update_single_module(
-                "auth",
-                module_info,
-                "https://example.com/repo.git",
-                no_preview=True,
+        try:
+            state = self._state(
+                {
+                    "auth": Mock(version="0.71.0", options={}),
+                    "storage": Mock(version="0.83.0", options={"backend": "local"}),
+                }
             )
-
-        assert result is True
-        # Verify all_modules_options dict was passed to
-        # _sync_module_dependencies with the module's options
-        # (SA9.1-REV-003/004).
-        mock_sync.assert_called_once()
-        args, _ = mock_sync.call_args
-        assert len(args) >= 2
-        all_options = args[1]
-        assert isinstance(all_options, dict)
-        assert "auth" in all_options
-        assert all_options["auth"] == {}
-
-    def test_module_options_with_local_backend_suppress_cloud_deps(
-        self,
-        tmp_path,
-        monkeypatch,
-    ):
-        """When applied state has storage.local backend, dependency sync
-        must receive options = {\"backend\": \"local\"} and suppress
-        cloud packages (SA9.1-REV-003)."""
-        quickscale_dir = tmp_path / ".quickscale"
-        quickscale_dir.mkdir()
-        (quickscale_dir / "state.yml").write_text(
-            "version: '1'\n"
-            "project:\n"
-            "  slug: myproject\n"
-            "  package: myproject\n"
-            "  theme: showcase_react\n"
-            "  created_at: '2025-01-01T00:00:00'\n"
-            "  last_applied: '2025-01-01T00:00:00'\n"
-            "modules:\n"
-            "  storage:\n"
-            "    name: storage\n"
-            "    version: '0.83.0'\n"
-            "    commit_sha: 'abc123'\n"
-            "    embedded_at: '2025-01-01T00:00:00'\n"
-            "    options:\n"
-            "      backend: local\n"
-        )
-
-        monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/storage", branch="splits/storage-module")
-
-        with (
-            patch(
-                "quickscale_cli.commands._module_embed._sync_module_dependencies"
-            ) as mock_sync,
-            patch(
-                "quickscale_core.utils.git_repo.resolve_remote_ref",
-                return_value="a" * 40,
-            ),
-            patch(
-                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
-                return_value="updated",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                return_value="0.83.0",
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-            ),
-        ):
-            mock_sync.return_value = True
-            result = _update_single_module(
-                "storage",
-                module_info,
-                "https://example.com/repo.git",
-                no_preview=True,
-            )
-
-        assert result is True
-        mock_sync.assert_called_once()
-        args, _ = mock_sync.call_args
-        assert len(args) >= 2
-        all_options = args[1]
-        assert isinstance(all_options, dict)
-        assert all_options.get("storage") == {"backend": "local"}
-
-    def test_pyproject_toml_included_in_commit_tracking(
-        self,
-        tmp_path,
-        monkeypatch,
-    ):
-        """pyproject.toml should be included in the git add paths during
-        _commit_module_update so changes from dependency sync are committed
-        (SA9.1-REV-002)."""
-        quickscale_dir = tmp_path / ".quickscale"
-        quickscale_dir.mkdir()
-        (quickscale_dir / "state.yml").write_text(
-            "version: '1'\n"
-            "project:\n"
-            "  slug: myproject\n"
-            "  package: myproject\n"
-            "  theme: showcase_react\n"
-            "  created_at: '2025-01-01T00:00:00'\n"
-            "  last_applied: '2025-01-01T00:00:00'\n"
-            "modules:\n"
-            "  auth:\n"
-            "    name: auth\n"
-            "    version: '0.71.0'\n"
-            "    commit_sha: 'abc123'\n"
-            "    embedded_at: '2025-01-01T00:00:00'\n"
-            "    options: {}\n"
-        )
-        # Create pyproject.toml so it's included in the commit
-        (tmp_path / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\n'
-        )
-
-        monkeypatch.chdir(tmp_path)
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
-
-        with (
-            patch(
-                "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update",
-                return_value=Mock(
-                    modules={
-                        "auth": Mock(
-                            version="0.71.0",
-                            options={},
-                        )
-                    }
+            targets = [
+                _ModuleUpdateTarget("auth", "0.82.0", "splits/auth-module", "a" * 40),
+                _ModuleUpdateTarget(
+                    "storage", "0.83.0", "splits/storage-module", "b" * 40
                 ),
-            ),
-            patch(
-                "quickscale_cli.commands._module_update_io._commit_module_update"
-            ) as mock_commit,
-            patch(
-                "quickscale_cli.commands._module_embed._sync_module_dependencies",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._sync_state_module_version",
-            ),
-            patch(
-                "quickscale_cli.commands._module_shared._read_embedded_module_version",
-                return_value="0.82.0",
-            ),
-            patch(
-                "quickscale_core.utils.git_repo.resolve_remote_ref",
-                return_value="a" * 40,
-            ),
-            patch(
-                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
-                return_value="updated",
-            ),
-        ):
-            result = _update_single_module(
-                "auth",
-                module_info,
-                "https://example.com/repo.git",
-                no_preview=True,
-            )
+            ]
+            outcome, sync, mock_commit = self._run_set(tmp_path, state, targets)
+        finally:
+            monkeypatch.undo()
 
-        assert result is True
-        mock_commit.assert_called_once_with("auth", "modules/auth")
+        assert outcome.failed_modules == []
+        sync.assert_called_once()
+        all_options = sync.call_args.args[1]
+        assert all_options["auth"] == {}
+        assert all_options["storage"] == {"backend": "local"}
+        mock_commit.assert_called_once()
+
+    def test_pyproject_toml_included_in_set_commit(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """The single set commit stages pyproject.toml and the lockfile."""
+        (tmp_path / ".quickscale").mkdir()
+        (tmp_path / ".quickscale" / "state.yml").write_text("modules: {}\n")
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry]\n")
+        (tmp_path / "poetry.lock").write_text("lock\n")
+        (tmp_path / "modules" / "auth").mkdir(parents=True)
+        (tmp_path / "modules" / "auth" / "module.yml").write_text("name: auth\n")
+        for command in (
+            ["git", "init", "-q"],
+            ["git", "config", "user.name", "Test User"],
+            ["git", "config", "user.email", "test@example.invalid"],
+            ["git", "add", "-A"],
+            ["git", "commit", "-qm", "baseline"],
+        ):
+            subprocess.run(command, cwd=tmp_path, check=True, capture_output=True)
+        monkeypatch.chdir(tmp_path)
+
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry]\nname = 'x'\n")
+        (tmp_path / "poetry.lock").write_text("refreshed\n")
+
+        _commit_module_update_set(["auth"], None)
+
+        committed = subprocess.run(
+            ["git", "show", "--name-only", "--format=", "HEAD"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split()
+        assert "pyproject.toml" in committed
+        assert "poetry.lock" in committed
 
 
 # ============================================================================
@@ -3553,12 +3343,12 @@ class TestUpdatePathDependencySync:
 # ============================================================================
 
 
-class TestSyncStateModuleVersionTriple:
-    """F2.6 tests: _sync_state_module_version refreshes the full provenance
+class TestApplyStateModuleVersionTriple:
+    """F2.6 tests: _apply_state_module_version refreshes the full provenance
     triple (version, commit_sha, embedded_at) consistently."""
 
     def test_sync_refreshes_full_triple(self, tmp_path):
-        """Update path: _sync_state_module_version writes version,
+        """Update path: _apply_state_module_version writes version,
         commit_sha, and refreshes embedded_at."""
         from quickscale_core.schema.state_schema import (
             ModuleState,
@@ -3590,14 +3380,12 @@ class TestSyncStateModuleVersionTriple:
         state_manager = StateManager(tmp_path)
         state_manager.save(initial_state)
 
-        # Call _sync_state_module_version with new version and commit_sha
+        # Apply the new version and commit_sha to the in-memory state.
         new_sha = "b" * 40
-        _sync_state_module_version(
-            tmp_path,
-            "auth",
-            "0.83.0",
-            commit_sha=new_sha,
-        )
+        state = state_manager.load()
+        assert state is not None
+        _apply_state_module_version(state, "auth", "0.83.0", commit_sha=new_sha)
+        state_manager.save(state)
 
         # Verify full triple was updated
         updated_state = state_manager.load()
@@ -3654,7 +3442,10 @@ class TestSyncStateModuleVersionTriple:
 
         monkeypatch.setattr(_datetime, "datetime", _FrozenDatetime)
 
-        _module_shared._sync_state_module_version(tmp_path, "auth", "0.83.0")
+        loaded = state_manager.load()
+        assert loaded is not None
+        _module_shared._apply_state_module_version(loaded, "auth", "0.83.0")
+        state_manager.save(loaded)
 
         updated_state = state_manager.load()
         assert updated_state is not None
@@ -3666,12 +3457,12 @@ class TestSyncStateModuleVersionTriple:
 # ============================================================================
 
 
-class TestCallerParityUpdateSyncHelper:
-    """F2.7 tests: _sync_state_module_version produces the same triple
+class TestCallerParityUpdateStateHelper:
+    """F2.7 tests: _apply_state_module_version produces the same triple
     structure as the apply and no-op repair paths."""
 
     def test_sync_helper_produces_same_triple_as_other_paths(self, tmp_path):
-        """_sync_state_module_version writes version, commit_sha, and
+        """_apply_state_module_version writes version, commit_sha, and
         embedded_at — the same triple that apply and no-op repair persist."""
         from quickscale_core.schema.state_schema import (
             ModuleState,
@@ -3703,12 +3494,10 @@ class TestCallerParityUpdateSyncHelper:
         state_manager.save(initial_state)
 
         new_sha = "e" * 40
-        _sync_state_module_version(
-            tmp_path,
-            "auth",
-            "0.83.0",
-            commit_sha=new_sha,
-        )
+        state = state_manager.load()
+        assert state is not None
+        _apply_state_module_version(state, "auth", "0.83.0", commit_sha=new_sha)
+        state_manager.save(state)
 
         updated_state = state_manager.load()
         assert updated_state is not None
