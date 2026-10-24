@@ -17,6 +17,7 @@ from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 import quickscale_core.project_state_hashes as _project_state_hashes
 import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.utils.git_errors as _git_errors
+import quickscale_core.utils.poetry_env as _poetry_env
 import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
 
 
@@ -101,6 +102,7 @@ def _record_update_mutation_snapshots(
         ("legacy-config-yml", project_path / ".quickscale" / "config.yml"),
         ("state-yml", project_path / ".quickscale" / "state.yml"),
         ("pyproject-toml", project_path / "pyproject.toml"),
+        ("poetry-lock", project_path / "poetry.lock"),
     ]
     return [
         _snapshot_update_path(path, backup_root, label)
@@ -225,6 +227,54 @@ def _regenerate_and_record_managed_wiring(
     return True, message
 
 
+def _refresh_update_lockfile(project_path: Path) -> bool:
+    """Refresh ``poetry.lock`` after the module set's dependency entries change.
+
+    Runs once, after every subtree pull and dependency repin, so the lock
+    describes the whole updated set instead of an intermediate mix.  A project
+    without ``pyproject.toml`` has no Poetry lock to refresh and passes.
+    """
+    pyproject_path = project_path / "pyproject.toml"
+    if not pyproject_path.exists():
+        click.echo("  • No pyproject.toml detected; skipping poetry.lock refresh.")
+        return True
+
+    click.echo("\n📦 Refreshing poetry.lock...")
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["poetry", "lock"],  # noqa: S607 - PATH-resolved executable by design
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=_poetry_env.build_isolated_poetry_env(),
+        )
+    except OSError as error:
+        click.secho(
+            f"❌ Failed to run 'poetry lock': {error}",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 Install Poetry and retry, or run 'poetry lock' in the project "
+            "before committing.",
+            err=True,
+        )
+        return False
+
+    if result.returncode != 0:
+        click.secho("❌ Failed to refresh poetry.lock", fg="red", err=True)
+        if result.stderr:
+            click.echo(result.stderr.strip(), err=True)
+        click.echo(
+            "💡 Resolve the dependency error, then run 'poetry lock' in the project.",
+            err=True,
+        )
+        return False
+
+    click.secho("  ✅ poetry.lock refreshed", fg="green")
+    return True
+
+
 def _record_managed_wiring_hashes(
     project_path: Path,
     project_package: str,
@@ -272,7 +322,7 @@ def _path_in_commit(project_path: Path, commit: str, path: str) -> bool:
 
 
 def _commit_regenerated_managed_wiring(project_package: str) -> None:
-    """Commit regenerated managed wiring and its refreshed hash records."""
+    """Commit regenerated managed wiring, hash records, and the refreshed lock."""
     tracked_paths: list[str] = []
     package_root = Path(project_package)
     for wiring_path in (
@@ -291,6 +341,9 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
     state_path = Path(".quickscale") / "state.yml"
     if state_path.exists():
         tracked_paths.append(str(state_path))
+    lock_path = Path("poetry.lock")
+    if lock_path.exists() or _git_tracks_path(lock_path):
+        tracked_paths.append(str(lock_path))
     if not tracked_paths:
         return
 
@@ -367,6 +420,7 @@ def _roll_back_partial_module_update(
             ".quickscale/state.yml",
             ".quickscale/config.yml",
             "pyproject.toml",
+            "poetry.lock",
         ]
     )
 
@@ -378,6 +432,10 @@ def _roll_back_partial_module_update(
         # commit does track are restored by the checkout below.
         for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS:
             _remove_update_path(project_path / relative)
+        # A lockfile the pre-update commit does not track must disappear too;
+        # ``git rm --ignore-unmatch`` leaves an untracked file in place.
+        if not _path_in_commit(project_path, pre_update_head, "poetry.lock"):
+            _remove_update_path(project_path / "poetry.lock")
 
         # Remove every path a successful pull or a failed wiring commit may
         # have added or staged, then restore the pre-update content: a plain

@@ -29,6 +29,7 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_core import __version__ as CORE_VERSION
+from quickscale_core.utils.git_repo import resolve_remote_ref
 from quickscale_core.utils.git_subtree import run_git_subtree_add
 from quickscale_cli.commands._module_update import (
     _get_update_migration_issues,
@@ -37,6 +38,7 @@ from quickscale_cli.commands._module_update import (
     _update_single_module,
     update,
 )
+from quickscale_cli.commands._module_update_seal import _UpdateSealPlan
 
 _APPLIED_MIGRATION = "# applied migration content\n"
 _PULLED_MIGRATION = "# rewritten by the pull\n"
@@ -597,6 +599,21 @@ def test_get_update_migration_issues_contract() -> None:
     ]
 
 
+def _resolve_local_source_seal(
+    remote: str, module: str, version: str
+) -> _UpdateSealPlan:
+    """Bind the real pull below to the local fixture's ``source`` branch."""
+    source_sha = resolve_remote_ref(str(remote), "source")
+    return _UpdateSealPlan(
+        module=module,
+        version=version,
+        tag="splits/auth-module",
+        tag_sha="a" * 40,
+        branch="source",
+        branch_sha=source_sha,
+    )
+
+
 def _run_git(project_path: Path, *args: str) -> str:
     """Run one git command in *project_path* and return its stripped stdout."""
     return subprocess.run(
@@ -752,6 +769,10 @@ def test_refused_real_subtree_pull_restores_git_state(
             "quickscale_cli.commands._module_update._update_single_module",
             side_effect=_update_from_local_remote,
         ),
+        patch(
+            "quickscale_cli.commands._module_update_seal._resolve_update_seal",
+            side_effect=_resolve_local_source_seal,
+        ),
         patch("click.confirm", return_value=True),
     ):
         result = CliRunner().invoke(
@@ -808,6 +829,10 @@ def test_refused_cross_release_pull_restores_git_state(
         patch(
             "quickscale_cli.commands._module_update._update_single_module",
             side_effect=_update_from_local_remote,
+        ),
+        patch(
+            "quickscale_cli.commands._module_update_seal._resolve_update_seal",
+            side_effect=_resolve_local_source_seal,
         ),
         patch("click.confirm", return_value=True),
     ):

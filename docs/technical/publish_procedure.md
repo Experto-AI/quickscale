@@ -254,7 +254,8 @@ through maintainer recovery; an unobservable branch requires restoring remote ac
 status. Neither state emits a publish command that is guaranteed to fail.
 
 A module whose `splits/<module>-module/X.Y.Z` seal tag no longer points at its current split is
-reported as **sealed but stale**. `make release-gate` fails on that state; correct it before
+reported as **sealed but stale** by `make publish-module-status`; the release seal check also fails
+when the published split branch tip no longer carries the seal's tree. Correct either state before
 publishing through the [Phase 5](#phase-5--seal-the-split-tags) reseal path.
 
 **Then verify before sealing.** Phases 4a and 4b below are the verification loop; a failure there means fixing

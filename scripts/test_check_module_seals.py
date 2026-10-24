@@ -63,8 +63,13 @@ def _split(repo: Path) -> str:
     return result.stdout.strip().splitlines()[-1]
 
 
+def _publish_branch(repo: Path, split_sha: str) -> None:
+    _git(repo, "push", "origin", f"{split_sha}:refs/heads/splits/{MODULE}-module")
+
+
 def _seal(repo: Path, split_sha: str) -> str:
     tag = f"splits/{MODULE}-module/{VERSION}"
+    _publish_branch(repo, split_sha)
     _git(repo, "tag", "--annotate", tag, split_sha, "-m", tag)
     _git(repo, "push", "origin", f"refs/tags/{tag}")
     return tag
@@ -135,6 +140,75 @@ def test_unobservable_seal_fails_closed(
     output = capsys.readouterr().out
     assert "could not inspect" in output
     assert "origin unreachable" in output
+
+
+def test_split_branch_moved_after_seal_fails(
+    repository: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A sealed tag whose branch moved fails even when the local split matches."""
+    sealed_commit = _git(repository, "rev-parse", "HEAD").stdout.strip()
+    tag = _seal(repository, _split(repository))
+
+    (repository / "quickscale_modules" / MODULE / "models.py").write_text(
+        "VALUE = 2\n", encoding="utf-8"
+    )
+    _git(repository, "commit", "-am", "move the split branch after sealing")
+    moved_split = _split(repository)
+    _git(
+        repository,
+        "push",
+        "-f",
+        "origin",
+        f"{moved_split}:refs/heads/splits/{MODULE}-module",
+    )
+
+    # Restore the module to the sealed content so the local split still
+    # matches the tag; only the published branch tip has moved.
+    _git(repository, "checkout", sealed_commit, "--", f"quickscale_modules/{MODULE}")
+    _git(repository, "commit", "-m", "restore the sealed module content")
+
+    assert check_module_seals.run_check(repository, version=VERSION, modules=[MODULE]) == 1
+    output = capsys.readouterr().out
+    assert "split branch" in output
+    assert "moved from seal" in output
+    assert tag in output
+    assert "FAILED: auth" in output
+
+
+def test_sealed_tag_without_split_branch_fails(
+    repository: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A seal with no published split branch cannot be consumed by an update."""
+    split_sha = _split(repository)
+    tag = f"splits/{MODULE}-module/{VERSION}"
+    _git(repository, "tag", "--annotate", tag, split_sha, "-m", tag)
+    _git(repository, "push", "origin", f"refs/tags/{tag}")
+
+    assert check_module_seals.run_check(repository, version=VERSION, modules=[MODULE]) == 1
+    output = capsys.readouterr().out
+    assert "has no split branch" in output
+    assert "FAILED: auth" in output
+
+
+def test_unobservable_split_branch_fails_closed(
+    repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _seal(repository, _split(repository))
+    real_resolve = git_module.resolve_remote_ref
+
+    def fail_branch_resolution(remote: str, ref: str, **kwargs: object) -> str:
+        if ref.startswith("splits/") and ref.count("/") == 1:
+            raise git_module.GitError("branch unreadable")
+        return real_resolve(remote, ref, **kwargs)
+
+    monkeypatch.setattr(git_module, "resolve_remote_ref", fail_branch_resolution)
+
+    assert check_module_seals.run_check(repository, version=VERSION, modules=[MODULE]) == 2
+    output = capsys.readouterr().out
+    assert "could not resolve split branch" in output
+    assert "branch unreadable" in output
 
 
 def test_seal_state_compares_tag_tree_with_current_split_tree(

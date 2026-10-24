@@ -78,6 +78,13 @@ one-time scaffolding.
   identity-derived tag is the released module ref. This is why release
   ordering is mandatory; see §[Module Version Lockstep](release_gates_policy.md#module-version-lockstep)
   Rule 3.
+- ✅ **An update proves the branch still carries the seal.** `quickscale update`
+  resolves each module's `splits/<module>-module/<version>` tag for the running
+  core and requires the canonical split branch tip to carry the same tree before
+  the first pull; a missing tag or moved branch fails closed without mutating a
+  module, and the update refreshes `poetry.lock` once after the set's dependency
+  entries change. The release seal check fails when a published split branch tip
+  no longer carries its tag's tree.
 - ✅ **A split tag becomes permanent at PyPI publication, not at push.** Before the
   core release for that version is published, `splits/<module>-module/<version>`
   has no external consumer, so a wrong tag is corrected by deleting it and

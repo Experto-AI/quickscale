@@ -173,6 +173,12 @@ and an update refuses to proceed while that identity cannot be established from 
 module. A refused update restores the pre-update content, and a migration file the pull adds is
 applied forward on the next `migrate`.
 
+Before the first pull, the update also resolves each module's immutable
+`splits/<module>-module/<version>` tag for the running QuickScale version and requires the split
+branch tip to carry the same tree. A missing tag or a branch that moved after sealing stops the
+update before any module is touched, so a fixed version label cannot silently change content. After
+the pulls, it refreshes `poetry.lock` once for the whole updated set.
+
 | Project part | Changed by `quickscale update`? | Notes |
 | --- | --- | --- |
 | `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits are unsupported; `quickscale update` refuses and lists them unless `--allow-local-changes` is passed. |
