@@ -141,11 +141,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   26). SA316 landed the watch that covers every new managed output from its first release.
 
   **Slices:**
-  - [x] (a) Generate `quickscaleSeam.hooks` plus payload types per installed module from its
-    manifest; move `CrmPage.tsx`'s section paths and `CrmStats` into it; extend the closed-world
-    check to reject a module resource subpath or payload type in a user-owned file, with the
-    managed hook as its passing control. Changing a module endpoint subpath then produces no
-    `project_contract.yml` step and no user-owned diff (Tier 2-full).
+  - [x] (a)
   - [ ] (b) After (a), move the remaining theme pages' module paths and types onto the generated
     hooks; the closed-world check passes over the full theme (Tier 2-full).
   - [ ] (c) Move the per-module branches in core templates (admin index, CI/Makefile, Compose,
