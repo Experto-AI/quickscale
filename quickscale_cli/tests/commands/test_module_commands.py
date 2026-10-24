@@ -3731,7 +3731,7 @@ class TestAF5RecoveryLedgerRegression:
 
     def test_load_update_recovery_handles_af6_era_ledger(self, tmp_path: Path) -> None:
         """An AF6-era ledger (without resume_checkpoint) must load cleanly."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_state
+        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3755,13 +3755,13 @@ class TestAF5RecoveryLedgerRegression:
             )
         )
 
-        result = _load_update_recovery_state(tmp_path)
+        result = _load_update_recovery_ledger(tmp_path)
         assert result is not None
-        assert result.project.slug == "myapp"
+        assert result.git_index_checkpoint == "deadbeefcafebabedeadbeefcafebabedeadbeef"
 
     def test_load_update_recovery_handles_af5_era_ledger(self, tmp_path: Path) -> None:
         """An AF5-era ledger WITH resume_checkpoint must load cleanly."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_state
+        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3788,15 +3788,15 @@ class TestAF5RecoveryLedgerRegression:
             )
         )
 
-        result = _load_update_recovery_state(tmp_path)
+        result = _load_update_recovery_ledger(tmp_path)
         assert result is not None
-        assert result.project.slug == "myapp"
+        assert result.git_index_checkpoint == "deadbeefcafebabedeadbeefcafebabedeadbeef"
 
     def test_load_update_recovery_fails_hard_on_malformed_ledger(
         self, tmp_path: Path
     ) -> None:
         """Malformed recovery content must fail hard as RuntimeError."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_state
+        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3804,13 +3804,13 @@ class TestAF5RecoveryLedgerRegression:
         recovery_path.write_text("- this\n- is\n- a\n- list\n")
 
         with pytest.raises(RuntimeError, match="Failed to load"):
-            _load_update_recovery_state(tmp_path)
+            _load_update_recovery_ledger(tmp_path)
 
     def test_load_update_recovery_fails_hard_on_bad_resume_checkpoint(
         self, tmp_path: Path
     ) -> None:
         """A malformed resume_checkpoint must fail hard as RuntimeError."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_state
+        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3836,16 +3836,47 @@ class TestAF5RecoveryLedgerRegression:
         )
 
         with pytest.raises(RuntimeError, match="Failed to load"):
-            _load_update_recovery_state(tmp_path)
+            _load_update_recovery_ledger(tmp_path)
 
     def test_load_update_recovery_returns_none_when_file_absent(
         self, tmp_path: Path
     ) -> None:
         """Absent recovery file must return None."""
-        from quickscale_cli.commands._module_update import _load_update_recovery_state
+        from quickscale_cli.commands._module_update import _load_update_recovery_ledger
 
-        result = _load_update_recovery_state(tmp_path)
+        result = _load_update_recovery_ledger(tmp_path)
         assert result is None
+
+    def test_update_guard_blocks_when_a_recovery_ledger_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """A pending apply must finish before any module update starts."""
+        from quickscale_cli.commands._module_update import _check_local_pre_pull_guard
+        from quickscale_core.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+        )
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_react",
+            ),
+            modules={"auth": ModuleState(name="auth", version="0.71.0")},
+        )
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "apply-recovery.yml").write_text(
+            yaml.safe_dump(
+                {"git_index_checkpoint": ("deadbeefcafebabedeadbeefcafebabedeadbeef")},
+                sort_keys=False,
+            )
+        )
+
+        assert _check_local_pre_pull_guard(tmp_path, "auth", state) is False
 
 
 # ============================================================================

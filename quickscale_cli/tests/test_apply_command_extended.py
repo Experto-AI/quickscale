@@ -54,6 +54,7 @@ from quickscale_cli.commands._generation import (
     _check_output_directory,
     _determine_output_path,
     _display_config_summary,
+    _generate_new_project,
     _generate_project,
     _generate_with_existing_config,
 )
@@ -1729,10 +1730,10 @@ class TestPrepareApplyContext:
         with pytest.raises(click.Abort):
             _prepare_apply_context(config_path)
 
-    def test_merges_pending_post_embed_recovery_without_authoritative_state(
+    def test_pending_recovery_without_authoritative_state_uses_legacy_snapshot(
         self, tmp_path
     ):
-        """Apply should treat recovery snapshots as retry context, not a no-state project."""
+        """A pre-SA317 snapshot is migrated instead of being silently lost."""
         project_path = tmp_path / "myapp"
         project_path.mkdir()
         config_path = project_path / "quickscale.yml"
@@ -1772,12 +1773,162 @@ class TestPrepareApplyContext:
 
         assert ctx.has_pending_post_embed_recovery is True
         assert ctx.had_existing_state is False
+        # The legacy snapshot seeds planning; the locked refresh materializes
+        # it into state.yml and the ledger remains a pointer.
         assert ctx.existing_state is not None
         assert list(ctx.existing_state.modules) == ["auth"]
-        # auth now requires orgs→notifications, so the delta includes
-        # these required modules as new modules to add during recovery.
-        assert ctx.delta.has_changes is True
         assert sorted(ctx.delta.modules_to_add) == ["notifications", "orgs"]
+
+    def test_pending_legacy_recovery_is_materialized_into_state_yml(self, tmp_path):
+        """The locked refresh writes the legacy snapshot into state.yml once."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        config_path = project_path / "quickscale.yml"
+        config_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        (project_path / ".quickscale").mkdir()
+        (project_path / ".quickscale" / "apply-recovery.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            '  created_at: "2025-01-01T00:00:00"\n'
+            '  last_applied: "2025-01-01T00:00:00"\n'
+            "modules:\n"
+            "  auth:\n"
+            '    version: "0.82.0"\n'
+            "    commit_sha:\n"
+            '    embedded_at: "2025-01-01T00:00:00"\n'
+            "    options: {}\n"
+            'git_index_checkpoint: "cafebabedeadbeefcafebabedeadbeefcafebabe"\n'
+        )
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        ctx = _prepare_apply_context(config_path)
+        _refresh_context_after_lock(ctx)
+
+        persisted = StateManager(project_path).load()
+        assert persisted is not None
+        assert list(persisted.modules) == ["auth"]
+        assert ctx.existing_state is not None
+        assert "auth" in ctx.existing_state.modules
+
+    def test_pending_legacy_recovery_materializes_managed_file_hashes(self, tmp_path):
+        """A newer legacy managed-file record survives the one-time migration."""
+        from quickscale_core.project_state import ProjectStateManager
+        from quickscale_core.project_state_hashes import hash_managed_file
+
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        config_path = project_path / "quickscale.yml"
+        config_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_react\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        managed_relative = "myapp/settings/modules.py"
+        managed_path = project_path / managed_relative
+        managed_path.parent.mkdir(parents=True)
+        managed_path.write_text("# managed\n")
+        legacy_hash = hash_managed_file(managed_path)
+
+        quickscale_dir = project_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_react",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-01-01T00:00:00",
+                    },
+                    "modules": {
+                        "auth": {
+                            "version": "0.82.0",
+                            "commit_sha": "abc123",
+                            "embedded_at": "2025-01-01T00:00:00",
+                            "options": {},
+                        }
+                    },
+                    "managed_files": [
+                        {
+                            "path": managed_relative,
+                            "hash": "old-hash",
+                            "applied_at": "2025-01-01T00:00:00",
+                        }
+                    ],
+                },
+                sort_keys=False,
+            )
+        )
+        (quickscale_dir / "apply-recovery.yml").write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_react",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-01-02T00:00:00",
+                    },
+                    "modules": {
+                        "auth": {
+                            "version": "0.82.0",
+                            "commit_sha": "abc123",
+                            "embedded_at": "2025-01-01T00:00:00",
+                            "options": {},
+                        }
+                    },
+                    "managed_files": [
+                        {
+                            "path": managed_relative,
+                            "hash": legacy_hash,
+                            "applied_at": "2025-01-02T00:00:00",
+                        }
+                    ],
+                    "git_index_checkpoint": (
+                        "cafebabedeadbeefcafebabedeadbeefcafebabe"
+                    ),
+                },
+                sort_keys=False,
+            )
+        )
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        ctx = _prepare_apply_context(config_path)
+        _refresh_context_after_lock(ctx)
+
+        persisted = StateManager(project_path).load()
+        assert persisted is not None
+        assert persisted.managed_files[managed_relative].hash == legacy_hash
+
+        managed_path.write_text("# edited\n")
+        drift = ProjectStateManager(project_path).detect_managed_file_drift()
+        assert [record.path for record in drift] == [managed_relative]
 
 
 # ============================================================================
@@ -2631,53 +2782,18 @@ class TestProvenancePersistence:
 
         assert state.modules["auth"].commit_sha == "e" * 40
 
-    def test_save_recovery_state_contains_provenance_commit_sha(self, tmp_path):
-        """Phase 2 checkpoint: recovery file carries the same commit_sha as
-        authoritative state would."""
-        module_dir = tmp_path / "modules" / "auth"
-        module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
-
-        config = Mock()
-        config.project.slug = "myapp"
-        config.project.package = "myapp"
-        config.project.theme = "showcase_react"
-        config.modules = {"auth": Mock(options={})}
-        delta = Mock()
-        delta.config_deltas = {}
-
-        resolved_sha = "f" * 40
-        provenance = {
-            "auth": ModuleEmbedProvenance(
-                module_name="auth",
-                prefix="modules/auth",
-                tracking_branch="splits/auth-module",
-                source_ref=resolved_sha,
-                installed_version="0.83.0",
-            )
-        }
-
+    def test_save_recovery_state_carries_no_applied_state(self, tmp_path):
+        """The recovery ledger is a pointer: no project, module, or hash state."""
         result = _save_apply_recovery_state(
             tmp_path,
-            config,
-            existing_state=None,
-            embedded_modules=["auth"],
-            delta=delta,
-            provenance_payloads=provenance,
             checkpoint_tree_id="d" * 40,
         )
 
         assert result is True
         recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
         assert recovery_path.exists()
-
-        # Load the recovery file and verify commit_sha is present
-        recovery_manager = StateManager(tmp_path)
-        recovery_manager.state_file = recovery_path
-        recovery_state = recovery_manager.load()
-        assert recovery_state is not None
-        assert "auth" in recovery_state.modules
-        assert recovery_state.modules["auth"].commit_sha == resolved_sha
+        recovery_data = yaml.safe_load(recovery_path.read_text())
+        assert recovery_data == {"git_index_checkpoint": "d" * 40}
 
     def test_save_project_state_persists_provenance_commit_sha(self, tmp_path):
         """Phase 2 checkpoint: authoritative state.yml carries commit_sha
@@ -2742,22 +2858,10 @@ class TestProvenancePersistence:
         checkpoint_tree_id into the recovery ledger, not a re-captured value."""
         (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
 
-        config = Mock()
-        config.project.slug = "myapp"
-        config.project.package = "myapp"
-        config.project.theme = "showcase_react"
-        config.modules = {}
-        delta = Mock()
-        delta.config_deltas = {}
-
         tree_id = "aabbccddeeff00112233445566778899aabbccdd"
 
         result = _save_apply_recovery_state(
             tmp_path,
-            config,
-            existing_state=None,
-            embedded_modules=[],
-            delta=delta,
             checkpoint_tree_id=tree_id,
         )
 
@@ -2773,22 +2877,10 @@ class TestProvenancePersistence:
         re-capture replaces it with a later tree value."""
         (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
 
-        config = Mock()
-        config.project.slug = "myapp"
-        config.project.package = "myapp"
-        config.project.theme = "showcase_react"
-        config.modules = {}
-        delta = Mock()
-        delta.config_deltas = {}
-
         threaded_id = "bbccddeeff00112233445566778899aabbccddee"
 
         result = _save_apply_recovery_state(
             tmp_path,
-            config,
-            existing_state=None,
-            embedded_modules=[],
-            delta=delta,
             checkpoint_tree_id=threaded_id,
         )
 
@@ -3813,6 +3905,22 @@ class TestExecuteApplySteps:
             "quickscale_cli.commands._config._load_module_manifests",
             lambda *args, **kwargs: {},
         )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._persist_state_snapshot",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._mark_apply_in_progress",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._save_project_state",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_core.apply.executor.ApplyExecutor.checkpoint_step",
+            lambda *args, **kwargs: None,
+        )
 
     @patch("quickscale_cli.commands._finalize._display_next_steps")
     @patch("quickscale_cli.commands._state._save_project_state")
@@ -4088,14 +4196,8 @@ class TestExecuteApplySteps:
         mock_run_post.assert_called_once_with(ctx.output_path)
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands._finalize._display_next_steps")
@@ -4157,16 +4259,7 @@ class TestExecuteApplySteps:
         assert ".quickscale/apply-recovery.yml" in text
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            ["auth"],
-            ctx.delta,
-        )
-        state_snapshot = mock_save_recovery.call_args.kwargs["state_snapshot"]
-        assert state_snapshot is not None
-        assert list(state_snapshot.modules) == ["auth"]
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands._finalize._display_next_steps")
@@ -4233,14 +4326,8 @@ class TestExecuteApplySteps:
 
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
@@ -4315,14 +4402,8 @@ class TestExecuteApplySteps:
 
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_sync_module_dependencies.assert_not_called()
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
@@ -4393,14 +4474,8 @@ class TestExecuteApplySteps:
 
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            ["backups"],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_notifications_env_sync.assert_not_called()
         mock_analytics_env_sync.assert_not_called()
         mock_sync_module_dependencies.assert_not_called()
@@ -4731,14 +4806,8 @@ class TestExecuteApplySteps:
         mock_run_migrations.assert_called_once_with(ctx.output_path)
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands._finalize._display_next_steps")
@@ -4811,14 +4880,8 @@ class TestExecuteApplySteps:
         mock_run_migrations.assert_not_called()
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands._finalize._display_next_steps")
@@ -4892,14 +4955,8 @@ class TestExecuteApplySteps:
         mock_run_migrations.assert_not_called()
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands._finalize._display_next_steps")
@@ -4990,14 +5047,8 @@ class TestExecuteApplySteps:
         )
         assert mock_save_state.call_args.kwargs["state_snapshot"] is not None
         mock_save_recovery.assert_called_once()
-        assert mock_save_recovery.call_args.args == (
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            [],
-            ctx.delta,
-        )
-        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
+        assert mock_save_recovery.call_args.args == (ctx.output_path,)
+        assert "checkpoint_tree_id" in mock_save_recovery.call_args.kwargs
         mock_clear_recovery.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
@@ -5865,6 +5916,94 @@ class TestGenerateWithExistingConfig:
             )
 
 
+class TestSA317ForceStaging:
+    """SA317(b): apply --force stages and swaps a non-empty target."""
+
+    @patch("quickscale_cli.commands._generation._generate_project")
+    def test_force_without_config_stages_and_swaps(self, mock_gen, tmp_path):
+        output = tmp_path / "myapp"
+        output.mkdir()
+        (output / "old_file.txt").write_text("old")
+        (output / "subdir").mkdir()
+        (output / "subdir" / "nested.txt").write_text("nested")
+
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+
+        def fake_generate(config, path):
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "manage.py").write_text("# new")
+            (path / "new_file.py").write_text("# new")
+            return True
+
+        mock_gen.side_effect = fake_generate
+
+        _generate_new_project(mock_config, output, force=True)
+
+        assert (output / "manage.py").read_text() == "# new"
+        assert (output / "new_file.py").read_text() == "# new"
+        assert not (output / "old_file.txt").exists()
+        assert not (output / "subdir").exists()
+        # Staging and backup directories are removed on success.
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["myapp"]
+
+    @patch("quickscale_cli.commands._generation._generate_project")
+    def test_force_without_config_rolls_back_on_swap_failure(self, mock_gen, tmp_path):
+        output = tmp_path / "myapp"
+        output.mkdir()
+        (output / "original_file.txt").write_text("preserve me")
+        (output / "subdir").mkdir()
+        (output / "subdir" / "nested.txt").write_text("nested")
+
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+
+        def fake_generate(config, path):
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "manage.py").touch()
+            (path / "new_file.py").touch()
+            return True
+
+        mock_gen.side_effect = fake_generate
+
+        move_counter: list[int] = [0]
+        real_move = _real_shutil.move
+
+        def controlled_move(src: str, dst: str) -> None:
+            move_counter[0] += 1
+            if move_counter[0] == 4:
+                raise OSError("Simulated filesystem failure during staging swap")
+            return real_move(src, dst)
+
+        with patch("shutil.move", controlled_move):
+            with pytest.raises(click.Abort):
+                _generate_new_project(mock_config, output, force=True)
+
+        assert (output / "original_file.txt").read_text() == "preserve me"
+        assert (output / "subdir" / "nested.txt").read_text() == "nested"
+        assert not (output / "manage.py").exists()
+        assert not (output / "new_file.py").exists()
+
+    @patch("quickscale_cli.commands._generation._generate_project")
+    def test_empty_existing_directory_generates_without_force(self, mock_gen, tmp_path):
+        output = tmp_path / "myapp"
+        output.mkdir()
+
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+
+        def fake_generate(config, path):
+            path.mkdir(parents=True)
+            (path / "manage.py").touch()
+            return True
+
+        mock_gen.side_effect = fake_generate
+
+        _generate_new_project(mock_config, output, force=False)
+
+        assert (output / "manage.py").exists()
+
+
 class TestGitCheckpointRestoration:
     """Regression coverage for apply-owned checkpoint cleanup."""
 
@@ -6559,6 +6698,18 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
     local migrations run before Railway deploy (CR-F12.3B-002).
     """
 
+    @pytest.fixture(autouse=True)
+    def _stub_state_persistence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The rerun exercises the gate, not real file writes to /tmp/proj."""
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._persist_state_snapshot",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._mark_apply_in_progress",
+            lambda *args, **kwargs: True,
+        )
+
     @patch("quickscale_cli.commands._finalize._display_next_steps")
     @patch("quickscale_cli.commands._state._save_project_state")
     @patch("quickscale_cli.commands._runtime._run_migrations")
@@ -6593,6 +6744,7 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
         mock_run_migrations,
         mock_save_state,
         mock_display_next_steps,
+        tmp_path: Path,
     ):
         """Recovery rerun: migration gate re-evaluates with refreshed context.
 
@@ -6648,7 +6800,7 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
         # post-refresh ctx.existing_state instead.
         ctx = Mock()
         ctx.existing_state = None
-        ctx.output_path = Path("/tmp/proj")
+        ctx.output_path = tmp_path
         ctx.manifests = {}
         ctx.delta = Mock()
         ctx.delta.modules_to_add = []
@@ -6671,6 +6823,346 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
         # context: existing_state is populated → existing_project=True →
         # Local migrations are now deferred to step 13 (AF5 Phase 4).
         mock_run_post.assert_called_once_with(ctx.output_path)
+
+
+class TestSA317SingleStateOwnerRecovery:
+    """SA317(a): a kill after step 4 resumes from state.yml, not the ledger."""
+
+    _MANAGED_RELATIVE = "myapp/settings/modules.py"
+
+    def _seed_project(self, tmp_path: Path) -> QuickScaleState:
+        """Write a state.yml carrying hashes and adopted contract steps."""
+        from quickscale_core.project_state_hashes import hash_managed_file
+        from quickscale_core.schema.state_schema import ManagedFileRecord
+
+        managed_path = tmp_path / self._MANAGED_RELATIVE
+        managed_path.parent.mkdir(parents=True)
+        managed_path.write_text("# managed\n")
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_react",
+                project_contract="0.89.0",
+                adopted_contract_steps=["sa201-throttling"],
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+            managed_files={
+                self._MANAGED_RELATIVE: ManagedFileRecord(
+                    path=self._MANAGED_RELATIVE,
+                    hash=hash_managed_file(managed_path),
+                    applied_at="2025-01-01T00:00:00",
+                )
+            },
+        )
+        StateManager(tmp_path).save(state)
+        return state
+
+    def _make_context(self, tmp_path: Path, state: QuickScaleState) -> ApplyContext:
+        qs_config = Mock()
+        qs_config.project.slug = "myapp"
+        qs_config.project.package = "myapp"
+        qs_config.project.theme = "showcase_react"
+        qs_config.modules = {}
+        qs_config.docker.start = False
+        qs_config.docker.build = False
+        delta = Mock()
+        delta.modules_to_add = []
+        delta.has_mutable_config_changes = False
+        return ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=state,
+            manifests={},
+            delta=delta,
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+    def test_kill_after_step_4_leaves_state_and_drift_detectable(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.apply import APPLY_STEPS, LedgerManager
+        from quickscale_core.apply.steps.types import StepOutcome
+        from quickscale_core.project_state import ProjectStateManager
+        from quickscale_core.project_state_hashes import hash_managed_file
+        from quickscale_core.schema.state_schema import ManagedFileRecord
+
+        state = self._seed_project(tmp_path)
+        ctx = self._make_context(tmp_path, state)
+        tree_id = "a" * 40
+
+        def _capture(_path, _qs_config, captured_state):
+            captured_state.managed_files[self._MANAGED_RELATIVE] = ManagedFileRecord(
+                path=self._MANAGED_RELATIVE,
+                hash=hash_managed_file(tmp_path / self._MANAGED_RELATIVE),
+                applied_at="2025-01-02T00:00:00",
+            )
+            return StepOutcome(success=True, message="captured")
+
+        with (
+            patch(
+                "quickscale_cli.commands._embedding._embed_modules_step",
+                return_value=EmbedModulesResult(success=True, embedded_modules=[]),
+            ),
+            patch(
+                "quickscale_cli.commands._finalize._exec_step_post_embed_snapshot",
+                return_value=(state, tree_id),
+            ),
+            patch(
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
+                side_effect=_capture,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
+                side_effect=RuntimeError("simulated hard kill after step 4"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="hard kill"):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        # The ledger points at step 5 and carries no applied-state section.
+        ledger = LedgerManager(tmp_path).load()
+        assert ledger is not None
+        assert ledger.resume_checkpoint is not None
+        assert ledger.resume_checkpoint.resume_step_id == APPLY_STEPS[4].step_id
+        ledger_data = yaml.safe_load(
+            (tmp_path / ".quickscale" / "apply-recovery.yml").read_text()
+        )
+        assert "project" not in ledger_data
+        assert "modules" not in ledger_data
+        assert "managed_files" not in ledger_data
+
+        # state.yml is the single owner: hashes and contract steps survived.
+        persisted = StateManager(tmp_path).load()
+        assert persisted is not None
+        assert self._MANAGED_RELATIVE in persisted.managed_files
+        assert persisted.project.adopted_contract_steps == ["sa201-throttling"]
+
+        # An edit after the crash is still drift.
+        (tmp_path / self._MANAGED_RELATIVE).write_text("# edited\n")
+        drifted = ProjectStateManager(tmp_path).detect_managed_file_drift()
+        assert [record.path for record in drifted] == [self._MANAGED_RELATIVE]
+
+        # Resume reads state.yml, completes, and clears the ledger.
+        ctx.existing_state = persisted
+        with (
+            patch(
+                "quickscale_cli.commands._embedding._embed_modules_step",
+                return_value=EmbedModulesResult(success=True, embedded_modules=[]),
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._run_local_migrations",
+                return_value=True,
+            ),
+            patch("quickscale_cli.commands._finalize._display_next_steps"),
+        ):
+            _execute_apply_steps_locked(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                has_pending_post_embed_recovery=True,
+            )
+
+        assert not (tmp_path / ".quickscale" / "apply-recovery.yml").exists()
+        final_state = StateManager(tmp_path).load()
+        assert final_state is not None
+        assert self._MANAGED_RELATIVE in final_state.managed_files
+        assert final_state.project.adopted_contract_steps == ["sa201-throttling"]
+        assert [
+            record.path
+            for record in ProjectStateManager(tmp_path).detect_managed_file_drift()
+        ] == [self._MANAGED_RELATIVE]
+
+    def test_crash_between_state_save_and_first_checkpoint_is_resumable(
+        self, tmp_path: Path
+    ) -> None:
+        """A marker written before the state save prevents a false no-op."""
+        from quickscale_core.apply import APPLY_STEPS, ApplyExecutor, LedgerManager
+        from quickscale_core.apply.steps.types import StepOutcome
+        from quickscale_core.project_state_hashes import hash_managed_file
+        from quickscale_core.schema.state_schema import ManagedFileRecord
+
+        state = self._seed_project(tmp_path)
+        ctx = self._make_context(tmp_path, state)
+        tree_id = "b" * 40
+
+        def _capture(_path, _qs_config, captured_state):
+            captured_state.managed_files[self._MANAGED_RELATIVE] = ManagedFileRecord(
+                path=self._MANAGED_RELATIVE,
+                hash=hash_managed_file(tmp_path / self._MANAGED_RELATIVE),
+                applied_at="2025-01-02T00:00:00",
+            )
+            return StepOutcome(success=True, message="captured")
+
+        with (
+            patch(
+                "quickscale_cli.commands._embedding._embed_modules_step",
+                return_value=EmbedModulesResult(success=True, embedded_modules=[]),
+            ),
+            patch(
+                "quickscale_cli.commands._finalize._exec_step_post_embed_snapshot",
+                return_value=(state, tree_id),
+            ),
+            patch(
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
+                side_effect=_capture,
+            ),
+            patch.object(
+                ApplyExecutor,
+                "checkpoint_step",
+                side_effect=RuntimeError("crash after state save"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="crash after state save"):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        # The marker and the saved state both exist, so the next apply resumes.
+        ledger = LedgerManager(tmp_path).load()
+        assert ledger is not None
+        assert ledger.resume_checkpoint is not None
+        assert ledger.resume_checkpoint.resume_step_id == APPLY_STEPS[1].step_id
+        persisted = StateManager(tmp_path).load()
+        assert persisted is not None
+        assert self._MANAGED_RELATIVE in persisted.managed_files
+
+        ctx.existing_state = persisted
+
+        # A retry whose state save fails must preserve the unfinished marker.
+        with (
+            patch(
+                "quickscale_cli.commands._embedding._embed_modules_step",
+                return_value=EmbedModulesResult(success=True, embedded_modules=[]),
+            ),
+            patch(
+                "quickscale_cli.commands._finalize._exec_step_post_embed_snapshot",
+                return_value=(persisted, tree_id),
+            ),
+            patch(
+                "quickscale_cli.commands._state._persist_state_snapshot",
+                return_value=False,
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    has_pending_post_embed_recovery=True,
+                )
+
+        ledger = LedgerManager(tmp_path).load()
+        assert ledger is not None
+        assert ledger.resume_checkpoint is not None
+        assert ledger.resume_checkpoint.resume_step_id == APPLY_STEPS[1].step_id
+
+        with (
+            patch(
+                "quickscale_cli.commands._embedding._embed_modules_step",
+                return_value=EmbedModulesResult(success=True, embedded_modules=[]),
+            ),
+            patch(
+                "quickscale_cli.commands._finalize._exec_step_post_embed_snapshot",
+                return_value=(persisted, tree_id),
+            ),
+            patch(
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
+                side_effect=_capture,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands._runtime._run_local_migrations",
+                return_value=True,
+            ),
+            patch("quickscale_cli.commands._finalize._display_next_steps"),
+        ):
+            _execute_apply_steps_locked(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                has_pending_post_embed_recovery=True,
+            )
+
+        assert not (tmp_path / ".quickscale" / "apply-recovery.yml").exists()
+        final_state = StateManager(tmp_path).load()
+        assert final_state is not None
+        assert self._MANAGED_RELATIVE in final_state.managed_files
+        assert final_state.project.adopted_contract_steps == ["sa201-throttling"]
 
 
 # ============================================================================
@@ -7720,6 +8212,22 @@ class TestApplyFailureSummaryParity:
         monkeypatch.setattr(
             "quickscale_cli.commands._config._load_module_manifests",
             lambda *args, **kwargs: {},
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._persist_state_snapshot",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._mark_apply_in_progress",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.commands._state._save_project_state",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "quickscale_core.apply.executor.ApplyExecutor.checkpoint_step",
+            lambda *args, **kwargs: None,
         )
 
     @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)

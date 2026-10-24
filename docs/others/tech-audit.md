@@ -17,6 +17,11 @@ audit evidence and now carry `status: fixed`:
 `publish-pypi-no-skip-existing`. The live ticket state is in
 [the roadmap](../technical/roadmap.md).
 
+**Fix record (2026-10-24).** SA317 closes three findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`:
+`cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`, and
+`beta-migrate-existing-recipient-no-dirty-guard`.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -250,7 +255,7 @@ items:
      anchors: [quickscale_modules/auth/src/quickscale_modules_auth/forms.py,
                quickscale_modules/auth/src/quickscale_modules_auth/_profile_views.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: cli-remove-accepts-path-traversal, status: open, severity: S3, category: X,
+  - {id: cli-remove-accepts-path-traversal, status: fixed, severity: S3, category: X,
      title: "quickscale remove joins an unvalidated module argument into modules/ and rmtree()s it",
      effort: Trivial, confidence: High, reality: maintainer-toolchain,
      anchors: [quickscale_cli/src/quickscale_cli/commands/remove_command.py],
@@ -261,7 +266,7 @@ items:
      anchors: [quickscale_core/src/quickscale_core/generator/templates/.dockerignore.j2,
                quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: cli-apply-force-never-forces, status: open, severity: S3, category: I,
+  - {id: cli-apply-force-never-forces, status: fixed, severity: S3, category: I,
      title: "apply --force still aborts on a non-empty directory without quickscale.yml", effort: Small,
      confidence: High, reality: maintainer-toolchain,
      anchors: [quickscale_cli/src/quickscale_cli/commands/_generation.py,
@@ -348,7 +353,7 @@ items:
      anchors: [quickscale_modules/auth/src/quickscale_modules_auth/views.py,
                quickscale_modules/auth/src/quickscale_modules_auth/_account_deletion_providers.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: beta-migrate-existing-recipient-no-dirty-guard, status: open, severity: S4, category: X,
+  - {id: beta-migrate-existing-recipient-no-dirty-guard, status: fixed, severity: S4, category: X,
      title: "--existing-recipient overwrites a git-tracked recipient with no dirty-tree check",
      effort: Small, confidence: High, reality: maintainer-toolchain,
      anchors: [quickscale_devtools/src/quickscale_devtools/beta_migration/execution.py],
@@ -440,8 +445,7 @@ Rows record audit-time severity; current status is in the machine-readable index
 | `forms-retention-skips-null-ip-rows` | S4 | IX | Retention skips rows stored without an IP | Trivial | High | carried |
 
 Quick wins (Trivial effort, S2/S3): `forms-null-optional-field-500`,
-`billing-invoice-payment-failed-unscoped`, `cli-remove-accepts-path-traversal`,
-`backups-prune-no-keep-last`.
+`billing-invoice-payment-failed-unscoped`, `backups-prune-no-keep-last`.
 
 ## Findings
 
@@ -981,10 +985,10 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
   and the restore-metadata fix still lands before the prune change.
-- **Generator/CLI/release batch:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`,
-  `media-image-decode-before-dimension-cap`, `auth-profile-email-change-desync`. The README,
-  `.dockerignore`, E2E-contract and publish-resumability fixes are closed; the rest ride with the
-  next generator release.
+- **Generator/CLI/release batch:** `media-image-decode-before-dimension-cap`,
+  `auth-profile-email-change-desync`. The README, `.dockerignore`, E2E-contract,
+  publish-resumability, remove-traversal, apply-force and dirty-recipient fixes are closed; the
+  rest ride with the next generator release.
 
 **S4 tail:** batch by file (orgs receivers, backups admin/perms, forms export/options, auth logging,
 three prior S4s). No ordering constraint beyond “restore-metadata before prune”.
@@ -1028,8 +1032,8 @@ reviewers.
 - **Notifications/social/listings/analytics:** no new defect beyond the carried notifications race
   and watchlist items; Svix raw-body verification, delivery-status contract, public filters, and
   analytics escaping verified.
-- **Devtools:** the prior `beta-migrate-existing-recipient-no-dirty-guard` still open; the rest was
-  sampled.
+- **Devtools:** the prior `beta-migrate-existing-recipient-no-dirty-guard` is fixed by SA317; the
+  rest was sampled.
 
 ## Clean sweeps and rejected candidates
 
@@ -1207,7 +1211,12 @@ release.
   expires 2026-11-22).
 - 2026-10-23 — `braces-build-time-advisory`: **withdrawn** (GHSA-vfj7-8cjw-p6xm withdrawn
   2026-10-23; both full audits no longer report it, so no exception is recorded).
-- 2026-10-24 — `beta-migrate-existing-recipient-no-dirty-guard`: still-open (S4; fix not landed).
+- 2026-10-24 — `cli-remove-accepts-path-traversal`: fixed by SA317 (bare-slug validation plus an
+  inside-`modules/` containment assertion before any deletion).
+- 2026-10-24 — `cli-apply-force-never-forces`: fixed by SA317 (the force path stages a generation
+  and swaps it in with rollback).
+- 2026-10-24 — `beta-migrate-existing-recipient-no-dirty-guard`: fixed by SA317 (the in-place path
+  refuses a recipient with uncommitted tracked changes).
 - 2026-10-24 — `notifications-message-status-aggregate-race`: still-open (S4; no parent lock added).
 - 2026-10-24 — `forms-retention-skips-null-ip-rows`: still-open (S4; still `.exclude(ip_address=None)`).
 - 2026-10-24 — `postcss-selector-parser-build-time-advisory`: accepted, carried (the current JS lock

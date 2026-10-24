@@ -244,8 +244,10 @@ def test_config_react_state_html_raises(tmp_path: Path) -> None:
     assert "showcase_html" in str(excinfo.value)
 
 
-def test_config_react_state_html_recovery_html_raises(tmp_path: Path) -> None:
-    """All sources are checked independently; all invalid themes reported."""
+def test_config_react_state_html_raises_with_recovery_present(
+    tmp_path: Path,
+) -> None:
+    """Recovery presence never masks an invalid applied-state theme."""
     _write_yml(tmp_path / "quickscale.yml", _react_config())
     _write_yml(
         tmp_path / ".quickscale" / "state.yml",
@@ -253,7 +255,7 @@ def test_config_react_state_html_recovery_html_raises(tmp_path: Path) -> None:
     )
     _write_yml(
         tmp_path / ".quickscale" / "apply-recovery.yml",
-        _state_data(theme="showcase_html"),
+        _state_data(theme="showcase_react"),
     )
     with pytest.raises(ThemeValidationError) as excinfo:
         validate_theme_preflight(tmp_path)
@@ -261,58 +263,28 @@ def test_config_react_state_html_recovery_html_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Recovery ledger
+# Recovery ledger is not a theme source
 # ---------------------------------------------------------------------------
 
 
-def test_recovery_html_config_react_state_react_raises(tmp_path: Path) -> None:
-    """Recovery ledger with HTML raises even when config and state are React."""
+def test_recovery_html_is_ignored(tmp_path: Path) -> None:
+    """The recovery ledger carries no applied state, so its theme is ignored."""
     _write_yml(tmp_path / "quickscale.yml", _react_config())
     _write_yml(tmp_path / ".quickscale" / "state.yml", _state_data())
     _write_yml(
         tmp_path / ".quickscale" / "apply-recovery.yml",
         _state_data(theme="showcase_html"),
     )
-    with pytest.raises(ThemeValidationError) as excinfo:
-        validate_theme_preflight(tmp_path)
-    assert "showcase_html" in str(excinfo.value)
+    validate_theme_preflight(tmp_path)
 
 
-def test_recovery_checkpoint_requires_opt_in(tmp_path: Path) -> None:
-    """The recovery checkpoint placeholder remains invalid by default."""
+def test_recovery_checkpoint_placeholder_is_ignored(tmp_path: Path) -> None:
+    """The old ledger placeholder is no longer a theme source."""
     _write_yml(
         tmp_path / ".quickscale" / "apply-recovery.yml",
         _state_data(theme="__checkpoint__"),
     )
-    with pytest.raises(ThemeValidationError) as excinfo:
-        validate_theme_preflight(tmp_path)
-    assert "__checkpoint__" in str(excinfo.value)
-
-
-def test_recovery_checkpoint_opt_in_passes(tmp_path: Path) -> None:
-    """The explicit opt-in permits the placeholder in the recovery ledger."""
-    _write_yml(tmp_path / "quickscale.yml", _react_config())
-    _write_yml(tmp_path / ".quickscale" / "state.yml", _state_data())
-    _write_yml(
-        tmp_path / ".quickscale" / "apply-recovery.yml",
-        _state_data(theme="__checkpoint__"),
-    )
-    validate_theme_preflight(tmp_path, allow_recovery_checkpoint=True)
-
-
-@pytest.mark.parametrize("state_path", ["quickscale.yml", ".quickscale/state.yml"])
-def test_recovery_checkpoint_opt_in_does_not_allow_config_or_state(
-    tmp_path: Path, state_path: str
-) -> None:
-    """The opt-in must not weaken desired or applied-state validation."""
-    if state_path == "quickscale.yml":
-        data = _react_config(theme="__checkpoint__")
-    else:
-        data = _state_data(theme="__checkpoint__")
-    _write_yml(tmp_path / state_path, data)
-    with pytest.raises(ThemeValidationError) as excinfo:
-        validate_theme_preflight(tmp_path, allow_recovery_checkpoint=True)
-    assert "__checkpoint__" in str(excinfo.value)
+    validate_theme_preflight(tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -337,11 +309,11 @@ def test_non_dict_yaml_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Valid React normal order (all three sources)
+# Valid React normal order (both state sources)
 # ---------------------------------------------------------------------------
 
 
-def test_all_three_sources_react_passes(tmp_path: Path) -> None:
+def test_config_and_state_react_passes(tmp_path: Path) -> None:
     _write_yml(tmp_path / "quickscale.yml", _react_config())
     _write_yml(tmp_path / ".quickscale" / "state.yml", _state_data())
     _write_yml(tmp_path / ".quickscale" / "apply-recovery.yml", _state_data())
@@ -402,12 +374,10 @@ def test_state_missing_project_raises(tmp_path: Path) -> None:
     assert "missing the required 'project' section" in str(excinfo.value)
 
 
-def test_recovery_missing_project_raises(tmp_path: Path) -> None:
-    """Recovery file without a 'project' key must fail closed."""
+def test_recovery_missing_project_is_ignored(tmp_path: Path) -> None:
+    """The recovery ledger's structure is no longer a theme concern."""
     _write_yml(
         tmp_path / ".quickscale" / "apply-recovery.yml",
         {"version": "1"},
     )
-    with pytest.raises(ThemeValidationError) as excinfo:
-        validate_theme_preflight(tmp_path)
-    assert "missing the required 'project' section" in str(excinfo.value)
+    validate_theme_preflight(tmp_path)

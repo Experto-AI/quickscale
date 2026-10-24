@@ -289,9 +289,9 @@ def build_state_payload(
 ) -> dict[str, Any]:
     """Build the serialized applied-state mapping shared by the writers.
 
-    ``StateManager.save`` writes this mapping to ``state.yml`` and the apply
-    recovery ledger embeds it as its ``applied_state`` section, so the shape
-    lives here once.  An explicit (even empty) ``modules`` key is the
+    ``StateManager.save`` writes this mapping to ``state.yml``, the sole
+    applied-state owner; the recovery ledger carries only the resume pointer
+    and diagnostic progress.  An explicit (even empty) ``modules`` key is the
     authoritative-state marker that stops legacy read-through import (SA207);
     ``include_empty_modules=False`` preserves the recovery ledger's historical
     omit-when-empty form.

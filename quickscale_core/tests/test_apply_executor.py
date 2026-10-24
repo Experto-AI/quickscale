@@ -33,11 +33,6 @@ from quickscale_core.apply.ledger import (
     LedgerManager,
     RecoveryLedger,
 )
-from quickscale_core.schema.state_schema import (
-    ProjectState,
-    QuickScaleState,
-)
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -50,20 +45,6 @@ _TENTH_STEP_ID = APPLY_STEPS[9].step_id  # "post-generation dependency..."
 _LAST_STEP_ID = APPLY_STEPS[-1].step_id  # "display next steps"
 
 _GIT_INDEX_CHECKPOINT = "cafebabedeadbeefcafebabedeadbeefcafebabe"
-
-
-def _minimal_state() -> QuickScaleState:
-    """Build the smallest valid QuickScaleState for test ledgers."""
-    return QuickScaleState(
-        version="1",
-        project=ProjectState(
-            slug="myapp",
-            package="myapp",
-            theme="showcase_react",
-            created_at="2025-01-01T00:00:00",
-            last_applied="2025-06-01T00:00:00",
-        ),
-    )
 
 
 def _write_ledger(path: Path, data: dict[str, Any]) -> None:
@@ -376,30 +357,28 @@ class TestApplyExecutorCheckpointStep:
         assert entry.status == "completed"
         assert entry.detail == "All modules embedded"
 
-    def test_recovery_ledger_applied_state_is_preserved(
+    def test_checkpoint_keeps_pointer_without_state(
         self,
         tmp_path: Path,
     ) -> None:
-        """An existing recovery ledger's applied_state must survive checkpoint
-        writes (the checker does NOT replace the applied state)."""
-        # First, create a recovery ledger with an applied state.
-        state = _minimal_state()
+        """A checkpoint write keeps the ledger a pointer, never a state owner."""
         mgr = LedgerManager(tmp_path)
-        initial_ledger = RecoveryLedger(
-            applied_state=state,
-            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        mgr.save(
+            RecoveryLedger(
+                resume_checkpoint=ResumeCheckpoint(resume_step_id=_FIRST_STEP_ID),
+                git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+            )
         )
-        mgr.save(initial_ledger)
 
-        # Now write a checkpoint step.
         executor = ApplyExecutor(tmp_path)
         executor.checkpoint_step(APPLY_STEPS[0])
 
-        # The applied_state must still be the original.
         ledger = executor.load_ledger()
         assert ledger is not None
-        assert ledger.applied_state.project.slug == "myapp"
         assert ledger.git_index_checkpoint == _GIT_INDEX_CHECKPOINT
+        assert ledger.resume_checkpoint is not None
+        assert ledger.resume_checkpoint.resume_step_id == _SECOND_STEP_ID
+        assert not hasattr(ledger, "applied_state")
 
 
 # ===========================================================================

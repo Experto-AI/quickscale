@@ -294,6 +294,59 @@ class TestRemoveCommand:
         assert result.exit_code != 0
         assert "not installed" in result.output.lower()
 
+    @pytest.mark.parametrize(
+        "bad_name",
+        ["..", "../outside", "/etc", "a/b", ".hidden", "auth/.."],
+    )
+    def test_remove_rejects_traversal_and_non_slug_names(
+        self,
+        cli_runner: CliRunner,
+        project_with_module: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        bad_name: str,
+    ) -> None:
+        """A non-slug name never reaches a path join or rmtree."""
+        monkeypatch.chdir(project_with_module)
+        sentinel = project_with_module.parent / "outside-sentinel.txt"
+        sentinel.write_text("keep")
+
+        result = cli_runner.invoke(
+            remove,
+            [bad_name, "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 2
+        assert "Invalid value for MODULE_NAME" in result.output
+        assert sentinel.read_text() == "keep"
+        assert (project_with_module / "modules" / "auth").exists()
+
+    def test_remove_rejects_module_symlink_escaping_modules_dir(
+        self,
+        cli_runner: CliRunner,
+        project_with_module: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A symlinked module directory may not resolve outside modules/."""
+        outside_dir = project_with_module.parent / "outside-module"
+        outside_dir.mkdir()
+        (outside_dir / "keep.txt").write_text("keep")
+        (project_with_module / "modules" / "evil").symlink_to(
+            outside_dir,
+            target_is_directory=True,
+        )
+        monkeypatch.chdir(project_with_module)
+
+        result = cli_runner.invoke(
+            remove,
+            ["evil", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 2
+        assert "outside the project's modules directory" in result.output
+        assert (outside_dir / "keep.txt").read_text() == "keep"
+
     def test_remove_outside_project(
         self,
         cli_runner: CliRunner,
@@ -362,13 +415,13 @@ class TestRemoveCommand:
         drift = ProjectStateManager(project_path).detect_managed_file_drift()
         assert any(record.path == seam_relative for record in drift)
 
-    def test_remove_orphan_keeps_survivor_legacy_tracking(
+    def test_remove_listed_module_keeps_survivor_legacy_tracking(
         self,
         cli_runner: CliRunner,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Removing a filesystem-only orphan keeps the survivor's legacy tracking.
+        """Removing a state-listed module keeps the survivor's legacy tracking.
 
         The survivor's branch, prefix, and installed_at live only in the
         legacy config.yml, and the removal's hash refresh materializes the
@@ -377,6 +430,32 @@ class TestRemoveCommand:
         """
         from quickscale_core.project_state import ProjectStateManager
 
+        project_path = tmp_path / "myproject"
+        project_path.mkdir()
+        _write_project_with_modules(project_path, ("auth", "storage"))
+        monkeypatch.chdir(project_path)
+
+        result = cli_runner.invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, result.output
+        state = ProjectStateManager(project_path).load_state()
+        assert state is not None
+        assert "auth" not in state.modules
+        assert state.modules["storage"].branch == "splits/storage-module"
+        assert state.modules["storage"].prefix == "modules/storage"
+        assert state.modules["storage"].installed_at == "2024-01-01"
+
+    def test_remove_rejects_filesystem_only_orphan(
+        self,
+        cli_runner: CliRunner,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A directory absent from applied state is not a removable module."""
         project_path = tmp_path / "myproject"
         project_path.mkdir()
         _write_project_with_modules(project_path, ("storage",))
@@ -391,12 +470,9 @@ class TestRemoveCommand:
             catch_exceptions=False,
         )
 
-        assert result.exit_code == 0, result.output
-        state = ProjectStateManager(project_path).load_state()
-        assert state is not None
-        assert state.modules["storage"].branch == "splits/storage-module"
-        assert state.modules["storage"].prefix == "modules/storage"
-        assert state.modules["storage"].installed_at == "2024-01-01"
+        assert result.exit_code != 0
+        assert "not installed" in result.output.lower()
+        assert orphan_dir.exists()
 
     def test_remove_preserves_other_legacy_tracking(
         self,

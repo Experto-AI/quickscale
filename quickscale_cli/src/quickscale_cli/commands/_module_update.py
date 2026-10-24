@@ -81,13 +81,14 @@ def _ensure_authoritative_state_for_update(
     return manager.materialize_authoritative_state()
 
 
-def _load_update_recovery_state(project_path: Path) -> Any | None:
-    """Load the optional apply recovery snapshot used by update guardrails.
+def _load_update_recovery_ledger(project_path: Path) -> Any | None:
+    """Load the optional apply recovery ledger used by update guardrails.
 
-    Returns the embedded applied-state (:class:`QuickScaleState`) when the
-    recovery ledger file exists and is valid, or ``None`` when the file
-    does not exist.  Malformed content raises :class:`LedgerError` which
-    is surfaced as a :class:`RuntimeError`.
+    Returns the :class:`~quickscale_core.apply.RecoveryLedger` when the file
+    exists and is valid, or ``None`` when it does not.  The ledger carries the
+    resume pointer only; applied state stays in ``.quickscale/state.yml``.
+    Malformed content raises :class:`LedgerError`, surfaced as a
+    :class:`RuntimeError`.
     """
     mgr = _apply.LedgerManager(project_path)
     if not mgr.ledger_file.exists():
@@ -101,9 +102,7 @@ def _load_update_recovery_state(project_path: Path) -> Any | None:
             f"{error}. Fix or clear the recovery snapshot before updating modules."
         ) from error
 
-    if ledger is None:
-        return None
-    return ledger.applied_state
+    return ledger
 
 
 def _check_local_pre_pull_guard(
@@ -126,15 +125,15 @@ def _check_local_pre_pull_guard(
             )
             return False
 
-        recovery_state = _load_update_recovery_state(project_path)
-        if recovery_state is not None and module_name in recovery_state.modules:
+        recovery_ledger = _load_update_recovery_ledger(project_path)
+        if recovery_ledger is not None:
             _module_output._report_local_pre_pull_guard_block(
                 module_name,
                 [
                     "",
-                    "Pending .quickscale/apply-recovery.yml still references this module.",
-                    "Finish or clear the local apply recovery flow before running 'quickscale update'.",
-                    "This guard uses only verified local state and does not predict remote compatibility.",
+                    "Pending .quickscale/apply-recovery.yml records an unfinished apply.",
+                    "Finish the interrupted apply or clear the local recovery ledger before running 'quickscale update'.",
+                    "The recovery ledger carries no applied state; .quickscale/state.yml remains authoritative.",
                 ],
             )
             return False

@@ -410,10 +410,10 @@ class TestDevUpPreflight:
         assert SOLE_VALID_THEME in (result.output or "")
         mock_docker.assert_not_called()
 
-    def test_up_recovery_html_rejected_with_remediation(
+    def test_up_ignores_recovery_ledger_theme(
         self, react_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """up() must reject a stale recovery ledger with remediation text."""
+        """The recovery ledger is not an applied-state theme source."""
         from quickscale_cli.commands.development_commands import up
 
         recovery = {
@@ -430,7 +430,8 @@ class TestDevUpPreflight:
             yaml.dump(recovery, default_flow_style=False, sort_keys=False)
         )
 
-        mock_docker = Mock()
+        post_preflight = RuntimeError("post-preflight sentinel")
+        mock_docker = Mock(side_effect=post_preflight)
         runner = CliRunner()
         with monkeypatch.context() as mp:
             mp.setattr(
@@ -443,13 +444,10 @@ class TestDevUpPreflight:
             )
             result = runner.invoke(up, [])
 
-        output = result.output or ""
         assert result.exit_code != 0
-        assert "showcase_html" in output
-        assert "retired" in output
-        assert SOLE_VALID_THEME in output
-        assert "apply-recovery.yml" in output
-        mock_docker.assert_not_called()
+        assert result.exception is post_preflight
+        assert "Theme validation failed" not in (result.output or "")
+        mock_docker.assert_called_once()
 
     def test_up_recovery_checkpoint_proceeds_past_preflight(
         self, react_project: Path, monkeypatch: pytest.MonkeyPatch

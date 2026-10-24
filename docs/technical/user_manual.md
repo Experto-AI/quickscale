@@ -491,7 +491,7 @@ quickscale apply --no-docker
 # Skip module embedding
 quickscale apply --no-modules
 
-# Force overwrite existing project directory
+# Replace a non-empty project directory after staging the new generation
 quickscale apply --force
 
 # Continue an existing project after manually adopting every named contract step
@@ -581,6 +581,7 @@ quickscale apply
   - or you need to verify startup from a clean container state.
 
 **Database note**:
+- `quickscale remove <module>` accepts only a bare module slug whose directory resolves inside `modules/`; `.`, `..`, path separators, and symlinks escaping that directory are rejected before any state read or deletion.
 - `quickscale remove` removes module code and state references, but does not automatically drop module tables.
 - If you need full data removal, run reverse migrations before/after removal as appropriate for your module.
 

@@ -90,10 +90,12 @@ donor's `quickscale.yml`, regenerates the throwaway recipient through a staging 
 `BASELINE=1` (`--existing-recipient`) skips the regeneration and migrates an existing recipient in
 place. The recipient must be an applied project created with `quickscale plan` and
 `quickscale apply` — no hand edits, no donor content — whose slug, package, theme, and module set
-match the donor's after required-module resolution; otherwise the run blocks. Nothing is
-removed, so the recipient's `.git` keeps the clean baseline commit and the migration lands as a
-reviewable diff on top of it. Without `BASELINE=1`, the recipient directory is deleted and
-regenerated, `.git` included.
+match the donor's after required-module resolution; otherwise the run blocks. A recipient that is
+a Git repository must also have a clean tracked working tree: uncommitted tracked changes block
+the run before any mutation so the migration stays a reviewable diff on the baseline commit.
+Untracked files are allowed. Nothing is removed, so the recipient's `.git` keeps the clean
+baseline commit and the migration lands as a reviewable diff on top of it. Without `BASELINE=1`,
+the recipient directory is deleted and regenerated, `.git` included.
 
 The iteration runs under the repository's Poetry environment, whose `quickscale` shadows the
 installed CLI, so an unreleased target version resolves its lockstep `quickscale-core` pin only

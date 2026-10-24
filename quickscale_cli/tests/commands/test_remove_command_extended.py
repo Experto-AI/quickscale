@@ -385,13 +385,16 @@ class TestRemoveTransactionalFailures:
 
 
 class TestRemoveCommandIntegration:
-    def test_remove_updates_pending_apply_recovery_snapshot(
+    def test_remove_leaves_pending_apply_recovery_ledger_untouched(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """The ledger is a resume pointer, not state remove must rewrite."""
         _write_valid_remove_project(tmp_path)
         _write_apply_recovery_state(tmp_path, ["auth", "blog"])
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        original = recovery_path.read_text()
 
         monkeypatch.chdir(tmp_path)
         result = CliRunner().invoke(
@@ -401,11 +404,7 @@ class TestRemoveCommandIntegration:
         )
 
         assert result.exit_code == 0
-        recovery_state = yaml.safe_load(
-            (tmp_path / ".quickscale" / "apply-recovery.yml").read_text()
-        )
-        assert set(recovery_state.get("modules", {})) == {"blog"}
-        assert "auth" not in recovery_state.get("modules", {})
+        assert recovery_path.read_text() == original
 
     def test_remove_does_not_materialize_future_desired_modules_during_regeneration(
         self,
@@ -493,21 +492,20 @@ class TestRemoveCommandIntegration:
         assert result.exit_code != 0
         assert "cancelled" in result.output.lower()
 
-    def test_remove_preserves_git_index_checkpoint_in_surviving_recovery(
+    def test_remove_leaves_git_index_checkpoint_untouched(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Partial remove must preserve the git_index_checkpoint in the
-        surviving apply-recovery.yml."""
+        """Remove does not rewrite the recovery ledger at all."""
         _CHECKPOINT = "aabbccddeeff00112233445566778899aabbccdd"
         _write_valid_remove_project(tmp_path)
         _write_apply_recovery_state(tmp_path, ["auth", "blog"])
-        # Rewrite the recovery file with a known checkpoint value.
         recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
         recovery_data = yaml.safe_load(recovery_path.read_text())
         recovery_data["git_index_checkpoint"] = _CHECKPOINT
         recovery_path.write_text(yaml.safe_dump(recovery_data, sort_keys=False))
+        original = recovery_path.read_text()
 
         monkeypatch.chdir(tmp_path)
         result = CliRunner().invoke(
@@ -517,19 +515,15 @@ class TestRemoveCommandIntegration:
         )
 
         assert result.exit_code == 0
-        rewritten = yaml.safe_load(recovery_path.read_text())
-        assert "auth" not in rewritten.get("modules", {})
-        assert "blog" in rewritten.get("modules", {})
-        # The checkpoint must be preserved byte-identical.
-        assert rewritten["git_index_checkpoint"] == _CHECKPOINT
+        assert recovery_path.read_text() == original
+        assert yaml.safe_load(original)["git_index_checkpoint"] == _CHECKPOINT
 
-    def test_remove_preserves_resume_checkpoint_in_surviving_recovery(
+    def test_remove_leaves_resume_checkpoint_untouched(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Partial remove must preserve the resume_checkpoint in the
-        surviving apply-recovery.yml (AF5 Phase 1 caller parity)."""
+        """Remove leaves the resume pointer byte-identical."""
         _write_valid_remove_project(tmp_path)
         # Write a recovery ledger with a resume_checkpoint.
         recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
@@ -569,6 +563,8 @@ class TestRemoveCommandIntegration:
             )
         )
 
+        original = recovery_path.read_text()
+
         monkeypatch.chdir(tmp_path)
         result = CliRunner().invoke(
             remove,
@@ -577,11 +573,7 @@ class TestRemoveCommandIntegration:
         )
 
         assert result.exit_code == 0
-        rewritten = yaml.safe_load(recovery_path.read_text())
-        assert "auth" not in rewritten.get("modules", {})
-        assert "blog" in rewritten.get("modules", {})
-        # resume_checkpoint must be preserved in the surviving file.
-        rc = rewritten.get("resume_checkpoint")
-        assert rc is not None, "resume_checkpoint was dropped during remove"
+        assert recovery_path.read_text() == original
+        rc = yaml.safe_load(original)["resume_checkpoint"]
         assert rc["resume_step_id"] == "module embedding"
         assert rc["suspend_after_step_id"] == "post-embed state snapshot"
