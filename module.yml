@@ -49,6 +49,7 @@ required_modules:
 dependencies:
   - djangorestframework
   - django-allauth
+  - sqlparse
   - quickscale-core
 
 contract_vintage:
