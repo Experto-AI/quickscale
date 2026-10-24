@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
 
+import quickscale_core.dr_engine._connection as _connection
 import quickscale_core.dr_engine._sidecar as _sidecar
 import quickscale_core.dr_engine._state as _state
 import quickscale_core.dr_engine._paths as _paths
@@ -247,6 +248,7 @@ def _resume_new_artifact(
     initiated_by: AbstractBaseUser | None,
     trigger: str,
     now: datetime,
+    backup_connection: _connection.ResolvedBackupConnection,
 ) -> tuple[Any, Path]:
     """Build the dump artifact for one found on disk or captured during resume."""
     candidate_dump_files = sorted(
@@ -292,6 +294,7 @@ def _resume_new_artifact(
             now=now,
             database_directory=database_directory,
             operation="backup capture resume",
+            backup_connection=backup_connection,
         )
 
     checksum = _primitives._compute_sha256(local_path)
@@ -427,12 +430,18 @@ def _resume_backup_capture(
         )
         database_directory.mkdir(parents=True, exist_ok=True)
 
-        connection_settings = django.db.connections["default"].settings_dict
-        engine = str(connection_settings.get("ENGINE", ""))
-        database_name = str(connection_settings.get("NAME", ""))
+        backup_connection = _connection._resolve_backup_connection(
+            django.db.connections["default"].settings_dict
+        )
+        engine = str(backup_connection.settings.get("ENGINE", ""))
+        database_name = str(backup_connection.settings.get("NAME", ""))
         artifact = snapshot.authoritative_dump
 
         if artifact is None:
+            _connection._ensure_backup_connection_is_privileged(
+                backup_connection,
+                operation="capture",
+            )
             artifact, local_path = _resume_new_artifact(
                 snapshot,
                 database_directory,
@@ -443,6 +452,7 @@ def _resume_backup_capture(
                 initiated_by=initiated_by,
                 trigger=trigger,
                 now=now,
+                backup_connection=backup_connection,
             )
             snapshot.authoritative_dump = artifact
         else:
@@ -507,9 +517,15 @@ def create_backup(
     local_directory.mkdir(parents=True, exist_ok=True)
 
     with _lock._backup_creation_lock(local_directory, now=backup_started_at):
-        connection_settings = django.db.connections["default"].settings_dict
-        engine = str(connection_settings.get("ENGINE", ""))
-        database_name = str(connection_settings.get("NAME", ""))
+        backup_connection = _connection._resolve_backup_connection(
+            django.db.connections["default"].settings_dict
+        )
+        engine = str(backup_connection.settings.get("ENGINE", ""))
+        database_name = str(backup_connection.settings.get("NAME", ""))
+        _connection._ensure_backup_connection_is_privileged(
+            backup_connection,
+            operation="capture",
+        )
         previous_failure_note = ""
         snapshot_id = _primitives._mint_snapshot_id()
         snapshot_root = _paths._build_snapshot_local_root(resolved_policy, snapshot_id)
@@ -547,6 +563,7 @@ def create_backup(
                 now=backup_started_at,
                 database_directory=database_directory,
                 operation="backup creation",
+                backup_connection=backup_connection,
             )
         except Exception as exc:
             if snapshot_root.exists():

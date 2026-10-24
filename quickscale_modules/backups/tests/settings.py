@@ -1,5 +1,6 @@
 """Django settings for QuickScale backups module tests."""
 
+import os
 from pathlib import Path
 
 from quickscale_core.testing.settings import (
@@ -66,6 +67,18 @@ WSGI_APPLICATION = "tests._wsgi.application"
 DATABASES = {
     "default": suite_database("backups"),
 }
+
+# The DR engine never runs a dump or restore under the restricted runtime role.
+# The integration harness connects this suite as that role, so point the
+# privileged backup URL at the harness superuser (the provisioning contract
+# uses trust authentication). The `backups` profile already connects as the
+# superuser, so it needs no extra URL.
+_backup_database = DATABASES["default"]
+if os.environ.get("QS_BACKUPS_DB_USER", "postgres") != "postgres":
+    os.environ.setdefault(
+        "QUICKSCALE_BACKUP_DATABASE_URL",
+        "postgresql://postgres@{HOST}:{PORT}/{NAME}".format(**_backup_database),
+    )
 
 USE_TZ = True
 TIME_ZONE = "UTC"

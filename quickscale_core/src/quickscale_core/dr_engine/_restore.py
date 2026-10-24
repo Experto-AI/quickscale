@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from quickscale_core.dr_engine.persistence import PersistedBackupArtifact
 
 
+import quickscale_core.dr_engine._connection as _connection
 import quickscale_core.dr_engine.recovery as _recovery
 import quickscale_core.dr_engine._state as _state
 import quickscale_core.dr_engine._lock as _lock
@@ -136,10 +137,16 @@ def _execute_restore_for_resolved_source(
     allow_forward: bool = False,
 ) -> RestoreResult:
     """Run the guarded restore pipeline — Django-backed wrapper around core."""
-    current_engine = str(
-        django.db.connections["default"].settings_dict.get("ENGINE") or ""
-    ).strip()
-    connection_settings = django.db.connections["default"].settings_dict
+    default_connection_settings = django.db.connections["default"].settings_dict
+    current_engine = str(default_connection_settings.get("ENGINE") or "").strip()
+    backup_connection = _connection._resolve_backup_connection(
+        default_connection_settings
+    )
+    if not dry_run:
+        _connection._ensure_backup_connection_is_privileged(
+            backup_connection,
+            operation="restore",
+        )
 
     result = _recovery._execute_restore_for_resolved_source(
         restore_source,
@@ -148,7 +155,7 @@ def _execute_restore_for_resolved_source(
         allow_production=allow_production,
         shell_runner=shell_runner,
         current_engine=current_engine,
-        connection_settings=connection_settings,
+        connection_settings=backup_connection.settings,
         is_debug=_conf.settings.DEBUG,
         pg_contract_checker=_metadata._require_postgresql_18_contract,
         installed_migration_hashes=_metadata._collect_module_migration_hashes(),

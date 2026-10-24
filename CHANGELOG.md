@@ -60,6 +60,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     module comes from project state.
   - **Disaster recovery streams large objects** and restores check migration content instead of
     version labels; backup and restore inherit the database's TLS posture.
+  - **Backups use the privileged database role.** `quickscale_backups_create` and restore connect
+    with `QUICKSCALE_BACKUP_DATABASE_URL` (falling back to `DATABASE_URL`) for the `pg_dump` and
+    `pg_restore` child process, so FORCE-RLS tenant tables dump and restore instead of failing under
+    the restricted runtime role.
   - **Supply chain pinned and scanned.** Publishing actions are pinned, the generated container and
     the published core wheel are checked, and security suppressions expire on review horizons.
   - **Quality gate uses fixed thresholds.** `make quality` fails at CC ≥ 21, files ≥ 800 lines,

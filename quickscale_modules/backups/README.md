@@ -28,6 +28,21 @@ spec (`>=X.Y.Z,<X.(Y+1).0`) to the root `pyproject.toml`. That spec must resolve
 index or the staged local wheelhouse before `poetry install` succeeds. `quickscale update` does
 not add root dependency constraints.
 
+## Database connection
+
+Dump and restore never use the restricted runtime role. The DR engine resolves a privileged
+connection for the one command that needs it: `QUICKSCALE_BACKUP_DATABASE_URL` when a dedicated
+backup role is configured, otherwise the superuser `DATABASE_URL` the deployment already uses for
+migrations. The URL reaches only the `pg_dump`/`pg_restore` child process; it is never written into
+Django's `DATABASES` or exported to the serving process.
+
+A PostgreSQL role with `NOBYPASSRLS` cannot dump a FORCE-RLS tenant table (`pg_dump` disables row
+security), and a role that does not own the tables cannot recreate them with
+`pg_restore --clean`. The engine therefore refuses the operation before running either command when
+the resolved role lacks `SUPERUSER`/`BYPASSRLS`, and a restore also requires the role to own every
+table. The refusal names the environment variable to set; a project whose serving role is already a
+superuser or has `BYPASSRLS` needs no extra configuration.
+
 ## Configuration
 
 The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
