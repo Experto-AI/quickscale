@@ -80,6 +80,7 @@ required_modules:
 dependencies:
   - djangorestframework
   - django-filter
+  - sqlparse
   - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.

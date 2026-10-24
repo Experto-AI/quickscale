@@ -13,7 +13,7 @@ for marketplace verticals (real estate, jobs, events, products).
 - Semantic, zero-style HTML templates and SEO-friendly slugs.
 - Tenant-scoped through orgs' `TenantModel`; `orgs` is required alongside `listings`.
 
-Dependencies: Django >= 6.0, Django REST Framework >= 3.17.2, django-filter >= 26.1,
+Dependencies: Django >= 6.0, Django REST Framework >= 3.18.2, django-filter >= 26.1,
 django-markdownx >= 4.0.11, and Pillow >= 13.0.0,<14.0.0.
 
 ## Configuration

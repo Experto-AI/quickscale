@@ -405,3 +405,10 @@ steps:
       - "Compare and manually adopt the current README.md: Docker Compose is documented as the local development stack (Django's development server with settings.local and DEBUG=True), not a production deployment; the setup steps edit the generated .env instead of copying .env.example over it, and the storage example is space-indented."
       - "Compare and manually adopt the current .dockerignore and .gitignore: `.quickscale/backups/` and transient `.quickscale/*.lock` files are excluded from the Docker build context so local database dumps are never baked into the image, while the `.quickscale/wheels/` cache stays visible to a local-wheel image build, and `/static/frontend/` is ignored so a Vite build does not leave a dirty tree that blocks module embedding."
       - "Compare and manually adopt the current pyproject.toml and settings/production.py: declare the `redis` runtime dependency and call `require_redis_cache_client(REDIS_URL)` before selecting RedisCache, so a deployment that sets REDIS_URL without the client fails at startup instead of on the first throttled request."
+
+  - id: sa327-dependency-floors
+    minimum: "0.89.0"
+    title: "Adopt the raised Django and module dependency floors"
+    adoption_steps:
+      - "Compare and manually adopt the current pyproject.toml Django constraint (`>=6.0.8,<6.1.0`) and refresh poetry.lock; a project generated with the earlier floor keeps a Django range whose lower bound admits the vulnerable release until this edit."
+      - "Update the embedded modules once this release's modules are available (`quickscale update --confirm-contract-adoption`) so they carry the raised Django, djangorestframework, sqlparse, certifi, and urllib3 floors, then refresh poetry.lock and re-run the generated project's test suite."

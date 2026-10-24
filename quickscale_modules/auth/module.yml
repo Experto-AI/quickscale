@@ -52,6 +52,7 @@ config:
 # Dependencies required by this module (bare names; specs live in pyproject.toml)
 dependencies:
   - django-allauth
+  - sqlparse
   - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.

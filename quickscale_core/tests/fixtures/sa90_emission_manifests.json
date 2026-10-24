@@ -62,7 +62,8 @@
       "sa299d": "Regenerated 2026-10-20 \u2014 the generated project's test harness passes as rendered: pyproject.toml collects tests/ only, the Makefile test-backend target and the CI test and migration steps set QUICKSCALE_ALLOW_BYPASSRLS=1 when orgs is installed, the tenant-isolation target's prerequisite migration uses QUICKSCALE_PRIVILEGED_COMMAND=migrate, and README.md's direct pytest commands carry the same allowance. Changed per variant: README.md and pyproject.toml; react_default also .github/workflows/ci.yml and Makefile. All unrelated paths, hashes, and modes remain authoritative.",
       "sa300b": "Regenerated 2026-10-20 \u2014 the generated home E2E spec asserts the current dashboard heading and its Playwright config targets the Django-served origin, because the React starter validates window.__QUICKSCALE__ and Vite alone cannot serve an E2E target. 2 fixture hashes updated per variant: frontend/e2e/home.spec.ts and frontend/playwright.config.ts. All unrelated paths, hashes, and modes remain authoritative.",
       "sa308": "Regenerated 2026-10-23 \u2014 generated runtime pins moved to Node 24.22.1, Python 3.14.9, and PostgreSQL 18.6; the Pillow (13), virtualenv (21.14.13), and React starter lockfile (DOMPurify 3.4.17, Vitest 4.1.12) advisory floors landed, and the generated README names the Node 24.22.1 prerequisite. 8 fixture hashes updated per variant: .github/workflows/ci.yml, Dockerfile, docker-compose.yml, frontend/package.json, frontend/pnpm-lock.yaml, pyproject.toml, README.md, <package>/settings/production.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa308-b": "Regenerated 2026-10-23 \u2014 the React starter declares its Tailwind animation plugin (`tailwindcss-animate`) as a build-only dev dependency instead of a runtime dependency, so production npm audits no longer see Tailwind's build-time `braces` and `postcss-selector-parser` chain. 2 fixture hashes updated per variant: frontend/package.json and frontend/pnpm-lock.yaml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa308-b": "Regenerated 2026-10-23 \u2014 the React starter declares its Tailwind animation plugin (`tailwindcss-animate`) as a build-only dev dependency instead of a runtime dependency, so production npm audits no longer see Tailwind's build-time `braces` and `postcss-selector-parser` chain. 2 fixture hashes updated per variant: frontend/package.json and frontend/pnpm-lock.yaml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa327": "Regenerated 2026-10-24 \u2014 the generated project's Django floor rises to >=6.0.8 to match the module manifests (SA327). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -556,7 +557,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "24c2b1c7c3123e6f9bdec34e7b7215faeb2be8306bf82920674fe83631fb6e62"
+      "sha256": "e04e2b09a38cdc6a78b066b09bd67be8f8d591c67bcdaf7dcdf08a4cb1858c66"
     },
     "quickscale-operations.md": {
       "mode": "644",
@@ -1126,7 +1127,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "24c2b1c7c3123e6f9bdec34e7b7215faeb2be8306bf82920674fe83631fb6e62"
+      "sha256": "e04e2b09a38cdc6a78b066b09bd67be8f8d591c67bcdaf7dcdf08a4cb1858c66"
     },
     "quickscale-operations.md": {
       "mode": "644",
@@ -1696,7 +1697,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "24c2b1c7c3123e6f9bdec34e7b7215faeb2be8306bf82920674fe83631fb6e62"
+      "sha256": "e04e2b09a38cdc6a78b066b09bd67be8f8d591c67bcdaf7dcdf08a4cb1858c66"
     },
     "quickscale-operations.md": {
       "mode": "644",

@@ -438,7 +438,7 @@ packages = [{include = "quickscale_modules_<name>", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.14,<3.15"
-Django = ">=6.0.7,<6.1.0"
+Django = ">=6.0.8,<6.1.0"
 # Add module-specific runtime dependencies here (e.g., django-allauth, Pillow).
 # Every module declares the lockstep core dependency last (module.yml lists
 # the bare name `quickscale-core`; this path spec installs it in the monorepo).
