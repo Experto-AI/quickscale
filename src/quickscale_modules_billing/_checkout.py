@@ -109,7 +109,11 @@ def _create_checkout_session(
         settings_snapshot=snapshot
     )
     stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
-    _validation._validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
+    _validation._validate_stripe_price_parity(
+        plan=plan,
+        stripe_price=stripe_price,
+        settings_snapshot=snapshot,
+    )
     customer_id, _ = _customers.get_or_create_stripe_customer(
         user,
         organization=organization,
