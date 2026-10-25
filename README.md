@@ -50,7 +50,10 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `secret_access_key_env_var` | string | `AWS_SECRET_ACCESS_KEY` | `QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR` | Environment variable name for the S3-compatible secret access key. |
 | `default_acl` | string | `""` | `AWS_DEFAULT_ACL` | Default ACL for uploaded objects (blank recommended for modern buckets). |
 | `querystring_auth` | boolean | `false` | `AWS_QUERYSTRING_AUTH` | When false, media URLs are public and cache-friendly. |
-| `private_media_enabled` | boolean | `false` | — (immutable) | Reserved extension point for future private media authorization flows. |
+
+`private_media_enabled` is retired and refused by name: QuickScale does not implement
+private-media authorization, so the switch never had an effect. Public media delivery keeps its
+current contract; private-media authorization arrives as a separate, enforced surface.
 
 The same desired state in `quickscale.yml`:
 
@@ -184,7 +187,36 @@ URLs without signed-query churn.
 
 ## Extending
 
-- This module focuses on public media delivery and shared helper contracts. Private media
-  authorization, richer image variants, and async media pipelines are deferred.
-- Project extensions should consume the services above instead of branching on a provider
-  directly.
+### What QuickScale owns
+
+The module package under `modules/storage/` — backend selection, validation and URL helpers,
+the shared Markdownx mount, and its settings — its manifest options, and the managed wiring
+`quickscale apply` writes (`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+`quickscale.yml` values for the options above, the deployment's credential environment
+variables, the bucket and CDN account, uploaded media files, and project templates and frontend
+code.
+
+### Update-safe customizations
+
+Change option values and call the documented services; project code consumes
+`build_public_media_url()` and the other helpers instead of branching on a provider. Private
+media authorization is not implemented, so `private_media_enabled` is refused by name rather
+than accepted as an inert switch.
+
+### Structured extension points
+
+The services `build_public_media_url()`, `build_upload_path()`, `validate_file_upload()`,
+`make_cache_friendly_name()`, `select_storage_backend()`, and the `StorageError` base are the
+documented surface. A project stores relative media keys and lets the service-backed URL
+resolution turn them into final public URLs; `public_base_url` is the one supported public
+media host setting.
+
+### Upgrade expectations
+
+Tier 1 settings and documented services survive normal module updates. Never edit
+`modules/storage/`: `quickscale update` refuses a local edit unless `--allow-local-changes`, and
+managed wiring is regenerated. Private media, richer image variants, and async media pipelines
+remain deferred and are not part of the current contract.

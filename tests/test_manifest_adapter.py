@@ -116,7 +116,6 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY": (
                 "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
             ),
-            "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
             "MARKDOWNX_MARKDOWN_EXTENSIONS": [
                 "markdown.extensions.fenced_code",
                 "markdown.extensions.tables",
@@ -143,7 +142,6 @@ class TestStorageManifestAdapter:
             "AWS_QUERYSTRING_AUTH",
             "QUICKSCALE_STORAGE_ACCESS_KEY_ID",
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY",
-            "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
             "MARKDOWNX_MARKDOWN_EXTENSIONS",
             "MARKDOWNX_MEDIA_PATH",
             "MARKDOWNX_UPLOAD_CONTENT_TYPES",
@@ -212,7 +210,6 @@ class TestStorageManifestAdapter:
             "AWS_QUERYSTRING_AUTH",
             "QUICKSCALE_STORAGE_ACCESS_KEY_ID",
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY",
-            "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
             "STORAGES",
@@ -255,7 +252,6 @@ class TestStorageManifestAdapter:
                 "region_name": " ",
                 "default_acl": " ",
                 "querystring_auth": True,
-                "private_media_enabled": True,
             }
         )
 
@@ -264,7 +260,6 @@ class TestStorageManifestAdapter:
             "https://cdn.example.com"
         )
         assert spec.settings["MEDIA_URL"] == "/uploads/"
-        assert spec.settings["QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED"] is True
         assert spec.settings["STORAGES"] == {
             "default": {
                 "BACKEND": "storages.backends.s3.S3Storage",
@@ -372,7 +367,6 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY": (
                 "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
             ),
-            "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
             "MARKDOWNX_MARKDOWN_EXTENSIONS": [
                 "markdown.extensions.fenced_code",
                 "markdown.extensions.tables",
