@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +15,7 @@ from quickscale_core.dr_engine import primitives as primitives_module
 from quickscale_core.dr_engine.primitives import (
     BackupConfigurationError,
     BackupError,
+    _BACKUP_MANIFEST_VERSION,
     _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC,
     _REQUIRED_POSTGRESQL_MAJOR,
     _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES,
@@ -27,6 +29,8 @@ from quickscale_core.dr_engine.primitives import (
     _dump_postgresql_database,
     _expected_backup_format_for_engine,
     _extract_any_major_version,
+    _ensure_private_directory,
+    _ensure_private_file,
     _extract_leading_major_version,
     _get_postgresql_tool_version,
     _mint_snapshot_id,
@@ -44,6 +48,9 @@ class TestConstants:
 
     def test_postgresql_custom_archive_magic(self) -> None:
         assert _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC == b"PGDMP"
+
+    def test_backup_manifest_version(self) -> None:
+        assert _BACKUP_MANIFEST_VERSION == 1
 
     def test_snapshots_directory_name(self) -> None:
         assert _SNAPSHOTS_DIRECTORY_NAME == "snapshots"
@@ -493,6 +500,26 @@ class TestSnapshotStructure:
         target = tmp_path / "a" / "b" / "c" / "file.json"
         _write_json_file(target, {"x": 1})
         assert target.exists()
+
+    def test_write_json_file_uses_private_modes(self, tmp_path: Path) -> None:
+        target = tmp_path / "private" / "file.json"
+        _write_json_file(target, {"x": 1})
+        assert stat.S_IMODE(target.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+
+    def test_ensure_private_directory_and_file_restrict_modes(
+        self, tmp_path: Path
+    ) -> None:
+        directory = tmp_path / "nested" / "private"
+        _ensure_private_directory(directory)
+        target = directory / "file.json"
+        target.write_text("{}")
+        target.chmod(0o644)
+
+        _ensure_private_file(target)
+
+        assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
 
 
 class TestComputeSha256:

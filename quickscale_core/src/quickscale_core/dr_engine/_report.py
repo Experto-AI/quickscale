@@ -120,6 +120,12 @@ def _snapshot_database_contract(
                 authoritative_dump
             )
             or {},
+            "manifest_version": _recovery._collect_artifact_manifest_version(
+                authoritative_dump
+            ),
+            "project_migration_hashes": (
+                _recovery._collect_artifact_project_migration_hashes(authoritative_dump)
+            ),
         }
 
     return (
@@ -245,10 +251,17 @@ def _collect_sidecar_provenance(
 def _snapshot_release_summary(payload: dict[str, Any]) -> dict[str, Any]:
     """Return the release metadata summary carried in the contract."""
     module_versions = payload.get("module_versions", {})
+    project_migration_hashes = payload.get("project_migration_hashes", {})
     return {
         "app_version": payload.get("app_version"),
         "django_version": payload.get("django_version"),
         "module_versions": module_versions if isinstance(module_versions, dict) else {},
+        "project_migration_hashes": (
+            project_migration_hashes
+            if isinstance(project_migration_hashes, dict)
+            else {}
+        ),
+        "manifest_version": payload.get("manifest_version"),
         "git_sha": payload.get("git_sha"),
     }
 
@@ -405,6 +418,12 @@ def build_backup_snapshot_report(
                 authoritative_dump
             )
             or {},
+            "manifest_version": _recovery._collect_artifact_manifest_version(
+                authoritative_dump
+            ),
+            "project_migration_hashes": (
+                _recovery._collect_artifact_project_migration_hashes(authoritative_dump)
+            ),
             "created_at": authoritative_dump.created_at.astimezone(
                 timezone.utc
             ).isoformat(),
@@ -577,6 +596,15 @@ def record_backup_snapshot_verification(
 
 def validate_backup_artifact(artifact: Any) -> list[str]:
     """Validate artifact integrity and update its validation status."""
+    if artifact.status == "restoring":
+        raise _primitives.BackupError(
+            "Cannot validate a backup artifact while its restore is in progress."
+        )
+    if artifact.status == "deleted":
+        raise _primitives.BackupError(
+            "Cannot validate a backup artifact that has been deleted."
+        )
+
     local_path = Path(artifact.local_path) if artifact.local_path else None
     issues = _recovery._collect_local_backup_validation_issues(
         local_path,

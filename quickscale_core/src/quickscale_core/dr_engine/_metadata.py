@@ -95,6 +95,84 @@ def _collect_module_migration_hashes() -> dict[str, dict[str, str]]:
     return hashes
 
 
+_PROJECT_APP_EXCLUDED_PATH_PARTS: frozenset[str] = frozenset(
+    {"site-packages", "dist-packages"}
+)
+
+
+def _is_project_owned_app(app_config: Any) -> bool:
+    """Return whether an installed app belongs to the project's own code tree."""
+    name = str(getattr(app_config, "name", "")).strip()
+    if not name or name.startswith("quickscale_modules_") or name.startswith("django."):
+        return False
+    path_text = str(getattr(app_config, "path", "") or "").strip()
+    if not path_text:
+        return False
+    path = Path(path_text)
+    if _PROJECT_APP_EXCLUDED_PATH_PARTS.intersection(path.parts):
+        return False
+    base_dir = Path(getattr(_conf.settings, "BASE_DIR", Path.cwd())).resolve()
+    try:
+        path.resolve().relative_to(base_dir)
+    except ValueError:
+        return False
+    return True
+
+
+def _collect_project_migration_hashes() -> dict[str, dict[str, str]]:
+    """Return each project-owned app's applied-migration content identity.
+
+    A project app records one key by app label, including an empty mapping for
+    an app that ships no migrations.  An unreadable or empty migrations
+    package fails the capture rather than recording a weaker identity.
+    """
+    hashes: dict[str, dict[str, str]] = {}
+    for app_config in apps.get_app_configs():
+        if not _is_project_owned_app(app_config):
+            continue
+        app_label = str(getattr(app_config, "label", "") or app_config.name)
+        migrations_dir = Path(app_config.path) / "migrations"
+        try:
+            is_directory = stat.S_ISDIR(migrations_dir.stat().st_mode)
+        except FileNotFoundError:
+            hashes[app_label] = {}
+            continue
+        except OSError as exc:
+            raise _primitives.BackupConfigurationError(
+                "Unable to inspect the migrations package for project app "
+                f"'{app_label}': {exc}"
+            ) from exc
+        if not is_directory:
+            raise _primitives.BackupConfigurationError(
+                f"Project app '{app_label}' has a migrations path that is not a directory"
+            )
+        try:
+            numbered_migrations = [
+                path
+                for path in migrations_dir.iterdir()
+                if path.is_file()
+                and _migration_hashes.NUMBERED_MIGRATION_PATTERN.match(path.name)
+            ]
+        except OSError as exc:
+            raise _primitives.BackupConfigurationError(
+                "Unable to inspect the migrations package for project app "
+                f"'{app_label}': {exc}"
+            ) from exc
+        if not numbered_migrations:
+            hashes[app_label] = {}
+            continue
+        try:
+            hashes[app_label] = _migration_hashes.compute_migration_hashes(
+                migrations_dir
+            )
+        except (_migration_hashes.MigrationHashError, OSError) as exc:
+            raise _primitives.BackupConfigurationError(
+                "Unable to record the migration content identity for project app "
+                f"'{app_label}': {exc}"
+            ) from exc
+    return hashes
+
+
 def _get_git_revision() -> str | None:
     """Return the best-effort current git revision for release metadata."""
     base_dir = Path(getattr(_conf.settings, "BASE_DIR", Path.cwd()))
@@ -138,7 +216,7 @@ def _read_setting_value(
 def _build_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
     """Capture release metadata reserved for later snapshot-aware CLI phases."""
     return {
-        "manifest_version": 1,
+        "manifest_version": _primitives._BACKUP_MANIFEST_VERSION,
         "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
         "project_slug": _get_project_slug(),
         "source_environment": _get_source_environment(),
@@ -148,6 +226,8 @@ def _build_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
         ),
         "django_version": django.get_version(),
         "module_versions": _collect_module_versions(),
+        "migration_hashes": _collect_module_migration_hashes(),
+        "project_migration_hashes": _collect_project_migration_hashes(),
         "git_sha": _get_git_revision(),
     }
 
@@ -207,6 +287,7 @@ def _create_database_dump(
             resolved_connection.settings,
             shell_runner=shell_runner,
         )
+        _primitives._ensure_private_file(local_path)
     else:
         backup_format = "json"
         filename = _paths.build_backup_filename(
@@ -231,7 +312,9 @@ def _create_database_dump(
 def _dump_database_as_json(local_path: Path) -> None:
     buffer = StringIO()
     call_command("dumpdata", stdout=buffer)
+    _primitives._ensure_private_directory(local_path.parent)
     local_path.write_text(buffer.getvalue(), encoding="utf-8")
+    _primitives._ensure_private_file(local_path)
 
 
 def _build_backup_metadata(
@@ -247,6 +330,7 @@ def _build_backup_metadata(
     dump_client_major: int | None = None,
 ) -> dict[str, Any]:
     metadata: dict[str, Any] = {
+        "manifest_version": _primitives._BACKUP_MANIFEST_VERSION,
         "created_at": created_at.astimezone(timezone.utc).isoformat(),
         "backup_format": backup_format,
         "database_engine": database_engine,
@@ -256,6 +340,7 @@ def _build_backup_metadata(
         "target_mode": target_mode,
         "module_versions": _collect_module_versions(),
         "migration_hashes": _collect_module_migration_hashes(),
+        "project_migration_hashes": _collect_project_migration_hashes(),
         "app_version": str(
             getattr(_conf.settings, "QUICKSCALE_APP_VERSION", "unknown")
         ),

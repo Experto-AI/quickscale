@@ -124,6 +124,14 @@ class TestMetadataOrchestration:
                 return_value={"quickscale_modules_auth": "1.2"},
             ),
             patch(
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                return_value={"quickscale_modules_auth": {"0001_initial.py": "hash"}},
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                return_value={"properties": {"0001_initial.py": "project-hash"}},
+            ),
+            patch(
                 "quickscale_core.dr_engine._metadata._get_git_revision",
                 return_value="abc123",
             ),
@@ -139,6 +147,12 @@ class TestMetadataOrchestration:
             "app_version": "2.4.0",
             "django_version": "5.2",
             "module_versions": {"quickscale_modules_auth": "1.2"},
+            "migration_hashes": {
+                "quickscale_modules_auth": {"0001_initial.py": "hash"}
+            },
+            "project_migration_hashes": {
+                "properties": {"0001_initial.py": "project-hash"}
+            },
             "git_sha": "abc123",
         }
 
@@ -154,6 +168,10 @@ class TestMetadataOrchestration:
                 return_value={
                     "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
                 },
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                return_value={"properties": {"0001_initial.py": "project-hash"}},
             ),
             patch(
                 "quickscale_core.dr_engine._metadata._get_database_server_version",
@@ -179,8 +197,12 @@ class TestMetadataOrchestration:
         assert result["database_server_major"] == 3
         assert result["pg_dump_version"] == "unused"
         assert result["dump_client_major"] == 18
+        assert result["manifest_version"] == 1
         assert result["migration_hashes"] == {
             "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+        }
+        assert result["project_migration_hashes"] == {
+            "properties": {"0001_initial.py": "project-hash"},
         }
 
     def test_module_migration_hash_collection_hashes_numbered_migrations(
@@ -228,6 +250,95 @@ class TestMetadataOrchestration:
 
         with pytest.raises(BackupConfigurationError, match="content identity"):
             _metadata._collect_module_migration_hashes()
+
+    def test_project_migration_hash_collection_hashes_project_owned_apps(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        base_dir = tmp_path / "project"
+        properties_migrations = base_dir / "properties" / "migrations"
+        properties_migrations.mkdir(parents=True)
+        (properties_migrations / "0001_initial.py").write_text("x = 1\n")
+        (properties_migrations / "__init__.py").write_text("")
+        blog_app = base_dir / "blog"
+        blog_app.mkdir()
+        module_migrations = base_dir / "modules" / "auth" / "migrations"
+        module_migrations.mkdir(parents=True)
+        (module_migrations / "0001_initial.py").write_text("module = 1\n")
+        outside_migrations = tmp_path / "third-party" / "migrations"
+        outside_migrations.mkdir(parents=True)
+        (outside_migrations / "0001_initial.py").write_text("outside = 1\n")
+        site_packages = (
+            base_dir / ".venv" / "lib" / "python3.14" / "site-packages" / "vendor"
+        )
+        (site_packages / "migrations").mkdir(parents=True)
+        (site_packages / "migrations" / "0001_initial.py").write_text("vendor = 1\n")
+
+        app_configs = [
+            SimpleNamespace(
+                name="quickscale_modules_auth",
+                label="auth",
+                path=str(module_migrations.parent),
+            ),
+            SimpleNamespace(
+                name="properties",
+                label="properties",
+                path=str(properties_migrations.parent),
+            ),
+            SimpleNamespace(name="blog", label="blog", path=str(blog_app)),
+            SimpleNamespace(
+                name="django.contrib.auth",
+                label="contrib_auth",
+                path=str(base_dir / "django-auth"),
+            ),
+            SimpleNamespace(
+                name="third_party",
+                label="third_party",
+                path=str(outside_migrations.parent),
+            ),
+            SimpleNamespace(
+                name="vendor",
+                label="vendor",
+                path=str(site_packages),
+            ),
+        ]
+        monkeypatch.setattr(_metadata.apps, "get_app_configs", lambda: app_configs)
+        monkeypatch.setattr(
+            _metadata._conf,
+            "settings",
+            SimpleNamespace(BASE_DIR=base_dir),
+        )
+
+        hashes = _metadata._collect_project_migration_hashes()
+
+        assert set(hashes) == {"properties", "blog"}
+        assert set(hashes["properties"]) == {"0001_initial.py"}
+        assert hashes["blog"] == {}
+
+    def test_project_migration_hash_collection_treats_empty_package_as_unmigrated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        base_dir = tmp_path / "project"
+        migrations = base_dir / "properties" / "migrations"
+        migrations.mkdir(parents=True)
+        (migrations / "__init__.py").write_text("")
+        monkeypatch.setattr(
+            _metadata.apps,
+            "get_app_configs",
+            lambda: [
+                SimpleNamespace(
+                    name="properties",
+                    label="properties",
+                    path=str(migrations.parent),
+                )
+            ],
+        )
+        monkeypatch.setattr(
+            _metadata._conf,
+            "settings",
+            SimpleNamespace(BASE_DIR=base_dir),
+        )
+
+        assert _metadata._collect_project_migration_hashes() == {"properties": {}}
 
     def test_module_migration_hash_collection_raises_on_inspect_failure(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

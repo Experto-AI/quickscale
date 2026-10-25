@@ -88,6 +88,15 @@ def _recorded_migration_hashes() -> dict[str, dict[str, str]]:
     return _collect_module_migration_hashes()
 
 
+def _recorded_project_migration_hashes() -> dict[str, dict[str, str]]:
+    """Return the project-app identity a backup captured here would record."""
+    from quickscale_core.dr_engine._metadata import (
+        _collect_project_migration_hashes,
+    )
+
+    return _collect_project_migration_hashes()
+
+
 @pytest.fixture
 def postgresql_artifact_file(tmp_path: Path) -> Path:
     """Return a filesystem path with sample pg_dump-style artifact content."""
@@ -110,9 +119,11 @@ def backup_artifact(db, artifact_file: Path, superuser) -> "BackupArtifact":
         database_engine="django.db.backends.sqlite3",
         database_name="test.sqlite3",
         metadata_json={
+            "manifest_version": 1,
             "environment": "test",
             "module_versions": _recorded_module_versions(),
             "migration_hashes": _recorded_migration_hashes(),
+            "project_migration_hashes": _recorded_project_migration_hashes(),
         },
         initiated_by=superuser,
     )
@@ -141,6 +152,7 @@ def postgresql_backup_artifact(
         database_server_major=18,
         dump_client_major=18,
         metadata_json={
+            "manifest_version": 1,
             "environment": "test",
             "database_server_version": "18.3 (Debian 18.3-1)",
             "database_server_major": 18,
@@ -148,6 +160,7 @@ def postgresql_backup_artifact(
             "dump_client_major": 18,
             "module_versions": _recorded_module_versions(),
             "migration_hashes": _recorded_migration_hashes(),
+            "project_migration_hashes": _recorded_project_migration_hashes(),
         },
         initiated_by=superuser,
     )

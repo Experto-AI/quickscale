@@ -1845,3 +1845,185 @@ class TestExecuteRestoreForResolvedSource:
 
         assert result.executed is True
         mock_run.assert_called()
+
+    def test_manifest_version_gate_refuses_unknown_or_missing_version(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+
+        for manifest_version, message in (
+            (2, "manifest version '2' is not supported"),
+            (None, "records no format version"),
+        ):
+            metadata: dict[str, Any] = {"project_migration_hashes": {}}
+            if manifest_version is not None:
+                metadata["manifest_version"] = manifest_version
+            artifact = FakeArtifact(
+                filename="test-backup.dump",
+                checksum_sha256=_compute_sha256(dump_file),
+                size_bytes=dump_file.stat().st_size,
+                metadata_json=metadata,
+            )
+            src = ResolvedRestoreSource(
+                confirmation_value="test-backup.dump",
+                local_path=dump_file,
+                backup_format="pg_dump_custom",
+                artifact=artifact,
+            )
+
+            with pytest.raises(BackupRestoreBlocked, match=message):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="test-backup.dump",
+                    dry_run=True,
+                    allow_production=False,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={"NAME": "testdb"},
+                    installed_project_migration_hashes={},
+                )
+
+    def test_manifest_without_project_identity_refused_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={"manifest_version": 1},
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="records no project migration content identity",
+        ):
+            _execute_restore_for_resolved_source(
+                src,
+                confirmation="test-backup.dump",
+                dry_run=True,
+                allow_production=False,
+                current_engine="django.db.backends.postgresql",
+                connection_settings={"NAME": "testdb"},
+                installed_project_migration_hashes={},
+            )
+
+    def test_changed_project_migration_content_refused_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={
+                "manifest_version": 1,
+                "project_migration_hashes": {
+                    "properties": {"0001_initial.py": "old-digest"}
+                },
+            },
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="project migration content cannot advance",
+        ) as exc_info:
+            _execute_restore_for_resolved_source(
+                src,
+                confirmation="test-backup.dump",
+                dry_run=True,
+                allow_production=False,
+                current_engine="django.db.backends.postgresql",
+                connection_settings={"NAME": "testdb"},
+                installed_project_migration_hashes={
+                    "properties": {"0001_initial.py": "new-digest"}
+                },
+            )
+
+        assert "properties migration '0001_initial.py' changed" in str(exc_info.value)
+
+    def test_matching_project_identity_passes_the_manifest_gate(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={
+                "manifest_version": 1,
+                "project_migration_hashes": {
+                    "properties": {"0001_initial.py": "digest"}
+                },
+            },
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+
+        result = _execute_restore_for_resolved_source(
+            src,
+            confirmation="test-backup.dump",
+            dry_run=True,
+            allow_production=False,
+            current_engine="django.db.backends.postgresql",
+            connection_settings={"NAME": "testdb"},
+            installed_project_migration_hashes={
+                "properties": {"0001_initial.py": "digest"}
+            },
+        )
+
+        assert result.dry_run is True
+
+    def test_file_source_refuses_unknown_recorded_manifest_version(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "snapshot-restore.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        src = ResolvedRestoreSource(
+            confirmation_value="snapshot-restore.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="manifest version '7' is not supported",
+        ):
+            _execute_restore_for_resolved_source(
+                src,
+                confirmation="snapshot-restore.dump",
+                dry_run=True,
+                allow_production=False,
+                current_engine="django.db.backends.postgresql",
+                connection_settings={"NAME": "testdb"},
+                installed_project_migration_hashes={},
+                recorded_manifest_version=7,
+                recorded_project_migration_hashes={},
+            )

@@ -203,6 +203,10 @@ class TestRestoreResolutionAndGuards:
                 return_value={},
             ),
             patch(
+                "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                return_value={},
+            ),
+            patch(
                 "quickscale_core.dr_engine.persistence.get_authoritative_snapshot_for_artifact",
                 return_value=restore_snapshot,
             ) as resolve_snapshot,
@@ -256,6 +260,10 @@ class TestRestoreResolutionAndGuards:
                 return_value={},
             ),
             patch(
+                "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                return_value={},
+            ),
+            patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ),
@@ -297,6 +305,10 @@ class TestRestoreResolutionAndGuards:
                 },
             ),
             patch(
+                "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                return_value={"properties": {"0001_initial.py": "project-hash"}},
+            ),
+            patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ) as core,
@@ -310,6 +322,9 @@ class TestRestoreResolutionAndGuards:
             )
         assert core.call_args.kwargs["installed_migration_hashes"] == {
             "quickscale_modules_auth": {"0001_initial.py": "hash-1"}
+        }
+        assert core.call_args.kwargs["installed_project_migration_hashes"] == {
+            "properties": {"0001_initial.py": "project-hash"}
         }
 
     def test_restore_backup_source_resolves_then_executes_in_order(self) -> None:
@@ -343,6 +358,8 @@ class TestRestoreResolutionAndGuards:
             allow_production=False,
             shell_runner="runner",
             recorded_migration_hashes=None,
+            recorded_manifest_version=None,
+            recorded_project_migration_hashes=None,
             allow_forward=False,
         )
 
@@ -371,6 +388,8 @@ class TestRestoreResolutionAndGuards:
         assert execute.call_args.kwargs["recorded_migration_hashes"] == {
             "quickscale_modules_auth": {"0001_initial.py": "hash-1"}
         }
+        assert execute.call_args.kwargs["recorded_manifest_version"] is None
+        assert execute.call_args.kwargs["recorded_project_migration_hashes"] is None
 
     def test_restore_backup_artifact_is_thin_source_wrapper(self) -> None:
         artifact = _artifact()

@@ -69,6 +69,12 @@ class TestFacadePatchTargets:
             patch.object(
                 _metadata, "_collect_module_versions", return_value={"m": "1"}
             ),
+            patch.object(
+                _metadata, "_collect_module_migration_hashes", return_value={}
+            ),
+            patch.object(
+                _metadata, "_collect_project_migration_hashes", return_value={}
+            ),
             patch.object(_metadata, "_get_git_revision", return_value="abc123"),
             patch.object(
                 _conf,

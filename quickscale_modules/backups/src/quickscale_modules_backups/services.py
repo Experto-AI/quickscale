@@ -126,6 +126,8 @@ from quickscale_core.runtime import (  # noqa: F401
 from django.conf import settings
 from django.utils import timezone as django_timezone
 
+from quickscale_core.dr_engine.primitives import _ensure_private_directory
+
 import quickscale_modules_backups._admin_upload as _admin_upload
 
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
@@ -409,7 +411,7 @@ def _persist_trusted_admin_upload(
     policy_snapshot = load_policy_snapshot()
     local_dir = get_local_backup_directory(policy_snapshot)
     try:
-        local_dir.mkdir(parents=True, exist_ok=True)
+        _ensure_private_directory(local_dir)
     except OSError as exc:
         raise BackupError(f"Failed to materialize the restore artifact: {exc}") from exc
     local_path = local_dir / trusted_artifact.filename

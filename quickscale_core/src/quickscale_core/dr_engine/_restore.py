@@ -134,6 +134,8 @@ def _execute_restore_for_resolved_source(
     allow_production: bool,
     shell_runner: ShellCommandRunner | None,
     recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    recorded_manifest_version: int | None = None,
+    recorded_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     allow_forward: bool = False,
 ) -> RestoreResult:
     """Run the guarded restore pipeline — Django-backed wrapper around core."""
@@ -165,7 +167,12 @@ def _execute_restore_for_resolved_source(
         is_debug=_conf.settings.DEBUG,
         pg_contract_checker=_metadata._require_postgresql_18_contract,
         installed_migration_hashes=_metadata._collect_module_migration_hashes(),
+        installed_project_migration_hashes=(
+            _metadata._collect_project_migration_hashes()
+        ),
         recorded_migration_hashes=recorded_migration_hashes,
+        recorded_manifest_version=recorded_manifest_version,
+        recorded_project_migration_hashes=recorded_project_migration_hashes,
         allow_forward=allow_forward,
     )
 
@@ -196,16 +203,19 @@ def restore_backup_source(
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
     recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    recorded_manifest_version: int | None = None,
+    recorded_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     allow_forward: bool = False,
 ) -> RestoreResult:
     """Run guarded restore validation or execution for one restore source.
 
-    *recorded_migration_hashes* carries the migration content identity for a
-    source that has no artifact row, such as a snapshot report restored by file
-    path; a bare file that records none is refused.  The Django-backed restore
-    path compares the identity with the installed modules.  Pass
-    *allow_forward* only when the caller completes the forward migration after
-    the restore (the DR snapshot route does).
+    *recorded_migration_hashes*, *recorded_manifest_version*, and
+    *recorded_project_migration_hashes* carry the manifest identity for a
+    source that has no artifact row, such as a snapshot report restored by
+    file path; a bare file that records none is refused.  The Django-backed
+    restore path compares the identity with the installed modules and
+    project-owned apps.  Pass *allow_forward* only when the caller completes
+    the forward migration after the restore (the DR snapshot route does).
     """
     with _resolve_restore_source(
         artifact=artifact,
@@ -222,6 +232,8 @@ def restore_backup_source(
             allow_production=allow_production,
             shell_runner=shell_runner,
             recorded_migration_hashes=recorded_migration_hashes,
+            recorded_manifest_version=recorded_manifest_version,
+            recorded_project_migration_hashes=recorded_project_migration_hashes,
             allow_forward=allow_forward,
         )
 

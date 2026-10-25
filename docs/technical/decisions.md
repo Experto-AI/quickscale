@@ -386,6 +386,21 @@ embeddable `backups` module keeps only thin Django-facing surfaces, reached thro
   backward-compatibility shim. Generated-project dependency resolution is
   documented in the backups module README.
 
+#### Backup Artifact Format {#backup-artifact-format-f5--m10}
+
+**Rule:** One backup artifact is version 1: a PostgreSQL 18 custom-format dump plus the four
+required private sidecars (`media-sync-manifest.json`, `env-var-manifest.json`,
+`release-metadata.json`, `promotion-verification.json`). `release-metadata.json` is the versioned
+manifest, and the dump artifact's capture metadata carries the same fields: both record
+`manifest_version`, module `migration_hashes`, and `project_migration_hashes` for project-owned
+apps. JSON artifacts are export-only.
+
+A format change MUST bump `manifest_version`. Restore MUST refuse a missing or unknown version, a
+manifest that records no project identity, any recorded module or project migration file that is
+absent or changed, and a newer installed migration unless the caller completes the forward
+migration after restore. Backup directories MUST be owner-only (0700); dump, sidecar and lock files
+MUST be owner-only (0600).
+
 ---
 
 ## Document Responsibilities

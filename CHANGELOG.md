@@ -71,6 +71,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     with `QUICKSCALE_BACKUP_DATABASE_URL` (falling back to `DATABASE_URL`) for the `pg_dump` and
     `pg_restore` child process, so FORCE-RLS tenant tables dump and restore instead of failing under
     the restricted runtime role.
+  - **Backup manifests are versioned.** Each backup records a manifest version and the migration
+    content identity of installed modules and project-owned apps; restore refuses an unknown
+    version or a changed migration file, and backup files are created owner-only with
+    collision-resistant names.
   - **Supply chain pinned and scanned.** Publishing actions are pinned, the generated container and
     the published core wheel are checked, and security suppressions expire on review horizons.
   - **Quality gate uses fixed thresholds.** `make quality` fails at CC ≥ 21, files ≥ 800 lines,

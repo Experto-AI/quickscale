@@ -24,6 +24,7 @@ from quickscale_core.dr_engine.primitives import (
     _REQUIRED_POSTGRESQL_MAJOR,
     _build_pg_restore_command,
     _compute_sha256,
+    _SUPPORTED_BACKUP_MANIFEST_VERSIONS,
     _database_engine_family,
     _expected_backup_format_for_engine,
     _run_shell_command,
@@ -206,19 +207,22 @@ def _get_restore_source_validation_issues(
 # ---------------------------------------------------------------------------
 
 
-def _collect_artifact_migration_hashes(
-    artifact: ArtifactLike,
+def _collect_metadata_migration_hashes(
+    metadata: Any,
+    key: str,
+    *,
+    allow_empty: bool = False,
 ) -> dict[str, dict[str, str]] | None:
-    """Return the artifact's recorded migration content identity, if any.
+    """Return one recorded migration content identity from capture metadata.
 
-    Absent, empty, or malformed capture metadata returns ``None`` so the
-    restore guard fails closed on a version label alone.
+    Absent or malformed metadata returns ``None`` so the restore guard fails
+    closed.  An empty mapping is refused unless *allow_empty* is set, which a
+    project identity uses to record a capture with no project-owned apps.
     """
-    metadata = getattr(artifact, "metadata_json", None)
-    recorded_hashes = (
-        metadata.get("migration_hashes") if isinstance(metadata, dict) else None
-    )
-    if not isinstance(recorded_hashes, dict) or not recorded_hashes:
+    recorded_hashes = metadata.get(key) if isinstance(metadata, dict) else None
+    if not isinstance(recorded_hashes, dict):
+        return None
+    if not recorded_hashes and not allow_empty:
         return None
     if any(not isinstance(files, dict) for files in recorded_hashes.values()):
         return None
@@ -226,6 +230,40 @@ def _collect_artifact_migration_hashes(
         str(name): {str(filename): str(digest) for filename, digest in files.items()}
         for name, files in recorded_hashes.items()
     }
+
+
+def _collect_artifact_migration_hashes(
+    artifact: ArtifactLike,
+) -> dict[str, dict[str, str]] | None:
+    """Return the artifact's recorded module migration content identity, if any.
+
+    Absent, empty, or malformed capture metadata returns ``None`` so the
+    restore guard fails closed on a version label alone.
+    """
+    return _collect_metadata_migration_hashes(
+        getattr(artifact, "metadata_json", None),
+        "migration_hashes",
+    )
+
+
+def _collect_artifact_project_migration_hashes(
+    artifact: ArtifactLike,
+) -> dict[str, dict[str, str]] | None:
+    """Return the artifact's recorded project-app migration identity, if any."""
+    return _collect_metadata_migration_hashes(
+        getattr(artifact, "metadata_json", None),
+        "project_migration_hashes",
+        allow_empty=True,
+    )
+
+
+def _collect_artifact_manifest_version(artifact: ArtifactLike) -> int | None:
+    """Return the artifact's recorded format version, if it is well formed."""
+    metadata = getattr(artifact, "metadata_json", None)
+    version = metadata.get("manifest_version") if isinstance(metadata, dict) else None
+    if isinstance(version, bool) or not isinstance(version, int):
+        return None
+    return version
 
 
 def _get_migration_content_issues(
@@ -274,6 +312,77 @@ def _get_migration_content_issues(
     return []
 
 
+def _get_project_migration_content_issues(
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]],
+    installed_migration_hashes: Mapping[str, Mapping[str, str]],
+    *,
+    allow_forward: bool = False,
+) -> list[str]:
+    """Return refusal issues for a recorded project-app migration identity.
+
+    An empty recorded mapping is a valid capture with no project-owned apps;
+    an app added after capture is a forward difference.  Every recorded
+    migration file must still be installed byte-identical.
+    """
+    differences: list[str] = []
+    forward_differences: list[str] = []
+    app_labels = set(recorded_migration_hashes) | set(installed_migration_hashes)
+    for app_label in sorted(app_labels):
+        recorded_files = recorded_migration_hashes.get(app_label, {})
+        installed_files = installed_migration_hashes.get(app_label, {})
+        for filename in sorted(set(recorded_files) | set(installed_files)):
+            recorded_digest = recorded_files.get(filename)
+            installed_digest = installed_files.get(filename)
+            if recorded_digest is None:
+                forward_differences.append(
+                    f"{app_label} installed migration '{filename}' is newer"
+                )
+            elif installed_digest is None:
+                differences.append(
+                    f"{app_label} recorded migration '{filename}' is not installed"
+                )
+            elif installed_digest != recorded_digest:
+                differences.append(f"{app_label} migration '{filename}' changed")
+    if differences:
+        return [
+            "backup project migration content cannot advance: " + "; ".join(differences)
+        ]
+    if forward_differences and not allow_forward:
+        return [
+            "backup project migration content is behind the installed project apps"
+            " and this restore does not complete the forward migration: "
+            + "; ".join(forward_differences)
+        ]
+    return []
+
+
+def _get_manifest_identity_issues(
+    recorded_manifest_version: int | None,
+    recorded_project_migration_hashes: Mapping[str, Mapping[str, str]] | None,
+    installed_project_migration_hashes: Mapping[str, Mapping[str, str]],
+    *,
+    allow_forward: bool = False,
+) -> list[str]:
+    """Return refusal issues for the artifact manifest identity.
+
+    Unknown or missing format versions fail closed, and so does a manifest
+    that records no project identity at all.
+    """
+    if recorded_manifest_version is None:
+        return ["backup manifest records no format version"]
+    if recorded_manifest_version not in _SUPPORTED_BACKUP_MANIFEST_VERSIONS:
+        return [
+            f"backup manifest version '{recorded_manifest_version}' is not supported"
+        ]
+    if recorded_project_migration_hashes is None:
+        return ["backup manifest records no project migration content identity"]
+    return _get_project_migration_content_issues(
+        recorded_project_migration_hashes,
+        installed_project_migration_hashes,
+        allow_forward=allow_forward,
+    )
+
+
 def _get_restore_source_migration_issues(
     restore_source: ResolvedRestoreSource,
     installed_migration_hashes: Mapping[str, Mapping[str, str]],
@@ -303,13 +412,16 @@ def _get_restore_compatibility_issues(
     current_engine: str,
     *,
     installed_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    installed_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     allow_forward: bool = False,
 ) -> list[str]:
     """Return restore guardrail issues for current database engine compatibility.
 
     With *installed_migration_hashes* the recorded migration content identity
     must be able to advance under it; a changed, missing, or unrecorded entry
-    is refused.  The Django-backed restore path always supplies it.
+    is refused.  *installed_project_migration_hashes* enables the manifest
+    version and project-app identity gate the same way.  The Django-backed
+    restore path always supplies both.
     """
     issues: list[str] = []
     current_engine_family = _database_engine_family(current_engine)
@@ -361,6 +473,15 @@ def _get_restore_compatibility_issues(
                 allow_forward=allow_forward,
             )
         )
+    if installed_project_migration_hashes is not None:
+        issues.extend(
+            _get_manifest_identity_issues(
+                _collect_artifact_manifest_version(artifact),
+                _collect_artifact_project_migration_hashes(artifact),
+                installed_project_migration_hashes,
+                allow_forward=allow_forward,
+            )
+        )
 
     return issues
 
@@ -370,7 +491,10 @@ def _get_restore_source_compatibility_issues(
     current_engine: str,
     *,
     installed_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    installed_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    recorded_manifest_version: int | None = None,
+    recorded_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     allow_forward: bool = False,
 ) -> list[str]:
     """Return compatibility issues for artifact and operator-supplied sources.
@@ -378,6 +502,10 @@ def _get_restore_source_compatibility_issues(
     With *installed_migration_hashes* the source's recorded migration content
     identity must be able to advance under it; *recorded_migration_hashes*
     carries that identity for a source that has no artifact row.
+    *installed_project_migration_hashes* enables the manifest version and
+    project-app identity gate, using the artifact's recorded manifest or the
+    caller-supplied *recorded_manifest_version* and
+    *recorded_project_migration_hashes* for a file source.
     """
     issues: list[str] = []
     if restore_source.artifact is not None:
@@ -395,6 +523,23 @@ def _get_restore_source_compatibility_issues(
                 restore_source,
                 installed_migration_hashes,
                 recorded_migration_hashes=recorded_migration_hashes,
+                allow_forward=allow_forward,
+            )
+        )
+    if installed_project_migration_hashes is not None:
+        artifact = restore_source.artifact
+        project_hashes: Mapping[str, Mapping[str, str]] | None
+        if artifact is not None:
+            manifest_version = _collect_artifact_manifest_version(artifact)
+            project_hashes = _collect_artifact_project_migration_hashes(artifact)
+        else:
+            manifest_version = recorded_manifest_version
+            project_hashes = recorded_project_migration_hashes
+        issues.extend(
+            _get_manifest_identity_issues(
+                manifest_version,
+                project_hashes,
+                installed_project_migration_hashes,
                 allow_forward=allow_forward,
             )
         )
@@ -640,7 +785,10 @@ def _execute_restore_for_resolved_source(
     is_debug: bool = False,
     pg_contract_checker: Callable[..., Any] | None = None,
     installed_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    installed_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    recorded_manifest_version: int | None = None,
+    recorded_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     allow_forward: bool = False,
 ) -> RestoreResult:
     """Run the guarded restore pipeline for one resolved restore source.
@@ -684,10 +832,19 @@ def _execute_restore_for_resolved_source(
         provided, an artifact whose recorded migration hashes cannot advance
         under it — or that records none — is refused before any destructive
         step.  The Django-backed restore path always supplies it.
+    installed_project_migration_hashes:
+        Migration content identity of the running code, per project-owned app.
+        When provided, the artifact manifest's format version and recorded
+        project identity are enforced the same way as the module identity.
     recorded_migration_hashes:
         Migration content identity recorded for a source that has no artifact
         row, such as a snapshot report restored by file path; a bare file that
         records none is refused.  Ignored for artifact-backed sources.
+    recorded_manifest_version:
+        Manifest format version recorded for a source that has no artifact row.
+    recorded_project_migration_hashes:
+        Project-app migration identity recorded for a source that has no
+        artifact row.
     allow_forward:
         When *True* the caller completes the forward migration after the
         restore (the DR snapshot route); *False* requires exact content.
@@ -722,7 +879,10 @@ def _execute_restore_for_resolved_source(
             restore_source,
             resolved_engine,
             installed_migration_hashes=installed_migration_hashes,
+            installed_project_migration_hashes=installed_project_migration_hashes,
             recorded_migration_hashes=recorded_migration_hashes,
+            recorded_manifest_version=recorded_manifest_version,
+            recorded_project_migration_hashes=recorded_project_migration_hashes,
             allow_forward=allow_forward,
         )
     elif installed_migration_hashes is not None:
@@ -732,6 +892,24 @@ def _execute_restore_for_resolved_source(
             recorded_migration_hashes=recorded_migration_hashes,
             allow_forward=allow_forward,
         )
+        if installed_project_migration_hashes is not None:
+            artifact = restore_source.artifact
+            compatibility_issues.extend(
+                _get_manifest_identity_issues(
+                    (
+                        _collect_artifact_manifest_version(artifact)
+                        if artifact is not None
+                        else recorded_manifest_version
+                    ),
+                    (
+                        _collect_artifact_project_migration_hashes(artifact)
+                        if artifact is not None
+                        else recorded_project_migration_hashes
+                    ),
+                    installed_project_migration_hashes,
+                    allow_forward=allow_forward,
+                )
+            )
     if compatibility_issues:
         compatibility_prefix = (
             "Restore blocked because artifact compatibility validation failed: "

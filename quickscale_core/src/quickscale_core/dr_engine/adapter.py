@@ -178,6 +178,44 @@ def _recorded_migration_hashes_from_report(
     return collected
 
 
+def _recorded_manifest_identity_from_report(
+    snapshot_report: dict[str, Any],
+) -> tuple[int | None, dict[str, dict[str, str]] | None]:
+    """Return the dump's manifest version and project migration identity.
+
+    A report that records no usable identity returns ``(None, None)`` so the
+    restore guard fails closed on an unversioned manifest.
+    """
+    full_backup = snapshot_report.get("full_backup")
+    if not isinstance(full_backup, dict):
+        return None, None
+    provenance = full_backup.get("provenance")
+    if not isinstance(provenance, dict):
+        return None, None
+    authoritative_dump = provenance.get("authoritative_dump")
+    if not isinstance(authoritative_dump, dict):
+        return None, None
+
+    recorded_version = authoritative_dump.get("manifest_version")
+    manifest_version = (
+        None
+        if isinstance(recorded_version, bool) or not isinstance(recorded_version, int)
+        else recorded_version
+    )
+
+    recorded_hashes = authoritative_dump.get("project_migration_hashes")
+    if not isinstance(recorded_hashes, dict):
+        return manifest_version, None
+    collected: dict[str, dict[str, str]] = {}
+    for app_label, app_hashes in recorded_hashes.items():
+        if not isinstance(app_hashes, dict):
+            return manifest_version, None
+        collected[str(app_label)] = {
+            str(filename): str(digest) for filename, digest in app_hashes.items()
+        }
+    return manifest_version, collected
+
+
 @_register
 def build_database_plan(
     snapshot_report: dict[str, Any],
@@ -198,6 +236,10 @@ def build_database_plan(
             "is missing its authoritative restore file metadata."
         )
 
+    (
+        recorded_manifest_version,
+        recorded_project_migration_hashes,
+    ) = _recorded_manifest_identity_from_report(snapshot_report)
     result = restore_backup_source(
         file_path=restore_file,
         confirmation=confirmation_value,
@@ -205,6 +247,8 @@ def build_database_plan(
         recorded_migration_hashes=_recorded_migration_hashes_from_report(
             snapshot_report
         ),
+        recorded_manifest_version=recorded_manifest_version,
+        recorded_project_migration_hashes=recorded_project_migration_hashes,
         allow_forward=True,
     )
 
@@ -246,6 +290,10 @@ def execute_database_restore(
             "is missing its authoritative restore file metadata."
         )
 
+    (
+        recorded_manifest_version,
+        recorded_project_migration_hashes,
+    ) = _recorded_manifest_identity_from_report(snapshot_report)
     restore_result = restore_backup_source(
         file_path=restore_file,
         confirmation=confirmation_value,
@@ -254,6 +302,8 @@ def execute_database_restore(
         recorded_migration_hashes=_recorded_migration_hashes_from_report(
             snapshot_report
         ),
+        recorded_manifest_version=recorded_manifest_version,
+        recorded_project_migration_hashes=recorded_project_migration_hashes,
         allow_forward=True,
     )
 

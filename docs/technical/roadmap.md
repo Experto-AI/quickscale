@@ -86,7 +86,7 @@ project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA322 (b) | yes | no: SA191d (production) for SA277 | yes: SA322 (a) |
+| 3 | SA322 (c) | yes | no: SA191d (production) for SA277 | yes: SA322 (a), SA322 (b) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -315,7 +315,7 @@ update; the cutover does not wait for them.
     visible; prune always keeps the newest valid snapshot; restore runs in one transaction or
     behind a pre-restore safety dump; the create lock stays held for the run, proven by a
     long-backup test (Tier 2-full).
-  - [ ] (b) After (a), decisions record the artifact format; the manifest carries a version and
+  - [x] (b) After (a), decisions record the artifact format; the manifest carries a version and
     project-app migration hashes; restore refuses an unknown version or a hash mismatch; the S4
     permission, file-mode and filename fixes ride along (Tier 2-full).
   - [ ] (c) After (b), capture media or an immutable media manifest per the recorded format, and

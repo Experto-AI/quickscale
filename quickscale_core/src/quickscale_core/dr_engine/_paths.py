@@ -8,6 +8,7 @@ subprocess execution.
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +35,12 @@ def build_backup_filename(
     now: datetime | None = None,
     suffix: str | None = None,
 ) -> str:
-    """Build a deterministic operator-friendly backup filename."""
+    """Build a collision-resistant operator-friendly backup filename.
+
+    The timestamp keeps the name readable; the short random token keeps two
+    captures in the same second on different replicas or lock directories from
+    colliding on the artifact table's unique filename.
+    """
     from quickscale_core.dr_engine._metadata import _get_project_slug
 
     timestamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -42,9 +48,11 @@ def build_backup_filename(
     environment = os.getenv("QUICKSCALE_ENVIRONMENT", "local").strip() or "local"
     project_slug = _get_project_slug()
     resolved_suffix = suffix or "json"
+    unique_token = secrets.token_hex(4)
     return (
         f"{policy.naming_prefix.strip()}-"
-        f"{project_slug}-{environment}-{timestamp_text}.{resolved_suffix}"
+        f"{project_slug}-{environment}-{timestamp_text}-"
+        f"{unique_token}.{resolved_suffix}"
     )
 
 

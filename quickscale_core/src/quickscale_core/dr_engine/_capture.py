@@ -266,6 +266,7 @@ def _resume_new_artifact(
 
     if candidate_dump_files:
         local_path = candidate_dump_files[0]
+        _primitives._ensure_private_file(local_path)
         backup_format = _recovery._detect_restore_file_format(local_path)
         if backup_format == "pg_dump_custom":
             (
@@ -418,17 +419,18 @@ def _resume_backup_capture(
     resolved_policy = _validate_resume_preconditions(snapshot, policy)
 
     snapshot_lock_directory = _paths._build_snapshot_lock_directory(snapshot)
-    snapshot_lock_directory.mkdir(parents=True, exist_ok=True)
+    _primitives._ensure_private_directory(snapshot_lock_directory)
 
     with _lock._backup_creation_lock(snapshot_lock_directory, now=now):
         _persistence.refresh_snapshot(snapshot)
         previous_failure_note = snapshot.failure_note.strip()
         snapshot_root = Path(snapshot.local_root_path)
-        snapshot_root.mkdir(parents=True, exist_ok=True)
+        _primitives._ensure_private_directory(snapshot_root.parent)
+        _primitives._ensure_private_directory(snapshot_root)
         database_directory = (
             snapshot_root / _primitives._SNAPSHOT_DATABASE_DIRECTORY_NAME
         )
-        database_directory.mkdir(parents=True, exist_ok=True)
+        _primitives._ensure_private_directory(database_directory)
 
         backup_connection = _connection._resolve_backup_connection(
             django.db.connections["default"].settings_dict
@@ -514,7 +516,7 @@ def create_backup(
         raise _primitives.BackupConfigurationError("; ".join(issues))
 
     local_directory = _paths.get_local_backup_directory(resolved_policy)
-    local_directory.mkdir(parents=True, exist_ok=True)
+    _primitives._ensure_private_directory(local_directory)
 
     with _lock._backup_creation_lock(local_directory, now=backup_started_at):
         backup_connection = _connection._resolve_backup_connection(
@@ -529,11 +531,12 @@ def create_backup(
         previous_failure_note = ""
         snapshot_id = _primitives._mint_snapshot_id()
         snapshot_root = _paths._build_snapshot_local_root(resolved_policy, snapshot_id)
-        snapshot_root.mkdir(parents=True, exist_ok=True)
+        _primitives._ensure_private_directory(snapshot_root.parent)
+        _primitives._ensure_private_directory(snapshot_root)
         database_directory = (
             snapshot_root / _primitives._SNAPSHOT_DATABASE_DIRECTORY_NAME
         )
-        database_directory.mkdir(parents=True, exist_ok=True)
+        _primitives._ensure_private_directory(database_directory)
         snapshot = _persistence.create_snapshot(
             snapshot_id=snapshot_id,
             status="pending",

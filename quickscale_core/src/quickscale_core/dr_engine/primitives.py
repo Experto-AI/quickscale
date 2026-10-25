@@ -40,6 +40,12 @@ _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES = (
     _RELEASE_METADATA_FILENAME,
     _PROMOTION_VERIFICATION_FILENAME,
 )
+_BACKUP_MANIFEST_VERSION: int = 1
+_SUPPORTED_BACKUP_MANIFEST_VERSIONS: frozenset[int] = frozenset(
+    {_BACKUP_MANIFEST_VERSION}
+)
+_PRIVATE_DIRECTORY_MODE: int = 0o700
+_PRIVATE_FILE_MODE: int = 0o600
 
 # ---------------------------------------------------------------------------
 # Error classes
@@ -423,13 +429,30 @@ def _build_snapshot_child_descriptor(
     return descriptor
 
 
+def _ensure_private_directory(directory: Path) -> Path:
+    """Create one directory readable and writable only by its owner."""
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chmod(directory, _PRIVATE_DIRECTORY_MODE)
+    return directory
+
+
+def _ensure_private_file(path: Path) -> Path:
+    """Restrict one existing file to owner read and write."""
+    os.chmod(path, _PRIVATE_FILE_MODE)
+    return path
+
+
 def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
-    """Write a JSON payload with deterministic formatting."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    """Write a JSON payload with deterministic formatting and private modes."""
+    _ensure_private_directory(path.parent)
+    descriptor = os.open(
+        path,
+        os.O_CREAT | os.O_WRONLY | os.O_TRUNC,
+        _PRIVATE_FILE_MODE,
     )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    _ensure_private_file(path)
 
 
 # ---------------------------------------------------------------------------

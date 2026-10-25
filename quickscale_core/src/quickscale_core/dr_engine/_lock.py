@@ -19,7 +19,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from quickscale_core.dr_engine.primitives import BackupError
+from quickscale_core.dr_engine.primitives import (
+    BackupError,
+    _ensure_private_directory,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +79,7 @@ def _acquire_backup_lock(
     now: datetime | None = None,
 ) -> Path:
     """Create an exclusive lock file to prevent overlapping backup runs."""
-    local_directory.mkdir(parents=True, exist_ok=True)
+    _ensure_private_directory(local_directory)
     lock_path = local_directory / _LOCK_FILENAME
     lock_time = now or datetime.now(timezone.utc)
 

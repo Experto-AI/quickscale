@@ -203,6 +203,33 @@ class TestVerificationAndPins:
             update_fields=["validated_at", "validation_notes", "status", "updated_at"],
         )
 
+    @pytest.mark.parametrize(
+        ("status", "message"),
+        [
+            ("restoring", "restore is in progress"),
+            ("deleted", "has been deleted"),
+        ],
+    )
+    def test_validate_backup_artifact_refuses_unfinished_or_deleted_status(
+        self, tmp_path: Path, status: str, message: str
+    ) -> None:
+        path = tmp_path / "backup.json"
+        path.write_text("{}")
+        artifact = _artifact(
+            local_path=str(path),
+            backup_format="json",
+            checksum_sha256=None,
+            size_bytes=None,
+            status=status,
+        )
+        with (
+            patch("django.utils.timezone.now", return_value=_NOW),
+            patch("quickscale_core.dr_engine.persistence.save_artifact") as save,
+        ):
+            with pytest.raises(BackupError, match=message):
+                _report.validate_backup_artifact(artifact)
+        save.assert_not_called()
+
     def test_validate_backup_artifact_marks_integrity_failure(
         self, tmp_path: Path
     ) -> None:

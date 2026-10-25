@@ -95,6 +95,15 @@ class TestBuildBackupFilename:
         assert "20260615" in name
         assert name.endswith(".json")
 
+    def test_same_second_names_do_not_collide(self) -> None:
+        """Two captures in the same second carry distinct random tokens."""
+        policy = _make_policy()
+        fixed_now = datetime(2026, 6, 15, 14, 30, 0, tzinfo=timezone.utc)
+        with patch(self._SLUG_PATCH, return_value="myproj"):
+            first = build_backup_filename(policy, now=fixed_now)
+            second = build_backup_filename(policy, now=fixed_now)
+        assert first != second
+
     def test_custom_suffix(self) -> None:
         """Custom suffix overrides default 'json'."""
         policy = _make_policy()

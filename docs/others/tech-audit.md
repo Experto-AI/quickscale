@@ -25,8 +25,11 @@ audit evidence and now carry `status: fixed`:
 **Fix record (2026-10-25).** SA322 (a) closes four findings recorded below; their entries keep the
 audit evidence and now carry `status: fixed`:
 `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
-`backups-restore-not-atomic`, and `backups-creation-lock-expires-live`. The remaining S4 backup
-findings ride with SA322 (b).
+`backups-restore-not-atomic`, and `backups-creation-lock-expires-live`.
+
+**Fix record (2026-10-25).** SA322 (b) closes the remaining S4 backup findings; their entries keep
+the audit evidence and now carry `status: fixed`: `backups-validate-action-view-permission`,
+`backups-dump-files-world-readable`, and `backups-filename-second-resolution-collision`.
 
 ## Orientation summary
 
@@ -313,18 +316,18 @@ items:
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/_constants.py,
                quickscale_modules/orgs/src/quickscale_modules_orgs/urls.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-validate-action-view-permission, status: open, severity: S4, category: III,
+  - {id: backups-validate-action-view-permission, status: fixed, severity: S4, category: III,
      title: "The Validate selected backups admin action lacks change permission", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/backups/src/quickscale_modules_backups/_admin_artifact.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-dump-files-world-readable, status: open, severity: S4, category: IX,
+  - {id: backups-dump-files-world-readable, status: fixed, severity: S4, category: IX,
      title: "Dump and sidecar files inherit the process umask", effort: Trivial, confidence: High,
      reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_paths.py,
                quickscale_core/src/quickscale_core/dr_engine/_capture.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-filename-second-resolution-collision, status: open, severity: S4, category: II,
+  - {id: backups-filename-second-resolution-collision, status: fixed, severity: S4, category: II,
      title: "Unique backup filenames have one-second resolution", effort: Trivial, confidence: High,
      reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_paths.py,
@@ -1088,9 +1091,9 @@ reviewers.
 - **Generated production topology is prose, not an artifact** (arch F4): media is container-local
   by default and schema changes at boot. The README's production claim is corrected; the structural
   form is arch `generated-deploy-topology-unmodeled`.
-- **Backups define a database dump, not a coherent recovery point** (arch F6): media is read live,
-  project migrations are excluded, and restore has no lease. The tickets are the backup
-  findings; the structural form is arch `backup-restore-incoherent`.
+- **Backups define a database dump, not a coherent recovery point** (arch F6): media is read live
+  and restore has no lease; project migration identity is enforced since SA322 (b). The tickets are
+  the backup findings; the structural form is arch `backup-restore-incoherent`.
 - **No provider-object reconciliation seam for billing**: the signed webhook payload is the only
   source of truth, so ordering and missed-event recovery are ad hoc. The ticket is
   `billing-webhook-status-applied-out-of-order`; the structural fix is a provider adapter that
@@ -1275,3 +1278,7 @@ release.
   restore recreates and relinks its artifact/snapshot rows and fails visibly on a metadata failure,
   prune retains the newest complete snapshot and newest live artifact, `pg_restore` runs in one transaction, and the
   create lock is held for the whole run).
+- 2026-10-25 — `backups-validate-action-view-permission`, `backups-dump-files-world-readable`,
+  `backups-filename-second-resolution-collision`: **resolved** (SA322 (b): the validate action
+  requires change permission and refuses a restoring or deleted artifact, backup directories and
+  files are created owner-only, and filenames carry a random token).

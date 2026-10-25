@@ -149,6 +149,10 @@ class TestBuildDatabasePlan:
                                 "0001_initial.py": "hash-1",
                             },
                         },
+                        "manifest_version": 1,
+                        "project_migration_hashes": {
+                            "properties": {"0001_initial.py": "project-hash"},
+                        },
                     },
                     "release": {
                         "module_versions": {"quickscale_modules_backups": "0.89.0"}
@@ -213,6 +217,10 @@ class TestBuildDatabasePlan:
             recorded_migration_hashes={
                 "quickscale_modules_backups": {"0001_initial.py": "hash-1"},
             },
+            recorded_manifest_version=1,
+            recorded_project_migration_hashes={
+                "properties": {"0001_initial.py": "project-hash"},
+            },
             allow_forward=True,
         )
 
@@ -232,6 +240,37 @@ class TestBuildDatabasePlan:
                 "recorded_migration_hashes"
             ]
             == {}
+        )
+        assert (
+            mock_orch.restore_backup_source.call_args.kwargs[
+                "recorded_manifest_version"
+            ]
+            is None
+        )
+        assert (
+            mock_orch.restore_backup_source.call_args.kwargs[
+                "recorded_project_migration_hashes"
+            ]
+            is None
+        )
+
+    def test_report_without_project_identity_passes_none(
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
+    ) -> None:
+        mock_orch, _, _ = _mock_orch_and_backups
+        mock_orch.restore_backup_source.return_value = MagicMock(message="Plan ready")
+
+        report = self._valid_report()
+        provenance = report["full_backup"]["provenance"]
+        provenance["authoritative_dump"].pop("project_migration_hashes")
+
+        build_database_plan(report)
+
+        assert (
+            mock_orch.restore_backup_source.call_args.kwargs[
+                "recorded_project_migration_hashes"
+            ]
+            is None
         )
 
     def test_report_prefers_dump_hashes_over_recaptured_sidecar(

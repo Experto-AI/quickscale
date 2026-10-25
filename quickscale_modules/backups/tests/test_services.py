@@ -6,7 +6,9 @@ import hashlib
 import inspect
 import json
 import os
+import re
 import shutil
+import stat
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
@@ -114,6 +116,15 @@ def _installed_migration_hashes() -> dict[str, dict[str, str]]:
     return _collect_module_migration_hashes()
 
 
+def _installed_project_migration_hashes() -> dict[str, dict[str, str]]:
+    """Return the running project-owned apps' migration content identity."""
+    from quickscale_core.dr_engine._metadata import (
+        _collect_project_migration_hashes,
+    )
+
+    return _collect_project_migration_hashes()
+
+
 def _private_remote_policy_snapshot(
     *,
     local_directory: str = ".quickscale/backups",
@@ -187,6 +198,8 @@ def _attach_complete_snapshot_contract(
                 "app_version": "test-app",
                 "django_version": "5.1",
                 "module_versions": {},
+                "migration_hashes": {},
+                "project_migration_hashes": {},
                 "git_sha": "abc123",
             },
         ),
@@ -410,7 +423,7 @@ class TestPolicyValidation:
         )
 
         assert filename.startswith("db-")
-        assert filename.endswith("20260326T120000Z.json")
+        assert re.search(r"20260326T120000Z-[0-9a-f]{8}\.json$", filename)
 
     @override_settings(
         QUICKSCALE_BACKUPS_RETENTION_DAYS=30,
@@ -496,6 +509,8 @@ class TestBackupLifecycle:
         assert artifact.checksum_sha256
         assert artifact.size_bytes > 0
         assert artifact.metadata_json["database_engine"] == "django.db.backends.sqlite3"
+        assert artifact.metadata_json["manifest_version"] == 1
+        assert artifact.metadata_json["project_migration_hashes"] == {}
         assert artifact.metadata_json["database_server_version"]
         assert artifact.database_server_major is None
         assert artifact.dump_client_major is None
@@ -536,8 +551,25 @@ class TestBackupLifecycle:
         )
         assert media_manifest["status"] == "missing_media_root"
         assert release_metadata["app_version"] == "test-app"
+        assert release_metadata["manifest_version"] == 1
+        assert release_metadata["migration_hashes"]
+        assert release_metadata["project_migration_hashes"] == {}
         assert release_metadata["project_slug"] == local_backup_settings.parent.name
         assert env_manifest["count"] == len(env_manifest["names"])
+        assert stat.S_IMODE(Path(artifact.local_path).stat().st_mode) == 0o600
+        assert stat.S_IMODE(local_backup_settings.stat().st_mode) == 0o700
+        assert (
+            stat.S_IMODE((local_backup_settings / "snapshots").stat().st_mode) == 0o700
+        )
+        assert stat.S_IMODE(snapshot_root.stat().st_mode) == 0o700
+        assert stat.S_IMODE((snapshot_root / "database").stat().st_mode) == 0o700
+        for sidecar_name in (
+            "env-var-manifest.json",
+            "media-sync-manifest.json",
+            "promotion-verification.json",
+            "release-metadata.json",
+        ):
+            assert stat.S_IMODE((snapshot_root / sidecar_name).stat().st_mode) == 0o600
 
     @override_settings(
         QUICKSCALE_STORAGE_BACKEND="s3",
@@ -3133,6 +3165,10 @@ class TestBackupLifecycle:
                 confirmation=invalid_file.name,
                 dry_run=True,
                 recorded_migration_hashes=_installed_migration_hashes(),
+                recorded_manifest_version=1,
+                recorded_project_migration_hashes=(
+                    _installed_project_migration_hashes()
+                ),
             )
 
     def test_restore_file_mode_refuses_bare_file_without_recorded_identity(
@@ -3176,6 +3212,8 @@ class TestBackupLifecycle:
             dry_run=False,
             shell_runner=cast(ShellCommandRunner, fake_runner),
             recorded_migration_hashes=_installed_migration_hashes(),
+            recorded_manifest_version=1,
+            recorded_project_migration_hashes=_installed_project_migration_hashes(),
         )
 
         assert result.executed is True
