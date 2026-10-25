@@ -139,7 +139,7 @@ class TestMetadataOrchestration:
             result = _metadata._build_release_metadata(captured_at=_NOW)
 
         assert result == {
-            "manifest_version": 1,
+            "manifest_version": 2,
             "captured_at": "2026-06-15T14:30:00+00:00",
             "project_slug": "demo",
             "source_environment": "staging",
@@ -197,7 +197,7 @@ class TestMetadataOrchestration:
         assert result["database_server_major"] == 3
         assert result["pg_dump_version"] == "unused"
         assert result["dump_client_major"] == 18
-        assert result["manifest_version"] == 1
+        assert result["manifest_version"] == 2
         assert result["migration_hashes"] == {
             "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
         }
@@ -1365,3 +1365,91 @@ class TestPruneAndDelete:
         delete_storage.assert_called_once()
         save_snapshot.assert_called_once()
         save_artifact.assert_called_once()
+
+
+class TestMediaCaptureContract:
+    def _media_payload_path(self, root: Path) -> Path:
+        return root / "media-sync-manifest.json"
+
+    def test_version_two_manifest_requires_a_captured_media_set(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot = TestReportsAndProvenance()._complete_snapshot(tmp_path)
+        self._media_payload_path(tmp_path).write_text(
+            json.dumps(
+                {
+                    "manifest_version": 2,
+                    "status": "ready",
+                    "project_slug": "demo",
+                    "source_environment": "local",
+                    "captured_at": "t",
+                    "inventory": [],
+                }
+            )
+        )
+
+        contract = _report._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+
+        assert contract["completeness"]["status"] == "incomplete"
+        assert any(
+            "media manifest records no complete captured media set" in issue
+            for issue in contract["completeness"]["issues"]
+        )
+
+    def test_captured_media_with_a_missing_file_is_incomplete(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot = TestReportsAndProvenance()._complete_snapshot(tmp_path)
+        self._media_payload_path(tmp_path).write_text(
+            json.dumps(
+                {
+                    "manifest_version": 2,
+                    "status": "ready",
+                    "project_slug": "demo",
+                    "source_environment": "local",
+                    "captured_at": "t",
+                    "inventory": [{"relative_path": "missing.png"}],
+                    "capture": {
+                        "status": "captured",
+                        "relative_root": "media",
+                        "file_count": 1,
+                        "total_bytes": 1,
+                    },
+                }
+            )
+        )
+
+        contract = _report._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+
+        assert contract["completeness"]["status"] == "incomplete"
+        assert any(
+            "captured media set: captured media file is missing: missing.png" in issue
+            for issue in contract["completeness"]["issues"]
+        )
+
+    def test_version_two_manifest_accepts_an_empty_capture(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot = TestReportsAndProvenance()._complete_snapshot(tmp_path)
+        self._media_payload_path(tmp_path).write_text(
+            json.dumps(
+                {
+                    "manifest_version": 2,
+                    "status": "ready",
+                    "project_slug": "demo",
+                    "source_environment": "local",
+                    "captured_at": "t",
+                    "inventory": [],
+                    "capture": {
+                        "status": "empty",
+                        "relative_root": "media",
+                        "file_count": 0,
+                        "total_bytes": 0,
+                    },
+                }
+            )
+        )
+
+        contract = _report._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+
+        assert contract["completeness"]["status"] == "complete"

@@ -21,6 +21,8 @@ from quickscale_core.dr_engine.primitives import (
     _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES,
     _SNAPSHOTS_DIRECTORY_NAME,
     _SNAPSHOT_DATABASE_DIRECTORY_NAME,
+    _SNAPSHOT_MEDIA_DIRECTORY_NAME,
+    _SUPPORTED_BACKUP_MANIFEST_VERSIONS,
     _build_pg_dump_command,
     _build_pg_restore_command,
     _build_snapshot_child_descriptor,
@@ -50,10 +52,14 @@ class TestConstants:
         assert _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC == b"PGDMP"
 
     def test_backup_manifest_version(self) -> None:
-        assert _BACKUP_MANIFEST_VERSION == 1
+        assert _BACKUP_MANIFEST_VERSION == 2
+        assert _SUPPORTED_BACKUP_MANIFEST_VERSIONS == frozenset({1, 2})
 
     def test_snapshots_directory_name(self) -> None:
         assert _SNAPSHOTS_DIRECTORY_NAME == "snapshots"
+
+    def test_snapshot_media_directory_name(self) -> None:
+        assert _SNAPSHOT_MEDIA_DIRECTORY_NAME == "media"
 
     def test_snapshot_database_directory_name(self) -> None:
         assert _SNAPSHOT_DATABASE_DIRECTORY_NAME == "database"

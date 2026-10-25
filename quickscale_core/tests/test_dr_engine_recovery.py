@@ -1855,7 +1855,7 @@ class TestExecuteRestoreForResolvedSource:
         dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
 
         for manifest_version, message in (
-            (2, "manifest version '2' is not supported"),
+            (3, "manifest version '3' is not supported"),
             (None, "records no format version"),
         ):
             metadata: dict[str, Any] = {"project_migration_hashes": {}}

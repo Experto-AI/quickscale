@@ -11,6 +11,9 @@ Private operational database backups for QuickScale projects.
 - Optional private S3-compatible offload without using public media URLs or
   `public_base_url`.
 - Retention pruning and guarded restore entrypoints for PostgreSQL dump artifacts.
+- Captured media sets stored inside the snapshot, so a restore covers the database, the media
+  bytes and the project schema from one recovery point.
+- A restore advisory lock that serializes destructive restores.
 - JSON export artifacts for non-PostgreSQL development/test fixture export or operator
   inspection.
 
@@ -22,16 +25,27 @@ generated PostgreSQL projects.
 
 ## Artifact format
 
-A backup artifact is version 1: one PostgreSQL 18 custom-format dump plus four sidecars under the
-snapshot root (`media-sync-manifest.json`, `env-var-manifest.json`, `release-metadata.json`,
-`promotion-verification.json`). `release-metadata.json` is the manifest: it carries the format
-version and the migration content identity of installed QuickScale modules and project-owned apps,
-and the artifact row's capture metadata carries the same fields.
+A backup artifact is version 2: one PostgreSQL 18 custom-format dump, the captured media set under
+`media/`, and four sidecars under the snapshot root (`media-sync-manifest.json`,
+`env-var-manifest.json`, `release-metadata.json`, `promotion-verification.json`).
+`release-metadata.json` is the manifest: it carries the format version and the migration content
+identity of installed QuickScale modules and project-owned apps, and the artifact row's capture
+metadata carries the same fields. `media-sync-manifest.json` records the captured media inventory,
+each file's snapshot-relative path and SHA-256 checksum, and `capture.status` (`captured` or
+`empty`). An empty capture is explicit: the project has no media root to freeze.
+
+Media capture copies every inventoried object into the snapshot before the snapshot is marked
+ready, verifies the recorded checksum, and fails the capture when an object is unreadable or
+changed. Private-remote target mode uploads the captured media next to the dump and sidecars.
 
 A missing or unknown manifest version, a manifest without project identity, or any recorded module
 or project migration file that changed or is not installed blocks restore before `pg_restore` runs.
-Backup directories are created owner-only (0700), dump and sidecar files owner-only (0600), and
-filenames carry a short random token so two captures in the same second never collide.
+A version 1 artifact still restores as a database-only recovery point and reports that it has no
+captured media. Restore execution holds a lease keyed to the target database's connection identity
+in the runtime's temporary directory, so artifact- and file-backed entrypoints contend for the same
+database and two operators cannot replace it concurrently. Backup directories are created owner-only
+(0700), dump, media and sidecar files owner-only (0600), and filenames carry a short random token so
+two captures in the same second never collide.
 
 ## Dependency on quickscale-core
 
@@ -135,8 +149,9 @@ This module ships no URLs.
 
 - `quickscale_backups_create` — create a private database backup artifact. `--trigger`
   takes `manual` (the default), `scheduled`, or the admin UI's `admin`. `--resume SNAPSHOT_ID`
-  resumes an existing snapshot capture by snapshot id, and `--json` emits the structured
-  capture report for automation.
+  resumes an existing snapshot capture by snapshot id; a snapshot whose recorded media set is
+  incomplete is refused so a resume never replaces a captured recovery point, and `--json` emits
+  the structured capture report for automation.
 - `quickscale_backups_dr_adapter_call` — thin CLI bridge to call DR adapter functions from
   within a Docker context; not for admin use. `--args-json` carries the adapter's keyword
   arguments as one JSON object (deprecated; piped stdin is preferred).
@@ -161,7 +176,9 @@ This module ships no URLs.
   validates without executing; `--local-only` forbids remote materialization, and
   `--allow-production` records explicit destructive-restore intent.
 - `quickscale_backups_sync_media` — dry-run or execute media sync for a stored backup
-  snapshot. `--dry-run` validates the inputs without copying objects; `--target-runtime-json`
+  snapshot. It copies the captured media set from the snapshot; a version 1 snapshot without
+  captured media falls back to the live source and reports `"source": "live"`. `--dry-run`
+  validates the captured files and checksums without copying objects; `--target-runtime-json`
   carries the target runtime settings as a JSON object, and `--json` emits the structured
   sync report.
 - `quickscale_backups_validate` — validate checksum and local availability for a backup
@@ -242,7 +259,16 @@ Guardrails:
 - A PostgreSQL restore runs as one `pg_restore --single-transaction`; stop application writes
   for the maintenance window before executing it. A successful restore re-records the restored
   backup's artifact and snapshot rows in the restored database, and a metadata failure fails the
-  command visibly instead of reporting a clean restore.
+  command visibly instead of reporting a clean restore. The restore holds a dedicated advisory
+  lock, so a second restore waits or fails instead of replacing the database concurrently.
+- Media sync restores the captured set, not live media: a missing or changed captured file blocks
+  the sync, and only a version 1 snapshot reads live media. Dry-run checks the captured checksums
+  before any copy.
+- A restore of a version 1 artifact still succeeds as a database-only recovery point and reports
+  `media_not_captured`; restore that backup's media from a separate media backup.
+- A resume never replaces a recorded captured media set: a damaged capture is refused with
+  guidance to capture a new snapshot, while an interrupted capture that never recorded a
+  completed set remains resumable.
 - Restore compatibility uses the recorded migration content identity, not a version label:
   every capture records the SHA-256 hashes of each installed module's applied migration files,
   and a restore refuses a backup whose recorded migration file is missing or has changed
@@ -267,6 +293,8 @@ Limitations:
   refused because a file source records no capture identity; the admin restore surface accepts a
   file upload instead of an arbitrary server path.
 - Scheduler orchestration remains external to the module.
+- A private-remote-only snapshot must be materialized locally before media sync reads its
+  captured set; only the dump has an on-demand remote materialization path.
 - Additional at-rest encryption is deferred: it would add key-management and restore-UX scope.
 
 ## Extending

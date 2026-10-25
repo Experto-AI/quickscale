@@ -321,6 +321,13 @@ def _build_snapshot_full_backup_contract(
         if payload is not None:
             loaded_sidecar_payloads[filename] = payload
 
+    from quickscale_core.dr_engine import _media as _media_module
+
+    completeness_issues.extend(
+        f"captured media set: {issue}"
+        for issue in _media_module._snapshot_media_capture_integrity_issues(snapshot)
+    )
+
     (
         project_slug_candidates,
         source_environment_candidates,

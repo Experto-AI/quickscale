@@ -6,7 +6,7 @@ import quickscale_core.dr_engine._restore as _restore
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -211,6 +211,10 @@ class TestRestoreResolutionAndGuards:
                 return_value=restore_snapshot,
             ) as resolve_snapshot,
             patch(
+                "quickscale_core.dr_engine._restore._resolve_restore_lock_directory",
+                return_value=tmp_path,
+            ),
+            patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ) as core,
@@ -264,6 +268,10 @@ class TestRestoreResolutionAndGuards:
                 return_value={},
             ),
             patch(
+                "quickscale_core.dr_engine.persistence.get_authoritative_snapshot_for_artifact",
+                return_value=None,
+            ),
+            patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ),
@@ -271,16 +279,15 @@ class TestRestoreResolutionAndGuards:
                 "quickscale_core.dr_engine._restore._persist_restore_artifact_metadata"
             ) as persist,
         ):
-            assert (
-                _restore._execute_restore_for_resolved_source(
-                    source,
-                    confirmation="trusted.dump",
-                    dry_run=True,
-                    allow_production=False,
-                    shell_runner=None,
-                )
-                is result
+            executed = _restore._execute_restore_for_resolved_source(
+                source,
+                confirmation="trusted.dump",
+                dry_run=True,
+                allow_production=False,
+                shell_runner=None,
             )
+        assert executed.dry_run is True
+        assert [warning.code for warning in executed.warnings] == ["media_not_captured"]
         persist.assert_not_called()
 
     def test_execute_restore_wrapper_supplies_installed_migration_hashes(
@@ -307,6 +314,10 @@ class TestRestoreResolutionAndGuards:
             patch(
                 "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
                 return_value={"properties": {"0001_initial.py": "project-hash"}},
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_authoritative_snapshot_for_artifact",
+                return_value=None,
             ),
             patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
@@ -361,6 +372,7 @@ class TestRestoreResolutionAndGuards:
             recorded_manifest_version=None,
             recorded_project_migration_hashes=None,
             allow_forward=False,
+            policy=None,
         )
 
     def test_restore_backup_source_passes_recorded_migration_hashes(self) -> None:
@@ -644,3 +656,472 @@ class TestAdminUploadRestore:
             "staging_directory": str(tmp_path / "stage"),
             "error": "permission denied",
         }
+
+
+class TestRestoreLeaseAndMediaWarnings:
+    def _locked_source(self, tmp_path: Path) -> tuple[Any, Path]:
+        artifact = _artifact(
+            local_path=str(
+                tmp_path / "snapshots" / "snap-1" / "database" / "trusted.dump"
+            ),
+        )
+        return _source(tmp_path / "trusted.dump", artifact), tmp_path
+
+    def _patched_environment(
+        self,
+        *,
+        restore_snapshot: Any,
+        result: RestoreResult,
+        tmp_path: Path,
+        persist_side_effect: Any = (),
+    ) -> Any:
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        stack = ExitStack()
+        stack.enter_context(
+            patch(
+                "django.db",
+                SimpleNamespace(
+                    connections={
+                        "default": SimpleNamespace(settings_dict={"ENGINE": "pg"})
+                    }
+                ),
+            )
+        )
+        stack.enter_context(patch("django.conf.settings", SimpleNamespace(DEBUG=True)))
+        stack.enter_context(patch("django.utils.timezone.now", return_value=_NOW))
+        stack.enter_context(
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                return_value={},
+            )
+        )
+        stack.enter_context(
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                return_value={},
+            )
+        )
+        stack.enter_context(
+            patch(
+                "quickscale_core.dr_engine.persistence.get_authoritative_snapshot_for_artifact",
+                return_value=restore_snapshot,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "quickscale_core.dr_engine._restore._resolve_restore_lock_directory",
+                return_value=tmp_path,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
+                return_value=result,
+            )
+        )
+        persist_patch = (
+            patch(
+                "quickscale_core.dr_engine._restore._persist_restore_artifact_metadata",
+                side_effect=persist_side_effect,
+            )
+            if callable(persist_side_effect)
+            else patch(
+                "quickscale_core.dr_engine._restore._persist_restore_artifact_metadata",
+                return_value=persist_side_effect,
+            )
+        )
+        stack.enter_context(persist_patch)
+        return stack
+
+    def test_execute_restore_holds_the_restore_lock_for_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        source, lock_directory = self._locked_source(tmp_path)
+        snapshot = _snapshot(local_root_path=str(tmp_path / "snapshots" / "snap-1"))
+        result = RestoreResult(executed=True, dry_run=False, message="done")
+        observed_lock_states: list[bool] = []
+
+        def persist_side_effect(*_args: Any, **_kwargs: Any) -> tuple[()]:
+            observed_lock_states.append(
+                (lock_directory / ".quickscale-backup-restore.lock").exists()
+            )
+            return ()
+
+        with self._patched_environment(
+            restore_snapshot=snapshot,
+            result=result,
+            tmp_path=lock_directory,
+            persist_side_effect=persist_side_effect,
+        ):
+            executed = _restore._execute_restore_for_resolved_source(
+                source,
+                confirmation="trusted.dump",
+                dry_run=False,
+                allow_production=False,
+                shell_runner=None,
+            )
+
+        assert executed.executed is True
+        assert observed_lock_states == [True]
+        assert not (lock_directory / ".quickscale-backup-restore.lock").exists()
+
+    def test_execute_restore_refuses_while_another_restore_holds_the_lock(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine._lock import (
+            BackupLockError,
+            _acquire_backup_lock,
+            _release_backup_lock,
+            _RESTORE_LOCK_FILENAME,
+        )
+
+        source, lock_directory = self._locked_source(tmp_path)
+        snapshot = _snapshot(local_root_path=str(tmp_path / "snapshots" / "snap-1"))
+        result = RestoreResult(executed=True, dry_run=False, message="done")
+        lock_path = _acquire_backup_lock(
+            lock_directory,
+            lock_filename=_RESTORE_LOCK_FILENAME,
+        )
+        try:
+            with self._patched_environment(
+                restore_snapshot=snapshot,
+                result=result,
+                tmp_path=lock_directory,
+            ):
+                with pytest.raises(BackupLockError, match="backup restore is already"):
+                    _restore._execute_restore_for_resolved_source(
+                        source,
+                        confirmation="trusted.dump",
+                        dry_run=False,
+                        allow_production=False,
+                        shell_runner=None,
+                    )
+        finally:
+            _release_backup_lock(lock_path)
+
+    def _write_media_manifest(self, snapshot_root: Path, payload: dict) -> None:
+        import json
+
+        snapshot_root.mkdir(parents=True, exist_ok=True)
+        (snapshot_root / "media-sync-manifest.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    def test_v1_artifact_restore_warns_that_media_is_not_captured(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot_root = tmp_path / "snapshots" / "snap-1"
+        self._write_media_manifest(
+            snapshot_root,
+            {
+                "manifest_version": 1,
+                "status": "ready",
+                "inventory": [],
+            },
+        )
+        source, lock_directory = self._locked_source(tmp_path)
+        snapshot = _snapshot(local_root_path=str(snapshot_root))
+        result = RestoreResult(executed=True, dry_run=False, message="done")
+
+        with self._patched_environment(
+            restore_snapshot=snapshot,
+            result=result,
+            tmp_path=lock_directory,
+        ):
+            executed = _restore._execute_restore_for_resolved_source(
+                source,
+                confirmation="trusted.dump",
+                dry_run=False,
+                allow_production=False,
+                shell_runner=None,
+            )
+
+        assert [warning.code for warning in executed.warnings] == ["media_not_captured"]
+
+    def test_v2_artifact_restore_warns_on_an_incomplete_captured_set(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot_root = tmp_path / "snapshots" / "snap-1"
+        self._write_media_manifest(
+            snapshot_root,
+            {
+                "manifest_version": 2,
+                "status": "ready",
+                "capture": {
+                    "status": "captured",
+                    "relative_root": "media",
+                    "file_count": 1,
+                },
+                "inventory": [{"relative_path": "blog/hero.png"}],
+            },
+        )
+        source = _source(
+            tmp_path / "trusted.dump",
+            _artifact(metadata_json={"manifest_version": 2}),
+        )
+        snapshot = _snapshot(local_root_path=str(snapshot_root))
+        result = RestoreResult(executed=True, dry_run=False, message="done")
+
+        with self._patched_environment(
+            restore_snapshot=snapshot,
+            result=result,
+            tmp_path=tmp_path,
+        ):
+            executed = _restore._execute_restore_for_resolved_source(
+                source,
+                confirmation="trusted.dump",
+                dry_run=False,
+                allow_production=False,
+                shell_runner=None,
+            )
+
+        assert [warning.code for warning in executed.warnings] == [
+            "media_capture_incomplete"
+        ]
+        assert "blog/hero.png" in executed.warnings[0].message
+
+    def test_dry_run_validates_media_without_taking_the_restore_lock(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot_root = tmp_path / "snapshots" / "snap-1"
+        self._write_media_manifest(
+            snapshot_root,
+            {
+                "manifest_version": 1,
+                "status": "ready",
+                "inventory": [],
+            },
+        )
+        source, lock_directory = self._locked_source(tmp_path)
+        snapshot = _snapshot(local_root_path=str(snapshot_root))
+        result = RestoreResult(executed=False, dry_run=True, message="dry")
+
+        with self._patched_environment(
+            restore_snapshot=snapshot,
+            result=result,
+            tmp_path=lock_directory,
+        ):
+            executed = _restore._execute_restore_for_resolved_source(
+                source,
+                confirmation="trusted.dump",
+                dry_run=True,
+                allow_production=False,
+                shell_runner=None,
+            )
+
+        assert [warning.code for warning in executed.warnings] == ["media_not_captured"]
+        assert not (lock_directory / ".quickscale-backup-restore.lock").exists()
+
+
+class TestRestoreLockDirectory:
+    def test_role_differences_share_the_database_lock(self) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        serving_role = {
+            "ENGINE": "django.db.backends.postgresql",
+            "HOST": "db.internal",
+            "PORT": "5432",
+            "NAME": "app",
+            "USER": "serving_role",
+        }
+        backup_role = {
+            "ENGINE": "django.db.backends.postgresql",
+            "HOST": "db.internal",
+            "PORT": "5432",
+            "NAME": "app",
+            "USER": "backup_role",
+        }
+
+        assert restore_module._resolve_restore_lock_directory(
+            serving_role
+        ) == restore_module._resolve_restore_lock_directory(backup_role)
+        assert "quickscale-backup-restore" in str(
+            restore_module._resolve_restore_lock_directory(serving_role)
+        )
+
+    def test_privileged_url_target_drives_the_lock_identity(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+        from quickscale_core.dr_engine._connection import _resolve_backup_connection
+
+        monkeypatch.delenv("QUICKSCALE_BACKUP_DATABASE_URL", raising=False)
+        monkeypatch.setenv(
+            "DATABASE_URL",
+            "postgresql://backup_role:secret@db.internal:5432/app",
+        )
+        resolved = _resolve_backup_connection(
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "HOST": "serving.internal",
+                "PORT": "5432",
+                "NAME": "serving",
+                "USER": "serving_role",
+            }
+        )
+
+        directory = restore_module._resolve_restore_lock_directory(resolved.settings)
+
+        assert directory.name == restore_module._restore_lock_identity(
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "HOST": "db.internal",
+                "PORT": "5432",
+                "NAME": "app",
+            }
+        )
+
+    def test_default_port_matches_an_explicit_default_port(self) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        base = {
+            "ENGINE": "django.db.backends.postgresql",
+            "HOST": "DB.internal",
+            "NAME": "app",
+        }
+
+        assert restore_module._restore_lock_identity(
+            base
+        ) == restore_module._restore_lock_identity({**base, "PORT": "5432"})
+
+    def test_a_different_target_database_uses_a_different_lock(self) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        first = restore_module._resolve_restore_lock_directory(
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "HOST": "db.internal",
+                "PORT": "5432",
+                "NAME": "app_one",
+                "USER": "app",
+            }
+        )
+        second = restore_module._resolve_restore_lock_directory(
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "HOST": "db.internal",
+                "PORT": "5432",
+                "NAME": "app_two",
+                "USER": "app",
+            }
+        )
+
+        assert first != second
+
+    def test_wrapper_lease_follows_the_privileged_target(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from contextlib import contextmanager
+
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        monkeypatch.delenv("QUICKSCALE_BACKUP_DATABASE_URL", raising=False)
+        monkeypatch.setenv(
+            "DATABASE_URL",
+            "postgresql://backup_role:secret@db.internal:5432/app",
+        )
+        observed: list[Path] = []
+
+        @contextmanager
+        def fake_restore_lock(directory: Path, **_kwargs: Any) -> Any:
+            observed.append(directory)
+            yield
+
+        def run_with_serving_host(serving_host: str) -> None:
+            source = _source(tmp_path / "file.dump")
+            result = RestoreResult(executed=False, dry_run=False, message="ok")
+            with (
+                patch(
+                    "django.db",
+                    SimpleNamespace(
+                        connections={
+                            "default": SimpleNamespace(
+                                settings_dict={
+                                    "ENGINE": "django.db.backends.postgresql",
+                                    "HOST": serving_host,
+                                    "PORT": "5432",
+                                    "NAME": "serving",
+                                    "USER": "serving_role",
+                                }
+                            )
+                        }
+                    ),
+                ),
+                patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
+                patch(
+                    "quickscale_core.dr_engine._connection._ensure_backup_connection_is_privileged"
+                ),
+                patch(
+                    "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                    return_value={},
+                ),
+                patch(
+                    "quickscale_core.dr_engine._metadata._collect_project_migration_hashes",
+                    return_value={},
+                ),
+                patch(
+                    "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
+                    return_value=result,
+                ),
+                patch(
+                    "quickscale_core.dr_engine._lock._restore_advisory_lock",
+                    fake_restore_lock,
+                ),
+            ):
+                restore_module._execute_restore_for_resolved_source(
+                    source,
+                    confirmation="file.dump",
+                    dry_run=False,
+                    allow_production=False,
+                    shell_runner=None,
+                    recorded_manifest_version=1,
+                )
+
+        run_with_serving_host("serving-one.internal")
+        run_with_serving_host("serving-two.internal")
+
+        assert observed[0] == observed[1]
+        assert observed[0].name == restore_module._restore_lock_identity(
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "HOST": "db.internal",
+                "PORT": "5432",
+                "NAME": "app",
+            }
+        )
+
+    def test_v2_artifact_without_a_snapshot_warns_database_only(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        warnings = restore_module._collect_media_restore_warnings(
+            _artifact(metadata_json={"manifest_version": 2}),
+            None,
+        )
+
+        assert [warning.code for warning in warnings] == ["media_not_captured"]
+
+    def test_v1_artifact_without_a_snapshot_still_warns(self, tmp_path: Path) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        warnings = restore_module._collect_media_restore_warnings(
+            _artifact(metadata_json={"manifest_version": 1}),
+            None,
+        )
+
+        assert [warning.code for warning in warnings] == ["media_not_captured"]
+
+    def test_file_source_warns_from_its_recorded_manifest_version(self) -> None:
+        from quickscale_core.dr_engine import _restore as restore_module
+
+        warnings = restore_module._collect_media_restore_warnings(
+            None,
+            None,
+            recorded_manifest_version=1,
+        )
+
+        assert [warning.code for warning in warnings] == ["media_not_captured"]

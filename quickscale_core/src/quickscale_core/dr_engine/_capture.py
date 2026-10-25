@@ -200,6 +200,66 @@ def _complete_capture_after_dump(
     return artifact
 
 
+def _get_resume_media_issue(snapshot: Any) -> str | None:
+    """Return why a recorded media capture forbids a live recapture on resume.
+
+    A snapshot that never recorded a completed capture can still be captured
+    again.  A snapshot that already froze media must not replace that set with
+    whatever happens to be live when an operator resumes it.
+    """
+    from quickscale_core.dr_engine import _media as _media
+
+    try:
+        manifest = _media._load_snapshot_media_manifest(snapshot)
+    except _primitives.BackupError:
+        descriptors = (
+            snapshot.child_descriptors_json
+            if isinstance(snapshot.child_descriptors_json, dict)
+            else {}
+        )
+        media_descriptor = descriptors.get("media")
+        metadata = (
+            media_descriptor.get("metadata")
+            if isinstance(media_descriptor, dict)
+            else None
+        )
+        capture_status = (
+            str(metadata.get("capture_status", "")).strip()
+            if isinstance(metadata, dict)
+            else ""
+        )
+        if capture_status == _media._MEDIA_CAPTURE_STATUS_CAPTURED:
+            return "its captured media manifest is missing"
+        if capture_status == _media._MEDIA_CAPTURE_STATUS_EMPTY:
+            return "its recorded empty media manifest is missing"
+        # No media manifest yet; a failed sidecar capture remains resumable.
+        return None
+
+    manifest_version = manifest.get("manifest_version")
+    if isinstance(manifest_version, bool) or not isinstance(manifest_version, int):
+        manifest_version = None
+    capture = manifest.get("capture")
+    if not isinstance(capture, dict):
+        if (
+            manifest_version is not None
+            and manifest_version >= _primitives._BACKUP_MANIFEST_VERSION_WITH_MEDIA
+        ):
+            return "its version 2 media manifest records no captured set"
+        return None
+
+    capture_status = str(capture.get("status", "")).strip()
+    if capture_status != _media._MEDIA_CAPTURE_STATUS_CAPTURED:
+        return None
+
+    issues = _media._collect_snapshot_media_capture_issues(
+        snapshot,
+        verify_checksums=True,
+    )
+    if issues:
+        return "its captured media set is incomplete (" + "; ".join(issues) + ")"
+    return None
+
+
 def _validate_resume_preconditions(
     snapshot: Any, policy: BackupPolicySnapshot
 ) -> BackupPolicySnapshot:
@@ -220,6 +280,13 @@ def _validate_resume_preconditions(
             f"Cannot resume snapshot '{snapshot.snapshot_id}' from environment "
             f"'{source_environment}' because it was captured from "
             f"'{snapshot.source_environment}'."
+        )
+
+    media_issue = _get_resume_media_issue(snapshot)
+    if media_issue is not None:
+        raise _primitives.BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because {media_issue}; "
+            "capture a new snapshot instead."
         )
 
     if (

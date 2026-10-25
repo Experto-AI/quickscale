@@ -24,6 +24,20 @@ def _echo_capture_summary(
     click.echo(f"Database artifact: {authoritative_dump.get('filename', 'unknown')}")
 
 
+def _echo_surface_warnings(surface_payload: Any) -> None:
+    """Print every warning carried by one DR surface result."""
+    if not isinstance(surface_payload, dict):
+        return
+    warnings = surface_payload.get("warnings", [])
+    if not isinstance(warnings, list):
+        return
+    for warning in warnings:
+        if isinstance(warning, dict) and warning.get("message"):
+            click.echo(
+                f"Warning [{warning.get('code', 'warning')}]: {warning['message']}"
+            )
+
+
 def _echo_plan_summary(plan_payload: dict[str, Any]) -> None:
     click.echo(f"Route: {plan_payload['route']}")
     click.echo(f"Snapshot id: {plan_payload['snapshot_id']}")
@@ -31,6 +45,9 @@ def _echo_plan_summary(plan_payload: dict[str, Any]) -> None:
     click.echo(f"Database: {plan_payload['database']['status']}")
     click.echo(f"Media: {plan_payload['media']['status']}")
     click.echo(f"Env vars: {plan_payload['env_vars']['status']}")
+    _echo_surface_warnings(plan_payload.get("database"))
+    _echo_surface_warnings(plan_payload.get("media"))
+    _echo_surface_warnings(plan_payload.get("env_vars"))
     manual_actions = plan_payload.get("manual_actions", [])
     if manual_actions:
         click.echo("Manual actions:")
@@ -54,6 +71,7 @@ def _echo_execute_summary(execute_payload: dict[str, Any]) -> None:
         click.echo(
             f"{surface_name.replace('_', ' ').title()}: {surface_payload['status']}"
         )
+        _echo_surface_warnings(surface_payload)
 
 
 def _echo_report_summary(route_report: dict[str, Any]) -> None:

@@ -30,7 +30,14 @@ from quickscale_core.dr_engine.primitives import (
 # ---------------------------------------------------------------------------
 
 _LOCK_FILENAME = ".quickscale-backup-create.lock"
+_RESTORE_LOCK_FILENAME = ".quickscale-backup-restore.lock"
 _LOCK_TIMEOUT_SECONDS = 300
+_CREATE_LOCK_BUSY_MESSAGE = (
+    "A backup operation is already in progress. Wait for it to finish first."
+)
+_RESTORE_LOCK_BUSY_MESSAGE = (
+    "A backup restore is already in progress. Wait for it to finish first."
+)
 _BackupLockOwnerKey = tuple[int, int, Path]
 _BackupLockOwnership = tuple[tuple[int, int], str, int]
 _backup_lock_ownership: dict[_BackupLockOwnerKey, _BackupLockOwnership] = {}
@@ -73,14 +80,40 @@ def _backup_creation_lock(
         _release_backup_lock(lock_path)
 
 
+@contextmanager
+def _restore_advisory_lock(
+    local_directory: Path,
+    *,
+    now: datetime | None = None,
+) -> Iterator[None]:
+    """Serialize restore execution across processes for one database target.
+
+    The lease is a separate file from the backup-create lock; it serializes
+    concurrent restores, while a capture and a restore remain independent
+    operations.
+    """
+    lock_path = _acquire_backup_lock(
+        local_directory,
+        now=now,
+        lock_filename=_RESTORE_LOCK_FILENAME,
+        busy_message=_RESTORE_LOCK_BUSY_MESSAGE,
+    )
+    try:
+        yield
+    finally:
+        _release_backup_lock(lock_path)
+
+
 def _acquire_backup_lock(
     local_directory: Path,
     *,
     now: datetime | None = None,
+    lock_filename: str = _LOCK_FILENAME,
+    busy_message: str = _CREATE_LOCK_BUSY_MESSAGE,
 ) -> Path:
     """Create an exclusive lock file to prevent overlapping backup runs."""
     _ensure_private_directory(local_directory)
-    lock_path = local_directory / _LOCK_FILENAME
+    lock_path = local_directory / lock_filename
     lock_time = now or datetime.now(timezone.utc)
 
     for _ in range(2):
@@ -92,10 +125,7 @@ def _acquire_backup_lock(
             )
         except FileExistsError:
             if not _clear_stale_backup_lock(lock_path, now=lock_time):
-                raise BackupLockError(
-                    "A backup operation is already in progress. Wait for it to "
-                    "finish first."
-                )
+                raise BackupLockError(busy_message)
             continue
         except OSError as exc:
             raise BackupError(
@@ -137,9 +167,7 @@ def _acquire_backup_lock(
             )
         return lock_path
 
-    raise BackupLockError(
-        "A backup operation is already in progress. Wait for it to finish first."
-    )
+    raise BackupLockError(busy_message)
 
 
 def _clear_stale_backup_lock(lock_path: Path, *, now: datetime) -> bool:
@@ -300,4 +328,5 @@ __all__ = [
     "_cleanup_local_backup_file",
     "_clear_stale_backup_lock",
     "_release_backup_lock",
+    "_restore_advisory_lock",
 ]

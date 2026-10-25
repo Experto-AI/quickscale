@@ -388,18 +388,20 @@ embeddable `backups` module keeps only thin Django-facing surfaces, reached thro
 
 #### Backup Artifact Format {#backup-artifact-format-f5--m10}
 
-**Rule:** One backup artifact is version 1: a PostgreSQL 18 custom-format dump plus the four
-required private sidecars (`media-sync-manifest.json`, `env-var-manifest.json`,
+**Rule:** One backup artifact is version 2: a PostgreSQL 18 custom-format dump, the captured media
+set under `media/`, and four private sidecars (`media-sync-manifest.json`, `env-var-manifest.json`,
 `release-metadata.json`, `promotion-verification.json`). `release-metadata.json` is the versioned
-manifest, and the dump artifact's capture metadata carries the same fields: both record
-`manifest_version`, module `migration_hashes`, and `project_migration_hashes` for project-owned
-apps. JSON artifacts are export-only.
+manifest; it and the dump's capture metadata record `manifest_version`, module `migration_hashes`,
+and `project_migration_hashes`. The media manifest records each captured file's snapshot-relative
+path and SHA-256 checksum, or an explicit empty capture when the project has no media root.
 
-A format change MUST bump `manifest_version`. Restore MUST refuse a missing or unknown version, a
-manifest that records no project identity, any recorded module or project migration file that is
-absent or changed, and a newer installed migration unless the caller completes the forward
-migration after restore. Backup directories MUST be owner-only (0700); dump, sidecar and lock files
-MUST be owner-only (0600).
+A format change MUST bump `manifest_version`. Version 1 artifacts remain restorable as database-only
+recovery points and MUST warn that they carry no captured media. Restore MUST refuse a missing or
+unknown version, a manifest without project identity, any recorded migration file that is absent or
+changed, and a newer installed migration unless the caller completes the forward migration after
+restore. A restore MUST hold an advisory lock for its whole run. Media sync MUST copy the captured
+set and MUST refuse a damaged capture; only a version 1 snapshot may read live media and MUST name
+that source. Backup directories MUST be 0700; dump, media, sidecar and lock files MUST be 0600.
 
 ---
 

@@ -72,7 +72,7 @@ test harness now runs under the RLS runtime role.
 | `quickscale update` → split branch head → `git subtree pull` → `pyproject.toml` | call / VCS | CLI + remote branch | branch tree proven equal to the seal before pull; lock refreshed once; per-module commits remain |
 | generated boot → `start.sh` → superuser migrate → runtime role → gunicorn | call / privilege | `start.sh` + runtime settings | migrations at every boot; no pre-deploy/rollback |
 | generated request → `ClientIdentityMiddleware` → RLS GUC → module views | call / trust boundary | orgs + runtime settings | RLS only under runtime role; generated tests run under it |
-| `pg_dump` → local/remote artifact + sidecars (media inventory) → restore | shared state / external effect | DR engine | DB-only freeze; media/env live at restore |
+| `pg_dump` + captured media → local/remote artifact + sidecars → restore | shared state / external effect | DR engine | DB+media freeze; live env at restore; restore advisory lock |
 | release → split tag/branch + PyPI wheel | build / supply chain | publish/seal scripts | tag is immutable; update reads branch |
 
 **Critical-path walkthrough and lifecycle transition.**
@@ -97,9 +97,10 @@ regenerates managed wiring, and adopts contract steps. Code at N must read state
 the desired-state schema stays `"1"`, applied state carries the release version plus per-module
 versions, and contract ids union forward. In-flight work: generated project requests during a rolling deploy see `start.sh` migrate
 first (F2); in-flight backups are local files with a 300 s stale heuristic (F3); queued work is
-external cron, not an in-process queue. Restore is the other lifecycle branch: it reads a database
-dump, live media, and live env at different moments (F3). No claim of safe in-flight upgrade or
-restore rests on a tested two-version exercise; this is residual risk.
+external cron, not an in-process queue. Restore is the other lifecycle branch: it restores a
+database dump under a dedicated advisory lease, and its captured media is restored by the separate
+media-sync surface, while the environment is read live (F3). No claim of safe in-flight upgrade
+rests on a tested two-version exercise; this is residual risk.
 
 **Measurements** (filter: `--since="12 months ago"`, no merges, commits touching ≤30 files,
 excluding `vendor/`, `node_modules/`, `dist/`, `build/`, `htmlcov/`, lockfiles, `CHANGELOG`,
@@ -143,7 +144,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Apply resume preserves state | `ApplyExecutor` checkpoint + fault harness | gated, content not asserted | gap |
 | Production migration safety | `start.sh` boot migration | convention | unchanged |
 | Production media durability | docs only; storage module optional | convention | unchanged |
-| DR migration identity | module plus project-app migrations | gated | **strengthened** (SA322 (b): project-app identity recorded and enforced at restore) |
+| DR recovery point | dump + captured media + module/project migration identity; restore advisory lock | gated | **closed** (SA322: captured media restored from the snapshot, project identity enforced, restore serialized) |
 | Tenant removal obligations | app-declared `removal_obligations` | convention (4 of 12 apps declare) | unchanged |
 | CLI public/private surface | split-facade gate | gated, one-directional | stable |
 
@@ -153,7 +154,6 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. |
 | 2 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
-| 3 | `backup-restore-incoherent` | Backups cover the database, not a coherent recovery point | 6–18 months | High | L | one-way | Media is live at restore and restore has no lease; project-schema identity is enforced since SA322 (b). |
 
 ## Machine-readable index
 
@@ -173,20 +173,11 @@ items:
   - {id: generated-deploy-topology-unmodeled, status: open, rank: 2,
      title: "Generated production topology is prose, not an artifact",
      lenses: [IV, VI, XVI, XIX], horizon: now, confidence: High, size: M,
-     reversibility: two-way door, depends_on: [], amplifies: [backup-restore-incoherent],
+     reversibility: two-way door, depends_on: [], amplifies: [],
      anchors: [quickscale_core/src/quickscale_core/generator/templates/README.md.j2,
                quickscale_core/src/quickscale_core/generator/templates/docker-compose.yml.j2,
                quickscale_core/src/quickscale_core/generator/templates/start.sh.j2,
                quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2],
-     first_seen: 2026-10-23, last_verified: 2026-10-23}
-  - {id: backup-restore-incoherent, status: open, rank: 3,
-     title: "Backups cover the database, not a coherent recovery point",
-     lenses: [I, IV, XVI, XVIII], horizon: 6-18 months, confidence: High, size: L,
-     reversibility: one-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_core/src/quickscale_core/dr_engine/_capture.py,
-               quickscale_core/src/quickscale_core/dr_engine/_sidecar.py,
-               quickscale_core/src/quickscale_core/dr_engine/_media.py,
-               quickscale_core/src/quickscale_core/dr_engine/_metadata.py],
      first_seen: 2026-10-23, last_verified: 2026-10-23}
 
   - {id: core-holds-module-vocabulary, status: watchlist}
@@ -376,83 +367,6 @@ items:
 
 ### Finding 3: Backups cover the database, not a coherent recovery point
 
-- **ID:** `backup-restore-incoherent`
-- **Rank rationale:** High × Medium, steep. The backup is the disaster path; media is read live at
-  restore and restore has no lease. Project-app migration identity is recorded and enforced since
-  SA322 (b); SA153 adds the first project-owned schema, which makes that identity load-bearing.
-- **Horizon & trigger:** `6–18 months` — the first restore drill of a project with project-owned
-  migrations or media, or an incident restore.
-- **Confidence:** High on the mechanism and the exclusions; runtime behavior of a real restore was
-  not exercised.
-- **Context dependence:** `wrong-for-now` (dimensions: project-owned schema, media volume, disaster
-  recovery obligation). Lives in reality (B).
-- **Problem:** A backup freezes only PostgreSQL; media is inventoried but read live at restore,
-  project-app migration identity is enforced since SA322 (b), and restore has no lease and no
-  pre-restore recovery point, so recovery is not a coherent point in time.
-- **Evidence:**
-  - Capture: `_capture.py:142` captures sidecars *after* the dump; `_sidecar.py:158-170` records a
-    media inventory (paths, sizes, checksums) but copies no media bytes. Restore reads live source
-    media at execute time (`_media.py:226`) and the DB restore receives no target settings
-    (`_dr_adapter.py:157`), so the DB uses the local `connections["default"]` (`_restore.py:139`)
-    while media/env use route variables.
-  - Restore safety: `pg_restore --clean --if-exists` runs `--single-transaction` since SA322 (a);
-    there is still no restore lock, maintenance mode, or pre-restore dump. The backup create lock is
-    held by its acquisition descriptor for the run since SA322 (a), so a live backup is no longer
-    declared stale (`_lock.py`); restore itself has no lease. The admin `RESTORING` CAS is only on
-    the admin dispatch path; CLI/management-command restores bypass it.
-  - Identity/version: before SA322 (b) `_metadata.py` hashed only apps whose name starts with
-    `quickscale_modules_`, so project apps were excluded, and `manifest_version: 1` was written but
-    never read. The manifest now carries the version and project-app migration hashes, and restore
-    refuses an unknown or missing version or a changed, missing, or unrecorded project identity.
-    `app_version`, `django_version`, and `module_versions` are recorded but not compared at restore.
-  - Retention/placement: the default is `target_mode: local`, `.quickscale/backups` under
-    `BASE_DIR` (`backups/module.yml:30-38`); the catalog is rows in the database being dumped;
-    `automation_enabled` is metadata only (`models.py:64`); prune marks rows deleted rather than
-    removing them (`_prune.py:111`). One credential pair per policy (`_remote.py:44`).
-- **Counter-evidence:** the database is the system of record; the docs explicitly separate database
-  restore, media sync, and env sync (`railway-operations.md:92-95`); module migration identity is
-  enforced and fails closed; restore is gated by exact filename confirmation and an environment
-  flag; remote streaming is bounded. A single-transaction restore and a descriptor-held create
-  lock are present since SA322 (a); neither supplies a restore lease or media capture. Project-app
-  migration identity is enforced since SA322 (b). Searched for a restore lease and media capture —
-  found none. The media sync command is a separate surface, not a consistency mechanism.
-- **Why it compounds:** growth variable = **data stores × projects**. Every new module table,
-  project-owned app, and media-bearing feature adds a surface the snapshot does not freeze or
-  validate. Project-owned migrations are already on the roadmap (SA153); SA322 (b) records and
-  enforces their identity, while media capture and a restore lease remain uncovered. A backup set
-  that is not coherent becomes less coherent with each release.
-- **Detection signal:** a restore completes but media URLs 404; a project table is missing columns
-  after restore; two operators restore concurrently; a newer engine restores an older artifact
-  silently; prune deletes a file still referenced by a rollback pin or an in-flight restore.
-- **Steelman:** PostgreSQL is the only system of record; media is expected in external object
-  storage with its own backup; project-owned schema is the user's responsibility; restore is a
-  deliberate, gated, last-resort operation. That holds while no project-owned schema exists and
-  media is externally backed up. The live project already has a project-owned app and the roadmap
-  adds migrations, so the first condition is ending.
-- **Correct shape:** a backup defines a coherent recovery point across the database, media, and
-  project schema, with a format version and a restore lease — or it explicitly declares itself
-  DB-only and refuses to be called disaster recovery.
-- **Do-nothing cost:** the first real restore drill fails on media or project schema, discovered
-  during an incident; retention and catalog loss can orphan artifacts; each new store widens the
-  untested surface.
-- **Options:**
-  1. **Close the recovery point**: capture media (or record an immutable media manifest with
-     object-store versions), hash project-app migrations, version the manifest and read it at
-     restore, and add a restore advisory lock. M/L, one-way for the artifact format; removes the
-     incoherence.
-  2. **Declare DB-only**: rename/label the feature, require a separate media/project backup in the
-     runbook, and add a preflight that reports uncovered surfaces. S/M, two-way; honest but does not
-     recover.
-  3. **Accept** with a documented restore drill. Containment: a restore checklist naming media and
-     project migrations. Revocation: the first restore of a project-owned schema.
-- **Recommendation:** option 1 for the module; option 2 for immediate release notes if the format
-  work cannot land this cycle. **Size:** L · **Reversibility:** one-way door (artifact format) ·
-  **Guard:** the restore check refuses an artifact whose manifest version is unknown or whose
-  project-app migration hashes do not match. **Acceptance check:** a restore of a DB+media+project
-  schema drill produces the captured file set and schema; killing restore mid-way leaves no
-  partially restored database (or a documented resumable state). **First step:** include
-  project-app migration hashes and a manifest version check before touching media.
-
 ## Change-cost probe
 
 **Probe A — SA153 adds a project-owned public page (next feature).** Stations: user-owned theme page,
@@ -476,7 +390,8 @@ rendering works.
 ## Fix order and interactions
 
 - **F2 and F3 share media:** F2's production storage backend reduces F3's media gap but does not
-  close it; F3 must still decide whether media is captured or explicitly external.
+  close it; SA322 captured media and added the restore lease, so F3's remaining exposure is the
+  deploy topology, not the artifact.
 - **Ranking already reflects amplification:** F1 is High × High; F2/F3 are High × Medium.
 
 ## Sound load-bearing decisions
@@ -643,6 +558,12 @@ watchlist **6**.
   one `state.yml` write, commits the set once, and resumes the recorded set on the next update after
   a hard interruption without re-pulling an already merged target; `apply` and deploy refuse while
   the journal is pending.
+- 2026-10-25 — `backup-restore-incoherent`: **resolved** by SA322. Slice (b) versions the artifact
+  manifest and enforces module and project-app migration identity at restore. Slice (c) captures the
+  media set into the version 2 snapshot with per-file checksums, restores media sync from that
+  captured set (a version 1 snapshot warns and stays database-only), and holds a dedicated restore
+  advisory lock; a PostgreSQL drill restores database, media and project schema, an aborted restore
+  rolls back, and a SIGKILLed restore leaves the target database unchanged.
 - 2026-10-24 — `generated-file-ownership-unmodeled`: **still-open, slice (a) landed**. SA320 (a)
   generates `frontend/src/quickscaleSeam.hooks.ts` from each active manifest's `frontend_resources`
   section (CRM declares five subpaths and `CrmStats`), moves `CrmPage.tsx` onto it, and extends the

@@ -178,6 +178,10 @@ def _mark_snapshot_descriptors_deleted(
             if isinstance(descriptor, dict):
                 descriptor["status"] = "deleted"
 
+    media_descriptor = updated.get("media")
+    if isinstance(media_descriptor, dict):
+        media_descriptor["status"] = "deleted"
+
     return updated
 
 

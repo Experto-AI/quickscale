@@ -31,6 +31,7 @@ from quickscale_core.dr_engine.adapter import (
     validate_artifact,
 )
 from quickscale_core.dr_engine.primitives import BackupError
+from quickscale_core.dr_engine.recovery import RestoreResult, RestoreWarning
 
 
 # ---------------------------------------------------------------------------
@@ -196,11 +197,39 @@ class TestBuildDatabasePlan:
         with pytest.raises(BackupError, match="missing its authoritative restore file"):
             build_database_plan(report)
 
+    def test_success_carries_restore_warnings(
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
+    ) -> None:
+        mock_orch, _, _ = _mock_orch_and_backups
+        mock_orch.restore_backup_source.return_value = RestoreResult(
+            executed=False,
+            dry_run=True,
+            message="Plan ready",
+            warnings=(
+                RestoreWarning(
+                    code="media_not_captured",
+                    message="database only",
+                ),
+            ),
+        )
+
+        result = build_database_plan(self._valid_report())
+
+        assert result["warnings"] == [
+            {
+                "code": "media_not_captured",
+                "message": "database only",
+                "details": None,
+            }
+        ]
+
     def test_success_delegates_to_restore_backup_source(
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         mock_orch, _, _ = _mock_orch_and_backups
-        mock_orch.restore_backup_source.return_value = MagicMock(message="Plan ready")
+        mock_orch.restore_backup_source.return_value = RestoreResult(
+            executed=False, dry_run=True, message="Plan ready"
+        )
 
         result = build_database_plan(self._valid_report())
 
@@ -228,7 +257,9 @@ class TestBuildDatabasePlan:
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         mock_orch, _, _ = _mock_orch_and_backups
-        mock_orch.restore_backup_source.return_value = MagicMock(message="Plan ready")
+        mock_orch.restore_backup_source.return_value = RestoreResult(
+            executed=False, dry_run=True, message="Plan ready"
+        )
 
         report = self._valid_report()
         report.pop("full_backup")
@@ -258,7 +289,9 @@ class TestBuildDatabasePlan:
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         mock_orch, _, _ = _mock_orch_and_backups
-        mock_orch.restore_backup_source.return_value = MagicMock(message="Plan ready")
+        mock_orch.restore_backup_source.return_value = RestoreResult(
+            executed=False, dry_run=True, message="Plan ready"
+        )
 
         report = self._valid_report()
         provenance = report["full_backup"]["provenance"]
@@ -277,7 +310,9 @@ class TestBuildDatabasePlan:
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         mock_orch, _, _ = _mock_orch_and_backups
-        mock_orch.restore_backup_source.return_value = MagicMock(message="Plan ready")
+        mock_orch.restore_backup_source.return_value = RestoreResult(
+            executed=False, dry_run=True, message="Plan ready"
+        )
 
         report = self._valid_report()
         provenance = report["full_backup"]["provenance"]
@@ -331,6 +366,41 @@ class TestExecuteDatabaseRestore:
     ) -> None:
         with pytest.raises(BackupError, match="missing its authoritative restore file"):
             execute_database_restore(report)
+
+    def test_execute_carries_restore_warnings(
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
+    ) -> None:
+        mock_orch, _, _ = _mock_orch_and_backups
+        mock_orch.restore_backup_source.return_value = RestoreResult(
+            executed=True,
+            dry_run=False,
+            message="done",
+            warnings=(
+                RestoreWarning(
+                    code="media_not_captured",
+                    message="database only",
+                ),
+            ),
+        )
+
+        with patch("django.core.management.call_command"):
+            result = execute_database_restore(
+                {
+                    "snapshot_id": "snap-001",
+                    "authoritative_dump": {
+                        "local_path": "/tmp/dumps/snap-001.dump",
+                    },
+                    "confirmation_value": "snap-001",
+                }
+            )
+
+        assert result["warnings"] == [
+            {
+                "code": "media_not_captured",
+                "message": "database only",
+                "details": None,
+            }
+        ]
 
 
 # ===================================================================

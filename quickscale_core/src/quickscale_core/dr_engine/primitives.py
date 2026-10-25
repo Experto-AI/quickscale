@@ -30,6 +30,7 @@ _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC = b"PGDMP"
 
 _SNAPSHOTS_DIRECTORY_NAME = "snapshots"
 _SNAPSHOT_DATABASE_DIRECTORY_NAME = "database"
+_SNAPSHOT_MEDIA_DIRECTORY_NAME = "media"
 _MEDIA_SYNC_MANIFEST_FILENAME = "media-sync-manifest.json"
 _ENV_VAR_MANIFEST_FILENAME = "env-var-manifest.json"
 _RELEASE_METADATA_FILENAME = "release-metadata.json"
@@ -40,10 +41,12 @@ _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES = (
     _RELEASE_METADATA_FILENAME,
     _PROMOTION_VERIFICATION_FILENAME,
 )
-_BACKUP_MANIFEST_VERSION: int = 1
-_SUPPORTED_BACKUP_MANIFEST_VERSIONS: frozenset[int] = frozenset(
-    {_BACKUP_MANIFEST_VERSION}
-)
+# Version 2 adds the captured media set under ``media/`` and records it in
+# ``media-sync-manifest.json``; version 1 snapshots stay restorable as
+# database-only recovery points.
+_BACKUP_MANIFEST_VERSION: int = 2
+_BACKUP_MANIFEST_VERSION_WITH_MEDIA: int = 2
+_SUPPORTED_BACKUP_MANIFEST_VERSIONS: frozenset[int] = frozenset({1, 2})
 _PRIVATE_DIRECTORY_MODE: int = 0o700
 _PRIVATE_FILE_MODE: int = 0o600
 

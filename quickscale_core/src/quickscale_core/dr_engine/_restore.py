@@ -33,6 +33,7 @@ import quickscale_core.dr_engine._connection as _connection
 import quickscale_core.dr_engine.recovery as _recovery
 import quickscale_core.dr_engine._state as _state
 import quickscale_core.dr_engine._lock as _lock
+import quickscale_core.dr_engine._media as _media
 import quickscale_core.dr_engine.primitives as _primitives
 import quickscale_core.dr_engine.persistence as _persistence
 import quickscale_core.dr_engine._metadata as _metadata
@@ -43,6 +44,114 @@ import quickscale_core.dr_engine._policy as _policy
 import quickscale_core.dr_engine._remote as _remote
 import django
 import django.utils.timezone as _django_timezone
+
+
+def _restore_lock_identity(connection_settings: Mapping[str, Any]) -> str:
+    """Return one stable exclusion identity for the target database."""
+    identity = "\x1f".join(
+        (
+            str(connection_settings.get("ENGINE") or "").strip().lower(),
+            str(connection_settings.get("HOST") or "").strip().lower(),
+            str(connection_settings.get("PORT") or "").strip() or "5432",
+            str(connection_settings.get("NAME") or "").strip(),
+        )
+    )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+
+
+def _resolve_restore_lock_directory(
+    connection_settings: Mapping[str, Any] | None = None,
+) -> Path:
+    """Resolve the database-scoped directory that holds the restore lease.
+
+    The identity comes from the target database connection, never from the
+    backup source: an artifact-backed and a file-backed restore of the same
+    database must contend even when the artifact lives in another backup
+    directory or the local policy moved.
+    """
+    resolved_settings = (
+        connection_settings
+        if connection_settings is not None
+        else django.db.connections["default"].settings_dict
+    )
+    return (
+        Path(_tempfile.gettempdir())
+        / "quickscale-backup-restore"
+        / _restore_lock_identity(resolved_settings)
+    )
+
+
+def _collect_media_restore_warnings(
+    artifact: Any,
+    snapshot: Any,
+    *,
+    recorded_manifest_version: int | None = None,
+) -> tuple[RestoreWarning, ...]:
+    """Warn when a restore covers the database without a usable media set."""
+    manifest_version = (
+        _recovery._collect_artifact_manifest_version(artifact)
+        if artifact is not None
+        else recorded_manifest_version
+    )
+    if snapshot is None:
+        if (
+            manifest_version is not None
+            and manifest_version >= _primitives._BACKUP_MANIFEST_VERSION_WITH_MEDIA
+        ):
+            message = (
+                "The backup manifest records version "
+                f"{manifest_version} but this restore source has no linked "
+                "snapshot, so its captured media cannot be restored; this "
+                "restore covers the database only."
+            )
+        elif manifest_version == 1:
+            message = (
+                "This backup predates captured media; this restore covers the "
+                "database only and its media must come from another backup."
+            )
+        else:
+            message = (
+                "This restore source records no captured media identity; this "
+                "restore covers the database only."
+            )
+        return (RestoreWarning(code="media_not_captured", message=message),)
+    if not str(getattr(snapshot, "local_root_path", "") or "").strip():
+        return ()
+
+    capture = _media._get_snapshot_media_capture(snapshot)
+    if capture is None:
+        if (
+            manifest_version is not None
+            and manifest_version >= _primitives._BACKUP_MANIFEST_VERSION_WITH_MEDIA
+        ):
+            message = (
+                "The backup manifest records version "
+                f"{manifest_version} but no captured media set; this restore "
+                "covers the database only."
+            )
+        else:
+            message = (
+                "This backup predates captured media; this restore covers the "
+                "database only and its media must come from another backup."
+            )
+        return (RestoreWarning(code="media_not_captured", message=message),)
+
+    issues = _media._collect_snapshot_media_capture_issues(
+        snapshot,
+        verify_checksums=False,
+    )
+    if not issues:
+        return ()
+    return (
+        RestoreWarning(
+            code="media_capture_incomplete",
+            message=(
+                "The captured media set is incomplete, so this restore covers "
+                "the database only: " + "; ".join(issues)
+            ),
+            details={"issues": "; ".join(issues)},
+        ),
+    )
 
 
 def _get_restore_compatibility_issues(artifact: Any) -> list[str]:
@@ -137,6 +246,7 @@ def _execute_restore_for_resolved_source(
     recorded_manifest_version: int | None = None,
     recorded_project_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
     allow_forward: bool = False,
+    policy: BackupPolicySnapshot | None = None,
 ) -> RestoreResult:
     """Run the guarded restore pipeline — Django-backed wrapper around core."""
     default_connection_settings = django.db.connections["default"].settings_dict
@@ -151,40 +261,60 @@ def _execute_restore_for_resolved_source(
         )
 
     restore_snapshot: Any = None
-    if not dry_run and restore_source.artifact is not None:
+    if restore_source.artifact is not None:
         restore_snapshot = _persistence.get_authoritative_snapshot_for_artifact(
             cast("PersistedBackupArtifact", restore_source.artifact)
         )
-
-    result = _recovery._execute_restore_for_resolved_source(
-        restore_source,
-        confirmation=confirmation,
-        dry_run=dry_run,
-        allow_production=allow_production,
-        shell_runner=shell_runner,
-        current_engine=current_engine,
-        connection_settings=backup_connection.settings,
-        is_debug=_conf.settings.DEBUG,
-        pg_contract_checker=_metadata._require_postgresql_18_contract,
-        installed_migration_hashes=_metadata._collect_module_migration_hashes(),
-        installed_project_migration_hashes=(
-            _metadata._collect_project_migration_hashes()
-        ),
-        recorded_migration_hashes=recorded_migration_hashes,
+    media_warnings = _collect_media_restore_warnings(
+        restore_source.artifact,
+        restore_snapshot,
         recorded_manifest_version=recorded_manifest_version,
-        recorded_project_migration_hashes=recorded_project_migration_hashes,
-        allow_forward=allow_forward,
     )
 
-    if result.executed and restore_source.artifact is not None:
-        restore_warnings = _persist_restore_artifact_metadata(
-            restore_source.artifact,
-            restored_at=_django_timezone.now(),
-            snapshot=restore_snapshot,
+    def _run() -> RestoreResult:
+        result = _recovery._execute_restore_for_resolved_source(
+            restore_source,
+            confirmation=confirmation,
+            dry_run=dry_run,
+            allow_production=allow_production,
+            shell_runner=shell_runner,
+            current_engine=current_engine,
+            connection_settings=backup_connection.settings,
+            is_debug=_conf.settings.DEBUG,
+            pg_contract_checker=_metadata._require_postgresql_18_contract,
+            installed_migration_hashes=_metadata._collect_module_migration_hashes(),
+            installed_project_migration_hashes=(
+                _metadata._collect_project_migration_hashes()
+            ),
+            recorded_migration_hashes=recorded_migration_hashes,
+            recorded_manifest_version=recorded_manifest_version,
+            recorded_project_migration_hashes=recorded_project_migration_hashes,
+            allow_forward=allow_forward,
         )
-        if restore_warnings:
-            result = replace(result, warnings=(*result.warnings, *restore_warnings))
 
+        if result.executed and restore_source.artifact is not None:
+            restore_warnings = _persist_restore_artifact_metadata(
+                restore_source.artifact,
+                restored_at=_django_timezone.now(),
+                snapshot=restore_snapshot,
+            )
+            if restore_warnings:
+                result = replace(
+                    result,
+                    warnings=(*result.warnings, *restore_warnings),
+                )
+        return result
+
+    if dry_run:
+        result = _run()
+    else:
+        lock_directory = _resolve_restore_lock_directory(backup_connection.settings)
+        _primitives._ensure_private_directory(lock_directory)
+        with _lock._restore_advisory_lock(lock_directory):
+            result = _run()
+
+    if media_warnings:
+        result = replace(result, warnings=(*media_warnings, *result.warnings))
     return result
 
 
@@ -235,6 +365,7 @@ def restore_backup_source(
             recorded_manifest_version=recorded_manifest_version,
             recorded_project_migration_hashes=recorded_project_migration_hashes,
             allow_forward=allow_forward,
+            policy=policy,
         )
 
 

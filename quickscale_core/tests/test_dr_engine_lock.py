@@ -469,3 +469,75 @@ class TestBackupCreationLockExhausted:
         ):
             with pytest.raises(BackupLockError, match="already in progress"):
                 _acquire_backup_lock(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# _restore_advisory_lock
+# ---------------------------------------------------------------------------
+
+
+class TestRestoreAdvisoryLock:
+    def test_acquire_and_release_uses_a_separate_lock_file(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine._lock import _restore_advisory_lock
+
+        restore_lock = tmp_path / ".quickscale-backup-restore.lock"
+        create_lock = tmp_path / ".quickscale-backup-create.lock"
+
+        with _restore_advisory_lock(tmp_path):
+            assert restore_lock.exists()
+            assert not create_lock.exists()
+            data = json.loads(restore_lock.read_text())
+            assert data["pid"] == os.getpid()
+
+        assert not restore_lock.exists()
+
+    def test_create_and_restore_locks_do_not_block_each_other(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine._lock import (
+            _backup_creation_lock,
+            _restore_advisory_lock,
+        )
+
+        with _backup_creation_lock(tmp_path):
+            with _restore_advisory_lock(tmp_path):
+                assert (tmp_path / ".quickscale-backup-create.lock").exists()
+                assert (tmp_path / ".quickscale-backup-restore.lock").exists()
+
+    def test_live_restore_lock_reports_restore_busy(self, tmp_path: Path) -> None:
+        from quickscale_core.dr_engine._lock import (
+            _acquire_backup_lock,
+            _release_backup_lock,
+            _restore_advisory_lock,
+            _RESTORE_LOCK_FILENAME,
+        )
+
+        lock_path = _acquire_backup_lock(
+            tmp_path,
+            lock_filename=_RESTORE_LOCK_FILENAME,
+        )
+        try:
+            with pytest.raises(BackupLockError, match="backup restore is already"):
+                with _restore_advisory_lock(tmp_path):
+                    pass  # pragma: no cover
+        finally:
+            _release_backup_lock(lock_path)
+
+    def test_killed_holder_releases_the_restore_lease(self, tmp_path: Path) -> None:
+        from datetime import timedelta
+
+        from quickscale_core.dr_engine._lock import _restore_advisory_lock
+
+        lock_path = tmp_path / ".quickscale-backup-restore.lock"
+        lock_path.write_text("{}")
+        old_mtime = time.time() - 1
+        os.utime(lock_path, (old_mtime, old_mtime))
+
+        # A released flock is the liveness oracle; the mtime grace keeps a
+        # just-created lock from being stolen before its owner flocks it.
+        stale_now = datetime.now(timezone.utc) + timedelta(seconds=400)
+        with _restore_advisory_lock(tmp_path, now=stale_now):
+            assert lock_path.exists()
+        assert not lock_path.exists()

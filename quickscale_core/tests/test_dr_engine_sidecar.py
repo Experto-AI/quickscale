@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -86,7 +86,7 @@ class TestBuildEnvVarManifest:
         ):
             manifest = _build_env_var_manifest(captured_at=_FAKE_NOW)
 
-        assert manifest["manifest_version"] == 1
+        assert manifest["manifest_version"] == 2
         assert manifest["project_slug"] == "myproj"
         assert manifest["source_environment"] == "staging"
         assert manifest["status"] == "ready"
@@ -135,7 +135,7 @@ class TestBuildPromotionVerificationPlaceholder:
                 captured_at=_FAKE_NOW
             )
 
-        assert placeholder["manifest_version"] == 1
+        assert placeholder["manifest_version"] == 2
         assert placeholder["project_slug"] == "myproj"
         assert placeholder["source_environment"] == "production"
         assert placeholder["status"] == "reserved"
@@ -733,3 +733,61 @@ class TestUploadToPrivateRemote:
             result = _upload_to_private_remote(local_path, policy)
 
         assert result == "s3://bucket/key"
+
+
+class TestRecordMediaCaptureDescriptor:
+    def test_partial_upload_retains_successful_remote_keys(
+        self, tmp_path: Path
+    ) -> None:
+        from quickscale_core.dr_engine._sidecar import (
+            _record_media_capture_descriptor,
+        )
+
+        snapshot_root = tmp_path / "snapshot"
+        media_root = snapshot_root / "media"
+        media_root.mkdir(parents=True)
+        (media_root / "a.png").write_bytes(b"a")
+        (media_root / "b.png").write_bytes(b"b")
+        payload = {
+            "capture": {
+                "status": "captured",
+                "relative_root": "media",
+                "file_count": 2,
+                "total_bytes": 2,
+            },
+            "inventory": [
+                {"snapshot_relative_path": "media/a.png"},
+                {"snapshot_relative_path": "media/b.png"},
+            ],
+        }
+        uploader = MagicMock(side_effect=["remote/a.png", BackupError("offline")])
+        failures: list[str] = []
+
+        from quickscale_core.dr_engine.primitives import BackupPolicySnapshot
+
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode="private_remote",
+            local_directory=".quickscale/backups",
+            remote_bucket_name="bucket",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="ACCESS",
+            remote_secret_access_key_env_var="SECRET",
+            automation_enabled=False,
+            schedule="",
+        )
+        descriptor = _record_media_capture_descriptor(
+            snapshot_root=snapshot_root,
+            snapshot_remote_root="snapshots/snap-1",
+            payload=payload,
+            policy=policy,
+            uploader=uploader,
+            failures=failures,
+        )
+
+        assert descriptor["status"] == "failed"
+        assert descriptor["remote_keys"] == ["remote/a.png"]
+        assert failures == ["media/b.png: offline"]

@@ -75,6 +75,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     content identity of installed modules and project-owned apps; restore refuses an unknown
     version or a changed migration file, and backup files are created owner-only with
     collision-resistant names.
+  - **Backups capture media and serialize restores.** Each backup stores its media set with
+    per-file checksums and media sync restores that captured set; a restore holds an advisory
+    lock, and a version 1 backup restores only the database and says so.
   - **Supply chain pinned and scanned.** Publishing actions are pinned, the generated container and
     the published core wheel are checked, and security suppressions expire on review horizons.
   - **Quality gate uses fixed thresholds.** `make quality` fails at CC ≥ 21, files ≥ 800 lines,

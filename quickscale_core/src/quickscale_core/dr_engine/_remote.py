@@ -178,6 +178,16 @@ def _delete_snapshot_storage(
             if remote_key:
                 remote_keys.add(remote_key)
 
+    media_descriptor = child_descriptors_json.get("media")
+    if isinstance(media_descriptor, dict):
+        media_remote_keys = media_descriptor.get("remote_keys")
+        if isinstance(media_remote_keys, list):
+            remote_keys.update(
+                str(remote_key).strip()
+                for remote_key in media_remote_keys
+                if str(remote_key).strip()
+            )
+
     if artifact is not None and artifact.remote_key:
         remote_keys.add(artifact.remote_key)
 

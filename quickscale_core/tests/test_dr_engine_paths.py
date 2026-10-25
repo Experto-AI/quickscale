@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from quickscale_core.dr_engine._paths import (
@@ -598,6 +600,164 @@ class TestSnapshotCaptureIsComplete:
             },
         )
         assert _snapshot_capture_is_complete(snapshot) is True
+
+    def test_incomplete_when_a_captured_media_file_is_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """A captured media manifest that names a missing file is incomplete."""
+        dump_path = tmp_path / "database" / "dump.dump"
+        dump_path.parent.mkdir(parents=True)
+        dump_path.write_text("dump data")
+        manifest_path = tmp_path / "media-sync-manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "manifest_version": 2,
+                    "status": "ready",
+                    "capture": {
+                        "status": "captured",
+                        "relative_root": "media",
+                        "file_count": 1,
+                    },
+                    "inventory": [{"relative_path": "missing.png"}],
+                }
+            )
+        )
+
+        snapshot = _make_snapshot(
+            local_root_path=str(tmp_path),
+            status="ready",
+            authoritative_dump=_make_artifact(
+                local_path=str(dump_path),
+                remote_key="",
+            ),
+            child_descriptors_json={
+                "database": {"status": "ready"},
+                "sidecars": {
+                    "media-sync-manifest.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                    "env-var-manifest.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                    "release-metadata.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                    "promotion-verification.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                },
+            },
+        )
+
+        assert _snapshot_capture_is_complete(snapshot) is False
+
+    def test_incomplete_when_a_version_two_manifest_has_no_capture(
+        self, tmp_path: Path
+    ) -> None:
+        """A version 2 media manifest without a capture is incomplete."""
+        dump_path = tmp_path / "database" / "dump.dump"
+        dump_path.parent.mkdir(parents=True)
+        dump_path.write_text("dump data")
+        manifest_path = tmp_path / "media-sync-manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "manifest_version": 2,
+                    "status": "ready",
+                    "inventory": [],
+                }
+            )
+        )
+
+        snapshot = _make_snapshot(
+            local_root_path=str(tmp_path),
+            status="ready",
+            authoritative_dump=_make_artifact(
+                local_path=str(dump_path),
+                remote_key="",
+            ),
+            child_descriptors_json={
+                "database": {"status": "ready"},
+                "sidecars": {
+                    "media-sync-manifest.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                    "env-var-manifest.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                    "release-metadata.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                    "promotion-verification.json": {
+                        "status": "ready",
+                        "local_path": str(manifest_path),
+                    },
+                },
+            },
+        )
+
+        assert _snapshot_capture_is_complete(snapshot) is False
+
+    def _remote_only_snapshot(self, remote_keys: list[str]) -> Any:
+        return _make_snapshot(
+            local_root_path="/missing-snapshot",
+            status="ready",
+            authoritative_dump=_make_artifact(
+                local_path=None, remote_key="s3://bucket/dump"
+            ),
+            child_descriptors_json={
+                "database": {"status": "ready"},
+                "media": {
+                    "status": "ready",
+                    "metadata": {"capture_status": "captured", "file_count": 1},
+                    "remote_keys": remote_keys,
+                },
+                "sidecars": {
+                    "media-sync-manifest.json": {
+                        "status": "ready",
+                        "local_path": "",
+                        "remote_key": "s3://bucket/m1",
+                    },
+                    "env-var-manifest.json": {
+                        "status": "ready",
+                        "local_path": "",
+                        "remote_key": "s3://bucket/m2",
+                    },
+                    "release-metadata.json": {
+                        "status": "ready",
+                        "local_path": "",
+                        "remote_key": "s3://bucket/m3",
+                    },
+                    "promotion-verification.json": {
+                        "status": "ready",
+                        "local_path": "",
+                        "remote_key": "s3://bucket/m4",
+                    },
+                },
+            },
+        )
+
+    def test_remote_only_captured_media_complete_when_all_keys_recorded(
+        self,
+    ) -> None:
+        snapshot = self._remote_only_snapshot(["s3://bucket/media/hero.png"])
+
+        assert _snapshot_capture_is_complete(snapshot) is True
+
+    def test_remote_only_captured_media_incomplete_without_remote_keys(
+        self,
+    ) -> None:
+        snapshot = self._remote_only_snapshot([])
+
+        assert _snapshot_capture_is_complete(snapshot) is False
 
     def test_complete_with_remote_key(self) -> None:
         """Dump and sidecars with only remote_key (no local) returns True."""

@@ -1607,6 +1607,24 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
             "authoritative_dump": {"filename": "db.dump"},
         },
     )
+    _dr_output._echo_plan_summary(
+        {
+            "route": "local-to-railway-develop",
+            "snapshot_id": "snap-123",
+            "status": "ready",
+            "database": {
+                "status": "ready",
+                "warnings": [
+                    {
+                        "code": "media_not_captured",
+                        "message": "database only",
+                    }
+                ],
+            },
+            "media": {"status": "ready"},
+            "env_vars": {"status": "ready"},
+        }
+    )
     _dr_output._echo_execute_summary(
         {
             "route": "local-to-railway-develop",
@@ -1614,7 +1632,15 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
             "status": "partial",
             "rollback_pin": {"expires_at": "2026-04-06T18:00:00+00:00"},
             "env_vars": {"status": "manual_required"},
-            "database": {"status": "skipped"},
+            "database": {
+                "status": "skipped",
+                "warnings": [
+                    {
+                        "code": "media_not_captured",
+                        "message": "database only",
+                    }
+                ],
+            },
             "media": {"status": "completed"},
         }
     )
@@ -1629,6 +1655,7 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
 
     captured = capsys.readouterr().out
 
+    assert "Warning [media_not_captured]: database only" in captured
     assert route_report["verification_records"] == [
         {
             "route": "local-to-railway-develop",

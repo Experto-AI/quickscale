@@ -47,7 +47,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Optional |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
-| SA322 | Make backup restore safe and its recovery point coherent | 3 | — | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
 | SA325 | Make module settings, defaults, messages and READMEs follow one contract | 3 | — | Optional |
@@ -63,8 +62,7 @@ Track 1: SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA322 (a → b → c)
-         ─► SA325 ─► SA326 ─► [SA191d (production)] SA277
+Track 3: SA325 ─► SA326 ─► [SA191d (production)] SA277
      release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA153 (j); SA191d (production) ─► SA153 (f)
 ```
@@ -86,7 +84,7 @@ project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA322 (c) | yes | no: SA191d (production) for SA277 | yes: SA322 (a), SA322 (b) |
+| 3 | SA325 | yes | no: SA191d (production) for SA277 | yes: SA322 |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -301,26 +299,7 @@ update; the cutover does not wait for them.
 
 - [x] **SA319 — Update modules as one sealed-tag transaction.**
 
-- [ ] **SA322 — Make backup restore safe and its recovery point coherent.**
-
-  Closes tech `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
-  `backups-restore-not-atomic`, `backups-creation-lock-expires-live`,
-  `backups-validate-action-view-permission`, `backups-dump-files-world-readable`,
-  `backups-filename-second-resolution-collision`, and arch `backup-restore-incoherent` (option 1).
-  The one-way artifact-format choice is made once in (b), behind a manifest version; later format
-  changes are version bumps.
-
-  **Slices:**
-  - [x] (a) Restore safety: the artifact row survives a restore and a metadata failure is
-    visible; prune always keeps the newest valid snapshot; restore runs in one transaction or
-    behind a pre-restore safety dump; the create lock stays held for the run, proven by a
-    long-backup test (Tier 2-full).
-  - [x] (b) After (a), decisions record the artifact format; the manifest carries a version and
-    project-app migration hashes; restore refuses an unknown version or a hash mismatch; the S4
-    permission, file-mode and filename fixes ride along (Tier 2-full).
-  - [ ] (c) After (b), capture media or an immutable media manifest per the recorded format, and
-    hold a restore advisory lock; a DB + media + project-schema drill restores the captured set,
-    and a killed restore leaves no partial database (Tier 2-full).
+- [x] **SA322 — Make backup restore safe and its recovery point coherent.**
 
 - [ ] **SA325 — Make module settings, defaults, messages and READMEs follow one contract.**
 

@@ -259,6 +259,14 @@ def build_database_plan(
         "confirmation_value": confirmation_value,
         "restore_scope": authoritative_dump.get("restore_scope"),
         "restore_scope_label": authoritative_dump.get("restore_scope_label"),
+        "warnings": [
+            {
+                "code": warning.code,
+                "message": warning.message,
+                "details": warning.details,
+            }
+            for warning in result.warnings
+        ],
     }
 
 
@@ -325,6 +333,14 @@ def execute_database_restore(
         "check_message": check_message,
         "confirmation_value": confirmation_value,
         "restore_file": restore_file,
+        "warnings": [
+            {
+                "code": warning.code,
+                "message": warning.message,
+                "details": warning.details,
+            }
+            for warning in restore_result.warnings
+        ],
     }
 
 

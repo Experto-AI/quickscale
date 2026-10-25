@@ -242,6 +242,11 @@ def _snapshot_capture_is_complete(snapshot: Any) -> bool:
         ):
             return False
 
+    from quickscale_core.dr_engine import _media as _media_module
+
+    if _media_module._snapshot_media_capture_integrity_issues(snapshot):
+        return False
+
     return True
 
 

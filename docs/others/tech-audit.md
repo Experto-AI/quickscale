@@ -31,6 +31,12 @@ audit evidence and now carry `status: fixed`:
 the audit evidence and now carry `status: fixed`: `backups-validate-action-view-permission`,
 `backups-dump-files-world-readable`, and `backups-filename-second-resolution-collision`.
 
+**Fix record (2026-10-25).** SA322 (c) closes the arch `backup-restore-incoherent` recovery-point
+finding: backups capture their media bytes with checksums, media sync restores that captured set,
+and restore holds an advisory lock; a failed restore leaves the target database unchanged. It also
+resolves the `media-sync-manifest-traversal` watchlist entry by rejecting a `..` segment at the
+capture, sync and restore boundary.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -402,7 +408,6 @@ items:
   - {id: templates-healthcheck-liveness, status: watchlist}
   - {id: notifications-pre-signature-db-read, status: watchlist}
   - {id: media-storage-orphans, status: watchlist}
-  - {id: media-sync-manifest-traversal, status: watchlist}
   - {id: backups-artifact-path-trust, status: watchlist}
   - {id: social-cache-bulk-invalidation, status: watchlist}
   - {id: postcss-selector-parser-build-time-advisory, status: accepted}
@@ -1091,9 +1096,9 @@ reviewers.
 - **Generated production topology is prose, not an artifact** (arch F4): media is container-local
   by default and schema changes at boot. The README's production claim is corrected; the structural
   form is arch `generated-deploy-topology-unmodeled`.
-- **Backups define a database dump, not a coherent recovery point** (arch F6): media is read live
-  and restore has no lease; project migration identity is enforced since SA322 (b). The tickets are
-  the backup findings; the structural form is arch `backup-restore-incoherent`.
+- **Backups hold a coherent recovery point** (arch F6, closed by SA322): media is captured into the
+  versioned snapshot and restored from it, project migration identity is enforced, and a restore
+  lease serializes destructive runs.
 - **No provider-object reconciliation seam for billing**: the signed webhook payload is the only
   source of truth, so ordering and missed-event recovery are ad hoc. The ticket is
   `billing-webhook-status-applied-out-of-order`; the structural fix is a provider adapter that
@@ -1169,7 +1174,6 @@ trigger. The chain pass reads this list.
 | `templates-healthcheck-liveness` | the healthcheck is DB-free; a broken DB still reports healthy | a deployment with a misconfigured runtime URL is routed traffic | not fired: liveness vs readiness is a deliberate choice; add a readiness probe |
 | `notifications-pre-signature-db-read` | `ingest_webhook_event` loads the settings snapshot (DB) before verifying the Svix signature | sustained unauthenticated traffic to the webhook endpoint | not fired: one cheap `exists()` per request; add a throttle or verify the signature before the read |
 | `media-storage-orphans` | blog/listing media and avatars are deleted with the row only; no storage cleanup | an erasure/retention obligation covers media objects | not fired: the public-media contract defers this; add a cleanup job |
-| `media-sync-manifest-traversal` | media-sync joins the manifest `relative_path` to `MEDIA_ROOT` with only `.lstrip("/")` | a `..` key enters the private bucket/manifest | not fired: no first-party upload writes such a key; use `sanitize_relative_media_path` at the boundary |
 | `backups-artifact-path-trust` | download/restore/purge treat a restored row's `local_path`/`snapshot.local_root_path` as authoritative | a crafted/restored DB row reaches the backup admin | not fired: the trusted-match upload path is the intended boundary; treat post-restore rows as data |
 | `social-cache-bulk-invalidation` | Django admin bulk delete does not invalidate the social public payload cache | a bulk delete is used on published social links | not fired: no bulk-delete workflow documented; add a post-delete signal |
 | `postcss-selector-parser-build-time-advisory` | **accepted** `GHSA-rj75-hqrm-r3gf` / `postcss-selector-parser@6.1.4`, dev-only build-time, owner Track 2, expires 2026-11-22 | a dependency/lockfile or exposure change; before expiry | carried: the current JS lock still resolves 6.1.4; the acceptance evidence was not re-run. Re-check `pnpm audit` and `pnpm audit --prod` on the next dependency change |

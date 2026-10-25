@@ -712,18 +712,18 @@ class TestMediaSyncOrchestration:
             patch(
                 "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
                 return_value={
+                    "manifest_version": 1,
                     "status": "ready",
                     "inventory": [
                         {"relative_path": "/present.jpg"},
                         {"relative_path": "missing.jpg"},
-                        {"relative_path": ""},
                         "not-a-dict",
                     ],
                 },
             ),
             patch(
                 "quickscale_core.dr_engine._media._resolve_media_runtime",
-                side_effect=[source_runtime, target_runtime],
+                side_effect=[target_runtime, source_runtime],
             ),
             patch("quickscale_core.dr_engine._media._copy_media_item") as copier,
         ):
@@ -737,6 +737,7 @@ class TestMediaSyncOrchestration:
             "snapshot_id": "snap-a2",
             "status": "partial",
             "dry_run": True,
+            "source": "live",
             "strategy": "local_to_railway",
             "source_backend": "local",
             "target_backend": "railway",
@@ -768,13 +769,14 @@ class TestMediaSyncOrchestration:
             patch(
                 "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
                 return_value={
+                    "manifest_version": 1,
                     "status": "ready",
                     "inventory": [{"relative_path": "a"}, {"relative_path": "b"}],
                 },
             ),
             patch(
                 "quickscale_core.dr_engine._media._resolve_media_runtime",
-                side_effect=[source, target],
+                side_effect=[target, source],
             ),
             patch(
                 "quickscale_core.dr_engine._media._copy_media_item",
@@ -793,6 +795,71 @@ class TestMediaSyncOrchestration:
             call(relative_path="a", source_runtime=source, target_runtime=target),
             call(relative_path="b", source_runtime=source, target_runtime=target),
         ]
+
+    def test_sync_rejects_an_unsafe_inventory_path(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=_snapshot(tmp_path),
+            ),
+            patch(
+                "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
+                return_value={
+                    "manifest_version": 1,
+                    "status": "ready",
+                    "inventory": [{"relative_path": "../escape.jpg"}],
+                },
+            ),
+            patch(
+                "quickscale_core.dr_engine._media._resolve_media_runtime",
+                return_value={
+                    "backend": "local",
+                    "use_s3_compatible": False,
+                    "media_root": tmp_path,
+                },
+            ),
+        ):
+            with pytest.raises(BackupError, match="not a safe relative path"):
+                _media.sync_backup_snapshot_media(
+                    "snap-a2",
+                    dry_run=True,
+                    target_runtime_settings={},
+                )
+
+    def test_sync_refuses_a_version_two_manifest_without_a_capture(
+        self, tmp_path: Path
+    ) -> None:
+        with (
+            patch(
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=_snapshot(tmp_path),
+            ),
+            patch(
+                "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
+                return_value={
+                    "manifest_version": 2,
+                    "status": "ready",
+                    "inventory": [],
+                },
+            ),
+            patch(
+                "quickscale_core.dr_engine._media._resolve_media_runtime",
+                return_value={
+                    "backend": "local",
+                    "use_s3_compatible": False,
+                    "media_root": tmp_path,
+                },
+            ),
+        ):
+            with pytest.raises(
+                BackupError,
+                match="without a completed captured media set",
+            ):
+                _media.sync_backup_snapshot_media(
+                    "snap-a2",
+                    dry_run=True,
+                    target_runtime_settings={},
+                )
 
     @pytest.mark.parametrize(
         ("manifest", "message"),
