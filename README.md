@@ -208,15 +208,41 @@ All account templates extend `quickscale_auth/base.html`. Override the base temp
 
 ## Extending
 
-- **Custom user fields**: add fields to `User` in `modules/auth/models.py`, run
-  `python manage.py makemigrations quickscale_auth && python manage.py migrate`, and update
-  `forms.py` to include them.
-- **Registration hooks**: extend the `user_signed_up` receiver in `receivers.py` to add
-  welcome emails, profiles, or logging.
-- **Social providers**: provider integrations are not part of the current shipped
-  configuration contract.
-- **Distribution and updates**: modules are distributed through the git-subtree workflow;
-  update an embedded module with `quickscale update`.
+### What QuickScale owns
+
+The module package under `modules/auth/` — the `User` model and migrations, the allauth adapter,
+account views, templates, and static assets — its manifest options, and the managed wiring
+`quickscale apply` writes (`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+`quickscale.yml` values for the options above, project templates under `templates/` including
+`templates/quickscale_auth/` overrides, project-owned models that relate to the user, project
+static assets, and the account data itself.
+
+### Update-safe customizations
+
+Change the mutable options, override account templates or assets in the project, and connect a
+project-owned receiver to django-allauth's `user_signed_up` signal from a project `AppConfig`.
+None of these edits module source, and `quickscale update` never rewrites project templates.
+
+### Structured extension points
+
+`User` is the `AUTH_USER_MODEL` foundation; project-specific user data belongs in a project-owned
+model related to `settings.AUTH_USER_MODEL`, not in `modules/auth/models.py`. Installed modules
+publish post-auth redirect hooks and `account_deletion_handlers` capabilities that the module's
+adapter and deletion view collect, so a project module can contribute either without auth
+naming it. Social provider integrations are not part of the shipped contract.
+
+### Upgrade expectations
+
+Tier 1 settings, documented services, template overrides, and signals survive normal module
+updates; the `User` model and migrations are updateable module code, so never edit them in place.
+`quickscale update` refuses a local edit under `modules/auth/` unless `--allow-local-changes`,
+and managed wiring is regenerated, never hand-edited.
+
+### Development and support
+
 - **Development**: module tests run from the maintainer repository root, for example
   `make MODULE=auth test -- --modules`; run `poetry run pytest` inside the module directory for
   a standalone checkout.
