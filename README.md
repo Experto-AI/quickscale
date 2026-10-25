@@ -99,7 +99,38 @@ This module ships no management commands.
 
 ## Extending
 
-- The template tags are the supported manual adoption path for server-rendered templates;
-  they do not rewrite templates automatically.
-- Related documentation: [provider decision](../../docs/technical/decisions.md#analytics-provider)
-  and the [module workspace README](../README.md).
+### What QuickScale owns
+
+The module package under `modules/analytics/`, its `module.yml` options and derived settings, its
+dashboard page, and the managed wiring `quickscale apply` writes (`<package>/settings/modules.py`,
+`<package>/urls_modules.py`).
+
+### What the project owns
+
+`quickscale.yml` values for the options above, the project's templates and frontend, its own
+event names and call sites, and all application data.
+
+### Update-safe customizations
+
+Setting values, project template overrides, and calls to `capture_event()` from project-owned
+code survive a module update; QuickScale never rewrites project templates or frontend files.
+Adopting analytics in server-rendered templates stays a manual, project-owned step through the
+module's template tags.
+
+### Structured extension points
+
+`capture_event()`, `is_enabled()`, `is_analytics_active()`,
+`analytics_enabled_for_request()`, `get_distinct_id()`, and
+`get_template_analytics_context()` are the documented service surface; feature modules name
+their own events under the `quickscale_<module>_<event>` stem. The settings snapshot and client
+internals stay private.
+
+### Upgrade expectations
+
+Tier 1 service, setting, and template-tag surfaces survive normal module updates with little or
+no merge work; the dashboard page and its URL remain module-owned. Never edit
+`modules/analytics/`: `quickscale update` refuses a local edit unless `--allow-local-changes`,
+and the managed wiring is regenerated, never hand-edited.
+
+Related documentation: [provider decision](../../docs/technical/decisions.md#analytics-provider)
+and the [module workspace README](../README.md).
