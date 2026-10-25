@@ -459,7 +459,7 @@ def test_contract_helpers_normalize_urls_and_raise_specific_errors() -> None:
         )
     with pytest.raises(
         ValueError,
-        match="Embeds support only TikTok and YouTube in v0.79.0.",
+        match="Embeds support only TikTok and YouTube.",
     ):
         resolve_social_embed_metadata("https://www.linkedin.com/company/quickscale")
     with pytest.raises(
@@ -531,7 +531,7 @@ def test_social_models_enforce_guardrails_and_invalidate_cache(
             invalid_embed.full_clean()
 
     assert exc_info.value.message_dict["provider_name"] == [
-        "Embeds support only TikTok and YouTube in v0.79.0."
+        "Embeds support only TikTok and YouTube."
     ]
 
 
