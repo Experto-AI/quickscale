@@ -136,7 +136,7 @@ def _snapshot(**overrides: Any) -> services.AnalyticsRuntimeSettingsSnapshot:
         "provider": services.ANALYTICS_PROVIDER_POSTHOG,
         "posthog_api_key_env_var": "POSTHOG_API_KEY",
         "posthog_host_env_var": "POSTHOG_HOST",
-        "posthog_host": services.ANALYTICS_POSTHOG_DEFAULT_HOST,
+        "posthog_host": "https://us.i.posthog.com",
         "exclude_debug": False,
         "exclude_staff": False,
         "anonymous_by_default": True,
@@ -236,7 +236,7 @@ def test_configure_analytics_client_missing_enabled_setting_raises_attribute_err
     QUICKSCALE_ANALYTICS_PROVIDER="plausible",
 )
 def test_configure_analytics_client_rejects_unsupported_providers(caplog) -> None:
-    """Only the approved PostHog provider should initialize in v0.80.0."""
+    """Only the approved PostHog provider should initialize."""
     caplog.set_level(logging.WARNING, logger=services.__name__)
 
     assert services.configure_analytics_client() is False

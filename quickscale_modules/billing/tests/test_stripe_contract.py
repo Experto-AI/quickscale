@@ -7,6 +7,7 @@ through the installed SDK. No network access is required.
 
 from __future__ import annotations
 import quickscale_modules_billing._payload as _payload
+import quickscale_modules_billing._validation as _validation
 
 import hashlib
 import hmac
@@ -28,7 +29,12 @@ from quickscale_modules_billing.models import (
     Subscription,
     WebhookEvent,
 )
-from quickscale_modules_billing._settings import STRIPE_API_VERSION
+from dataclasses import replace
+
+from quickscale_modules_billing._settings import (
+    STRIPE_API_VERSION,
+    BillingSettingsSnapshot,
+)
 from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
     BillingError,
@@ -121,6 +127,49 @@ def test_construct_event_through_real_sdk_keeps_event_id() -> None:
 
     assert event["id"] == "evt_signed"
     assert event["api_version"] == STRIPE_API_VERSION
+
+
+@pytest.mark.django_db
+def test_checkout_validation_uses_the_configured_billing_currency() -> None:
+    """The module-wide currency gates every Checkout, not only the plan row."""
+    plan = Plan.objects.create(
+        name="Euro Contract",
+        slug="euro-contract",
+        stripe_price_id="price_eur_contract",
+        credits_per_period=100,
+        price_cents=1900,
+        currency="eur",
+        billing_interval=Plan.BillingInterval.MONTHLY,
+    )
+    stripe_price = {
+        "unit_amount": 1900,
+        "currency": "eur",
+        "type": "recurring",
+        "recurring": {"interval": "month"},
+    }
+    with pytest.raises(BillingValidationError, match="configured billing currency"):
+        _validation._validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
+
+    supplied = replace(BillingSettingsSnapshot.from_settings(), billing_currency="eur")
+    _validation._validate_stripe_price_parity(
+        plan=plan,
+        stripe_price=stripe_price,
+        settings_snapshot=supplied,
+    )
+
+    usd_plan = _create_plan(price_id="price_usd_contract")
+    usd_price = {
+        "unit_amount": 1900,
+        "currency": "usd",
+        "type": "recurring",
+        "recurring": {"interval": "month"},
+    }
+    with pytest.raises(BillingValidationError, match="configured billing currency"):
+        _validation._validate_stripe_price_parity(
+            plan=usd_plan,
+            stripe_price=usd_price,
+            settings_snapshot=supplied,
+        )
 
 
 def test_pinned_api_version_matches_installed_sdk_named_release() -> None:

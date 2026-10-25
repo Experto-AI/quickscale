@@ -49,7 +49,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
-| SA325 | Make module settings, defaults, messages and READMEs follow one contract | 3 | — | Optional |
 | SA326 | Wire the unwired release and security gates | 3 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d, SA320 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
@@ -62,7 +61,7 @@ Track 1: SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA325 ─► SA326 ─► [SA191d (production)] SA277
+Track 3: SA326 ─► [SA191d (production)] SA277
      release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA153 (j); SA191d (production) ─► SA153 (f)
 ```
@@ -84,7 +83,7 @@ project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA325 | yes | no: SA191d (production) for SA277 | yes: SA322 |
+| 3 | SA326 | yes | no: SA191d (production) for SA277 | yes: SA325 |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -99,12 +98,12 @@ SA191d (production) clears SA277.
   manifests, locks and advisory disposition; module runtime code and tests in billing, CRM, orgs,
   auth, storage, forms, listings and notifications.
 - Track 3: `beta_migration/`, apply/update state and CLI commands, the contract-vintage gate,
-  backups and `dr_engine`, module manifests/READMEs for SA325, repository gates, supported-version
+  backups and `dr_engine`, module manifests/READMEs, repository gates, supported-version
   fixtures, versioned upgrade prompt, and upgrade decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
   `decisions.md`, `README.md.j2` (SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
-  SA321), billing `_settings.py` (SA310, SA314), module manifests (SA320 (c), SA325),
+  SA321), billing `_settings.py` (SA310, SA314), module manifests (SA320 (c)),
   `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
   (`App.test.tsx`, `AppRoutes.test.tsx`; SA153 adds pages).
   Reconcile after each merge and run the consistency test.
@@ -301,16 +300,7 @@ update; the cutover does not wait for them.
 
 - [x] **SA322 — Make backup restore safe and its recovery point coherent.**
 
-- [ ] **SA325 — Make module settings, defaults, messages and READMEs follow one contract.**
-
-  Closes coherence `manifest-declared-surface`, `duplicated-default-constants`,
-  `stale-version-error-strings`, and `readme-extending-contract` (proposals 3, 9, 12, 14; gaps 24,
-  27, 30–31). Q1 default: `storage.private_media_enabled` is rejected as not supported until
-  private-media authorization exists. Q3 default: the five Extending items are mandatory.
-
-  **Acceptance:** every accepted manifest option has a live consumer; code constants derive from
-  manifest defaults; no module source message names a release; all twelve READMEs answer the five
-  Extending questions; each detector carries the audit's fixture controls (Tier 2-full).
+- [x] **SA325 — Make module settings, defaults, messages and READMEs follow one contract.**
 
 - [ ] **SA326 — Wire the unwired release and security gates.**
 

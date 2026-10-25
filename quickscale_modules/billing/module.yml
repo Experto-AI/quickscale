@@ -39,7 +39,7 @@ config:
       type: string
       default: "usd"
       django_setting: QUICKSCALE_BILLING_CURRENCY
-      description: "ISO 4217 billing currency code used for plan metadata and Checkout validation."
+      description: "ISO 4217 billing currency code; Checkout refuses a plan whose currency differs from this value or from its Stripe price."
       validation:
         choices:
           - aud

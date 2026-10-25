@@ -99,7 +99,9 @@ _ZERO_DECIMAL_PRICE_CURRENCIES = frozenset({"jpy"})
 
 
 def _format_price_cents(cents: int, currency: str) -> str:
-    normalized_currency = (currency or "usd").strip().lower() or "usd"
+    normalized_currency = currency.strip().lower()
+    if not normalized_currency:
+        raise ValueError("Plan currency is required.")
     decimal_places = 0 if normalized_currency in _ZERO_DECIMAL_PRICE_CURRENCIES else 2
     amount = Decimal(cents) / (Decimal(10) ** decimal_places)
     amount_format = ",.0f" if decimal_places == 0 else ",.2f"

@@ -90,12 +90,7 @@ config:
       description: "When false, media URLs are public and cache-friendly"
       validation: {}
 
-  immutable:
-    private_media_enabled:
-      type: boolean
-      default: false
-      description: "Reserved extension point for future private media authorization flows"
-      validation: {}
+  immutable: {}
 
 required_modules: []
 
@@ -120,6 +115,16 @@ retired_options:
   secret_access_key: >-
     Legacy config key 'secret_access_key' is no longer supported. Use
     'secret_access_key_env_var' to reference an environment variable instead.
+  private_media_enabled: >-
+    Option 'private_media_enabled' is not supported: QuickScale has no
+    private-media authorization, so the switch would have no effect. Remove
+    the option; public media delivery keeps its current contract.
+
+retired_settings:
+  QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED: >-
+    Setting 'QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED' is no longer supported:
+    QuickScale has no private-media authorization. Remove the setting; public
+    media delivery keeps its current contract.
 
 derivation:
   wiring_projections:
@@ -137,14 +142,11 @@ derivation:
             - quickscale_modules_storage.markdownx_urls
       description: "The one shared staff-guarded Markdownx editor mount (rule 41)"
 
-  # The immutable switch has no django_setting of its own; the derived-setting
-  # vocabulary is its one home: the projected setting equals the option value.
+  # The manifest owns every setting's only default; no module-source fallback
+  # repeats one (rule 3).  Private-media authorization does not exist, so a
+  # switch for it is refused by name in ``retired_options`` instead of being
+  # accepted as an inert option (rule 12).
   derived_settings:
-    - setting_key: QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED
-      derivation_type: direct
-      expression:
-        option: private_media_enabled
-      description: "Reserved private-media authorization switch"
     - setting_key: AWS_ACCESS_KEY_ID
       derivation_type: computed
       expression:

@@ -25,6 +25,7 @@ from scripts.module_conventions._settings_manifest import (
     _adapter_pattern_compilation_violations,
     _contains_key,
     _declares_option_blocks,
+    _derived_consumer_violations,
     _manifest_key_violations,
     _option_schema_violations,
 )
@@ -38,6 +39,7 @@ from scripts.module_conventions._settings_names import (
 )
 from scripts.module_conventions._settings_reads import (
     _declared_settings,
+    _duplicated_default_violations,
     _manifest_declared_settings,
     _module_level_targets,
     _option_settings,
@@ -234,13 +236,17 @@ def rule_3_settings_reads(corpus: Corpus) -> list[str]:
     The statically checkable clauses: module code reads only settings its
     manifest (or its own adapter) declares, never another module's setting,
     and reads no setting through ``getattr(settings, ...)``; the module's
-    ``tests/settings.py`` defines every manifest option's setting.
+    ``tests/settings.py`` defines every manifest option's setting.  An
+    option's default lives only in the manifest, so a module-source
+    ``*DEFAULT*`` constant, function default, or ``or`` fallback that repeats
+    one is a second home (coherence proposal 12).
     """
     violations: list[str] = []
     for module in corpus.modules:
         declared = _declared_settings(module)
         violations.extend(_tests_settings_violations(module))
         violations.extend(_read_violations(module, declared))
+        violations.extend(_duplicated_default_violations(module))
     return violations
 
 
@@ -264,6 +270,7 @@ def rule_12_manifest_options(corpus: Corpus) -> list[str]:
                 continue
             for key, option in options.items():
                 violations.extend(_option_schema_violations(module, kind, key, option))
+        violations.extend(_derived_consumer_violations(corpus, module))
         if _contains_key(manifest, "validation_rules"):
             violations.append(f"rule 12: {module.name}: manifest declares retired validation_rules")
     return violations

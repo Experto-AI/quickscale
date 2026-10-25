@@ -106,7 +106,7 @@ CASE_BUILDERS = {
         _with_readme(GOLDEN_README.replace("## Operations\nNone.\n", ""))
     ),
     "out_of_order_heading": lambda: _corpus(
-        _with_readme("## Extending\nNone.\n\n" + GOLDEN_README.replace("## Extending\nNone.\n", ""))
+        _with_readme("## Extending\nNone.\n\n" + GOLDEN_README.split("## Extending")[0])
     ),
     "versioned_heading": lambda: _corpus(
         _with_readme(

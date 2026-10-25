@@ -47,6 +47,20 @@ REQUIRED_HEADINGS = (
 #: A level-two heading line: ``## <heading>``.
 _HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
+#: A level-three heading line: ``### <heading>``.
+_SUBHEADING = re.compile(r"^###\s+(.+?)\s*$", re.MULTILINE)
+
+#: Rule 38's Extending contract: the five answers every module README carries,
+#: in order, as level-three subsections (``module-extension.md`` §Standard
+#: Documentation Contract, coherence proposal 9).
+EXTENDING_ITEMS = (
+    "What QuickScale owns",
+    "What the project owns",
+    "Update-safe customizations",
+    "Structured extension points",
+    "Upgrade expectations",
+)
+
 #: A version number inside a heading, e.g. ``2.0`` in ``## 2.0 Notes``.
 _VERSIONED_HEADING = re.compile(r"\d+\.\d+")
 
@@ -201,6 +215,47 @@ def _role_listing_violations(module: Module, public_surface: str) -> list[str]:
     return []
 
 
+def _subsections(section: str) -> dict[str, str]:
+    """Return a level-two section's level-three bodies keyed by heading."""
+    sections: dict[str, str] = {}
+    current = ""
+    for line in section.splitlines():
+        match = _SUBHEADING.match(line)
+        if match:
+            current = match.group(1)
+            sections.setdefault(current, "")
+            continue
+        if current:
+            sections[current] += line + "\n"
+    return sections
+
+
+def _extending_violations(module: Module, extending: str) -> list[str]:
+    """
+    Return rule 38's Extending-contract findings.
+
+    The five standard questions are required as level-three subsections, in
+    order, each with a non-blank answer; ``module-extension.md`` owns their
+    wording.  A missing ``## Extending`` heading is the heading check's
+    finding, so an absent section reports nothing here.
+    """
+    headings = _SUBHEADING.findall(extending)
+    violations: list[str] = []
+    position = 0
+    for item in EXTENDING_ITEMS:
+        try:
+            position = headings.index(item, position) + 1
+        except ValueError:
+            violations.append(f"rule 38: {module.name}: Extending does not answer {item!r}")
+            break
+    bodies = _subsections(extending)
+    for item in EXTENDING_ITEMS:
+        body = bodies.get(item)
+        if body is not None and not body.strip():
+            violations.append(f"rule 38: {module.name}: Extending {item!r} has no answer")
+    return violations
+
+
 def _readme_violations(module: Module) -> list[str]:
     """Return rule 38's findings for one module, in the pre-split order."""
     readme = module.root_files.get("README.md")
@@ -209,11 +264,16 @@ def _readme_violations(module: Module) -> list[str]:
     headings = _readme_headings(readme)
     sections = _readme_sections(readme)
     commands = sections.get("Management commands", "")
+    heading_violations = _heading_violations(module, headings)
+    extending_violations = (
+        [] if heading_violations else _extending_violations(module, sections.get("Extending", ""))
+    )
     return [
-        *_heading_violations(module, headings),
+        *heading_violations,
         *_versioned_heading_violations(module, headings),
         *_configuration_violations(module, sections.get("Configuration", "")),
         *_command_violations(module, commands),
         *_flag_violations(module, commands),
         *_role_listing_violations(module, sections.get("Public surface", "")),
+        *extending_violations,
     ]

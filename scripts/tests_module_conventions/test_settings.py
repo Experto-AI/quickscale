@@ -23,6 +23,7 @@ _GOLDEN_EXTRA_SETTINGS = (
     "QUICKSCALE_DEMO_BACKEND = 'local'\n"
     "QUICKSCALE_DEMO_CDN_URL = '/demo/'\n"
     "QUICKSCALE_DEMO_MARKETING_HOST = ''\n"
+    "QUICKSCALE_DEMO_ALLOWED_TAGS = ['quickscale', 'transactional']\n"
 )
 
 
@@ -262,6 +263,65 @@ def test_derived_setting_read_control() -> None:
         "reads undeclared QUICKSCALE_DEMO_BACKEND_ALIAS" in violation
         for violation in _violations(checker.rule_3_settings_reads, undeclared)
     )
+
+
+def test_duplicated_default_control() -> None:
+    """Coherence proposal 12: a manifest default has one home."""
+    module = _golden_module()
+    assert _violations(checker.rule_3_settings_reads, module) == []
+    constant = _with_files(module, services='DEFAULT_BACKEND = "local"\n')
+    assert any(
+        "defines default constant 'DEFAULT_BACKEND' for option 'backend'" in violation
+        for violation in _violations(checker.rule_3_settings_reads, constant)
+    )
+    fallback = _with_files(
+        module,
+        services=('def public_url(prefix: str) -> str:\n    return prefix or "/demo/"\n'),
+    )
+    assert any(
+        "writes a code default for option 'cdn_url'" in violation
+        for violation in _violations(checker.rule_3_settings_reads, fallback)
+    )
+    sequence = _with_files(
+        module,
+        services='DEFAULT_ALLOWED_TAGS = ("quickscale", "transactional")\n',
+    )
+    assert any(
+        "defines default constant 'DEFAULT_ALLOWED_TAGS' for option 'allowed_tags'" in violation
+        for violation in _violations(checker.rule_3_settings_reads, sequence)
+    )
+    reader = _with_files(
+        module,
+        services=(
+            "from django.conf import settings\n\nBACKEND = settings.QUICKSCALE_DEMO_BACKEND\n"
+        ),
+    )
+    assert _violations(checker.rule_3_settings_reads, reader) == []
+
+
+def test_derived_setting_consumer_control() -> None:
+    """Coherence proposal 3: a derived setting is read or it is not accepted."""
+    module = _golden_module()
+    derived = copy.deepcopy(module.manifest)
+    derivation = derived["derivation"]
+    derivation["derived_settings"] = [
+        {
+            "setting_key": "QUICKSCALE_DEMO_ALIAS",
+            "derivation_type": "direct",
+            "expression": {"option": "backend"},
+            "description": "Backend alias.",
+        }
+    ]
+    unread = replace(module, manifest=derived)
+    assert any(
+        "derived setting QUICKSCALE_DEMO_ALIAS has no live consumer" in violation
+        for violation in _violations(checker.rule_12_manifest_options, unread)
+    )
+    wired = _with_files(
+        unread,
+        services=("from django.conf import settings\n\nALIAS = settings.QUICKSCALE_DEMO_ALIAS\n"),
+    )
+    assert _violations(checker.rule_12_manifest_options, wired) == []
 
 
 def test_env_var_default_vendor_vocabulary_controls() -> None:

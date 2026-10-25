@@ -1242,6 +1242,21 @@ def test_shipped_source_ticket_control() -> None:
     )
 
 
+@pytest.mark.parametrize("stamp", ["v0.80.0", "0.80.0"])
+def test_shipped_source_release_stamp_control(stamp: str) -> None:
+    """Coherence proposal 14: a source message names behaviour, not a release."""
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        services=(f'def message() -> str:\n    return "Unsupported since {stamp}."\n'),
+    )
+    assert any(
+        "message carries a release stamp" in violation
+        for violation in _violations(checker.rule_29_test_names, broken)
+    )
+    assert _violations(checker.rule_29_test_names, module) == []
+
+
 def test_manifest_ticket_control() -> None:
     module = _golden_module()
     broken = replace(module, manifest_text="# Manifest rules (T2.3 Phase 3)\n")

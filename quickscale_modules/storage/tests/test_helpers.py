@@ -320,25 +320,30 @@ class TestPublicUrlHelpers:
 
     def test_build_public_media_url_with_absolute_reference(self) -> None:
         absolute_url = "https://cdn.example.com/blog/uploads/image.png"
-        resolved = build_public_media_url(absolute_url)
+        resolved = build_public_media_url(absolute_url, media_url="/media/")
         assert resolved == absolute_url
 
     def test_build_public_media_url_with_empty_reference(self) -> None:
-        assert build_public_media_url("") == ""
+        assert build_public_media_url("", media_url="/media/") == ""
 
     def test_build_public_media_url_with_public_base_url(self) -> None:
         resolved = build_public_media_url(
             "blog/uploads/image.png",
             public_base_url="https://cdn.example.com/media",
+            media_url="/media/",
         )
         assert resolved == "https://cdn.example.com/media/blog/uploads/image.png"
 
-    def test_build_public_media_url_with_media_url_fallback(self) -> None:
+    def test_build_public_media_url_with_media_prefix(self) -> None:
         resolved = build_public_media_url(
             "blog/uploads/image.png",
             media_url="/media/",
         )
         assert resolved == "/media/blog/uploads/image.png"
+
+    def test_build_public_media_url_refuses_a_blank_media_prefix(self) -> None:
+        with pytest.raises(ImproperlyConfigured, match="MEDIA_URL"):
+            build_public_media_url("blog/uploads/image.png", media_url=" ")
 
     def test_build_public_media_url_with_relative_media_prefix_and_request(
         self,
@@ -353,6 +358,7 @@ class TestPublicUrlHelpers:
     def test_build_public_media_url_with_leading_slash_uses_request_uri(self) -> None:
         resolved = build_public_media_url(
             "/media/blog/uploads/image.png",
+            media_url="/media/",
             request=self._Request(),
         )
         assert resolved == "http://testserver/media/blog/uploads/image.png"

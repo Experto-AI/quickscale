@@ -20,7 +20,6 @@ from quickscale_modules_analytics._settings import (
 logger = logging.getLogger(__name__)
 
 ANALYTICS_PROVIDER_POSTHOG = "posthog"
-ANALYTICS_POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com"
 
 # Rule 22: the session holds only this module-generated random identifier.
 # The live session credential is never read to build an outbound value.
@@ -115,9 +114,7 @@ def configure_analytics_client() -> bool:
             return _set_disabled_state(snapshot, "disabled")
 
         if snapshot.provider != ANALYTICS_PROVIDER_POSTHOG:
-            logger.warning(
-                "QuickScale analytics only supports the PostHog provider in v0.80.0."
-            )
+            logger.warning("QuickScale analytics only supports the PostHog provider.")
             return _set_disabled_state(snapshot, "unsupported-provider")
 
         if snapshot.exclude_debug and bool(settings.DEBUG):
@@ -290,7 +287,6 @@ def is_enabled() -> bool:
 
 
 __all__ = [
-    "ANALYTICS_POSTHOG_DEFAULT_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
     "analytics_enabled_for_request",
     "capture_event",

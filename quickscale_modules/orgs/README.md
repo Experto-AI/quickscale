@@ -234,15 +234,40 @@ supported removal path; organization data cannot be silently dropped.
 
 ## Extending
 
-- A project-owned tenant model subclasses `TenantModel` (directly or through a module abstract
-  base), ships its own FORCE RLS migration through `apply_force_rls`, and classifies every
-  non-relational `*_id` field in `provider_id_classification` (`provider-backed` or
-  `not-provider-backed`). The purge refuses while any row of the organization carries a value
-  in a provider-backed field, naming the field, and the orgs system check fails on any `*_id`
-  field that neither a declared obligation nor its model classifies. See
-  [module-extension.md](../../docs/technical/module-extension.md#project-owned-tenant-models).
-- An app that owns organization-scoped data declares its removal obligations on its
-  `AppConfig` so purge and account deletion discharge them without orgs knowing the app. A
-  module that owns organization-scoped cache state also declares its keys through the
-  `organization_cache_keys` capability, so the purge clears them without orgs knowing the key
-  shapes.
+### What QuickScale owns
+
+The module package under `modules/orgs/` — models, migrations, managers, permissions, tenancy
+helpers, current-organization context, removal machinery, admin, middleware, views, and
+commands — its manifest options, and the managed wiring `quickscale apply` writes
+(`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+Organization, membership, and invitation data; `quickscale.yml` values for the options above; its
+own tenant models and their migrations, views, serializers, admin registration, and templates;
+and every project-owned app.
+
+### Update-safe customizations
+
+Change option values and override project templates or views. The tenant base, permissions,
+current-org context, and removal helpers are imported from `quickscale_modules_orgs`; settings
+and project code never copy them. Template overrides survive updates because QuickScale never
+rewrites them.
+
+### Structured extension points
+
+A project-owned tenant model subclasses `TenantModel` (directly or through a module abstract
+base), ships its own FORCE RLS migration through `apply_force_rls`, and classifies every
+non-relational `*_id` field in `provider_id_classification` (`provider-backed` or
+`not-provider-backed`). An app that owns organization-scoped data declares its removal
+obligations on its `AppConfig`, and a module that owns organization-scoped cache state declares
+its keys through `organization_cache_keys`, so purge and account deletion discharge them
+without orgs naming the app. See
+[module-extension.md](../../docs/technical/module-extension.md#project-owned-tenant-models).
+
+### Upgrade expectations
+
+Tier 1 permissions, context, and settings survive normal module updates; Tier 2 `TenantModel`
+subclassing survives minor updates while this documented contract holds. Never edit
+`modules/orgs/`: `quickscale update` refuses a local edit unless `--allow-local-changes`, and
+managed wiring is regenerated.

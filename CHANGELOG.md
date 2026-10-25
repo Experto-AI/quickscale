@@ -78,6 +78,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Backups capture media and serialize restores.** Each backup stores its media set with
     per-file checksums and media sync restores that captured set; a restore holds an advisory
     lock, and a version 1 backup restores only the database and says so.
+  - **Module contracts share one home.** Every module option default lives only in its
+    `module.yml`, every accepted option reaches a live consumer, source messages carry no release
+    stamps, and each README's Extending section answers the five standard ownership and upgrade
+    questions; storage's inert `private_media_enabled` switch is refused by name and billing's
+    configured currency gates Checkout.
   - **Supply chain pinned and scanned.** Publishing actions are pinned, the generated container and
     the published core wheel are checked, and security suppressions expire on review horizons.
   - **Quality gate uses fixed thresholds.** `make quality` fails at CC ≥ 21, files ≥ 800 lines,
