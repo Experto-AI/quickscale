@@ -467,6 +467,59 @@ def test_backups_pin_command_clears_rollback_pin() -> None:
     )
 
 
+def test_backups_pin_command_dry_run_reports_without_writing() -> None:
+    stdout = StringIO()
+    mock_pin = MagicMock()
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"set_rollback_pin": mock_pin},
+    ):
+        call_command(
+            "quickscale_backups_pin",
+            "snap-pin",
+            "--hours",
+            "6",
+            "--reason",
+            "production rollback window",
+            "--dry-run",
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+
+    mock_pin.assert_not_called()
+    assert stdout.getvalue() == (
+        "Dry run: would pin snapshot snap-pin for 6 hours "
+        "(reason: production rollback window); no change written.\n"
+    )
+
+
+def test_backups_pin_command_dry_run_json_serializes_the_preview() -> None:
+    stdout = StringIO()
+    mock_clear = MagicMock()
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"clear_rollback_pin": mock_clear},
+    ):
+        call_command(
+            "quickscale_backups_pin",
+            "snap-pin",
+            "--clear",
+            "--dry-run",
+            "--json",
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+
+    mock_clear.assert_not_called()
+    assert json.loads(stdout.getvalue()) == {
+        "dry_run": True,
+        "operation": "clear_rollback_pin",
+        "snapshot_id": "snap-pin",
+    }
+
+
 def test_backups_create_refuses_scheduled_runs_when_disabled(settings) -> None:
     """Rule 1 (D3): a module switched off runs none of its scheduled jobs."""
     settings.QUICKSCALE_BACKUPS_ENABLED = False
