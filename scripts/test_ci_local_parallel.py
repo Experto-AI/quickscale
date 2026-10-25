@@ -554,8 +554,9 @@ def test_help_stage_numbers_match_runtime_stage_order(tmp_path: Path) -> None:
     for grouped_heading in (
         "  6. Module app declaration and org-context primitives gates",
         "  7. Registered script suites, CSRF-exempt, dependency vulnerability, "
-        "security static-analysis, beta-migration smoke, generated deploy posture, "
-        "workflow security, and secret scanning gates",
+        "security static-analysis, security negative-probes, beta-migration smoke, "
+        "generated deploy posture, workflow security, generated workflow lint, "
+        "migration hashes, and tree-and-history secret scanning gates",
         "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint",
         " 12. E2E tests (optional, with --e2e flag)",
     ):

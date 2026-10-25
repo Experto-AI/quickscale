@@ -9,7 +9,7 @@
 #   make setup                - Install Poetry dependencies only
 #   make fix                  - Auto-format + auto-fix lint (write mode)
 #   make check                - Fast pre-commit gate (lint + typecheck + unit + gates)
-#   make check QUIET=1        - Same as `check`, quiet on success (LLM/agent mode)
+#   make check QUIET=1        - Same commands as `check`, output captured on success
 #   make ci                   - Full local-CI parity (adds integration)
 #   make test                 - Run all tests
 #   make test-unit            - Run unit tests only
@@ -273,7 +273,7 @@ help:
 	@echo ""
 	@echo "Before you push (gates):"
 	@echo "  make check                - Fast gate: lint + typecheck + unit tests + repo gates"
-	@echo "  make check QUIET=1        - Same as check, quiet on success (LLM/agent mode)"
+	@echo "  make check QUIET=1        - Same commands as check, output captured on success"
 	@echo "  make ci                   - Full local-CI parity (adds integration when PostgreSQL available)"
 	@echo "  make ci-e2e               - Full local CI including E2E (slow — Docker + Playwright)"
 	@echo ""
@@ -311,7 +311,7 @@ help:
 	@echo "    e.g. make lint -- --core | make typecheck -- --cli --modules"
 	@echo "    Variable form: SECTION=modules or SECTIONS=\"core modules\""
 	@echo "  MODULE=blog               - Limit the modules scope to one module (e.g. make MODULE=blog test -- --modules)"
-	@echo "  QUIET=1                   - Quiet-on-success output for \`make check\` / \`make test-cov\` (LLM/agent mode)"
+	@echo "  QUIET=1                   - Capture output only; commands and gates stay identical"
 	@echo "  PYTEST_XDIST_WORKERS=0|N  - Serial run (0) or pinned worker count (default: auto)"
 	@echo ""
 	@echo "Docs:"
@@ -354,11 +354,15 @@ help:
 	@echo "  make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
 	@echo "  make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
 	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
-	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
+	@echo "  make check-secret-scanning        - Blocking gitleaks tree and history scan with expiring suppressions"
 	@echo "  make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
 	@echo "  make check-split-facade-imports   - Reject a private module importing a facade in its distribution (SA234)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make check-migration-freeze      - Frozen module migrations keep their recorded content identity"
+	@echo "  make check-security-negative-probes - Prove the security gates fail closed on known-bad inputs (alias: make security-negative-probes)"
+	@echo "  make check-generated-workflow-lint - Render a generated project and lint its workflows with actionlint"
+	@echo "  make check-migration-hashes     - Verify the module migration hash manifest is current"
+	@echo "  make release-check-module-seals - Fail when a module changed after its split tag was sealed"
 	@# END GENERATED: makefile-gate-help
 	@echo "  make manifest-sync                - Materialize the bundled module manifests for a build"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
@@ -621,14 +625,13 @@ test-e2e:
 # Usage:
 #   make test-cov                          — standalone (backups optional)
 #   make test-cov REQUIRE_BACKUPS_COVERAGE=1 — CI mode (backups required)
+#   make test-cov QUIET=1                  — same five phases with output captured
 test-cov:
 	@set -e; \
 	if [ -n "$(QUIET)" ]; then \
-		$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short \
-			--cov=quickscale_core/src --cov=quickscale_cli/src \
-			--cov-report=term-missing --cov-report=json --cov-fail-under=90 \
-			> pytest_cov_log.txt 2>&1 || { cat pytest_cov_log.txt; rm -f pytest_cov_log.txt; exit 1; }; \
-		rm -f pytest_cov_log.txt; \
+		q_cov_log=$$(mktemp "$${TMPDIR:-/tmp}/quickscale-test-cov.XXXXXX"); \
+		$(MAKE) test-cov QUIET= > "$$q_cov_log" 2>&1 || { cat "$$q_cov_log"; rm -f "$$q_cov_log"; exit 1; }; \
+		rm -f "$$q_cov_log"; \
 		exit 0; \
 	fi; \
 	overall_exit=0; \
@@ -1017,8 +1020,8 @@ format:
 manifest-sync:
 	@$(MAKEFILE_ROOT)scripts/build_core_wheel.sh --materialize-only
 
-security-negative-probes:
-	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
+# Manual alias for the registry-bound negative-probes gate.
+security-negative-probes: check-security-negative-probes
 
 # Release-time operator tool (SA212).  It resolves every SHA-pinned action's
 # latest release and rewrites the pins; catalog-owned refs move through the
@@ -1374,19 +1377,11 @@ check:
 				fi; \
 			done; \
 		fi; \
-		q_test_dirs=""; \
-		if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
-			q_test_dirs="$$q_test_dirs quickscale_core/tests"; \
-		fi; \
-		if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
-			q_test_dirs="$$q_test_dirs quickscale_cli/tests"; \
-		fi; \
-		q_test_dirs="$$(echo $$q_test_dirs)"; \
-		if [ -n "$$q_test_dirs" ]; then \
-			$(RESET_FAILURE_CACHES); \
-			qs_started=$$(date +%s); \
-			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short -m "not integration and not e2e" $(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; $(PYTHON) scripts/record_failures.py record --stage unit --since "$$qs_started" >/dev/null 2>&1 || true; exit 1; }; \
-			rm -f pytest_log.txt; \
+		sections_for_test_unit="$(filter-out modules,$(ACTIVE_SECTIONS))"; \
+		if [ -n "$$sections_for_test_unit" ]; then \
+			q_unit_log=$$(mktemp "$${TMPDIR:-/tmp}/quickscale-check-unit.XXXXXX"); \
+			$(MAKE) test-unit SECTIONS="$$sections_for_test_unit" MODULE="$(MODULE)" > "$$q_unit_log" 2>&1 || { cat "$$q_unit_log"; rm -f "$$q_unit_log"; exit 1; }; \
+			rm -f "$$q_unit_log"; \
 		fi; \
 	else \
 		$(MAKE) lint typecheck SECTIONS="$(ACTIVE_SECTIONS)" MODULE="$(MODULE)"; \
@@ -1434,7 +1429,7 @@ check:
 # skips.  Each line is its own shell, so GNU Make aborts the target at the first
 # failing lane rather than reporting a late lane's success as the verdict.
 release-gate:
-	$(PYTHON) scripts/check_module_seals.py
+	@$(MAKE) release-check-module-seals
 	$(PYTHON) -m pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short -o addopts= --no-cov
 	$(PYTHON) -m pytest quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_all_module_initial_migrations_apply_from_embedded_sources -q --tb=short -o addopts= --no-cov
 	@$(MAKE) test-integration
@@ -1538,8 +1533,8 @@ publish-module-status:
 
 # Fail when a module changed after its immutable VERSION split tag was sealed.
 # The check names the stale module and points at the Phase 5 reseal path.
-check-module-seals:
-	@$(PYTHON) scripts/check_module_seals.py
+# Manual alias for the publish-bound seal freshness check.
+check-module-seals: release-check-module-seals
 
 # Disabled in SA117 Phase 4: inspect status before choosing publication or recovery.
 publish-modules-outdated:

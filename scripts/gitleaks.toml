@@ -1,8 +1,11 @@
-# gitleaks configuration for the QuickScale secret-scanning gate (SA202).
+# gitleaks configuration for the QuickScale secret-scanning gate (SA202, SA326).
 #
-# The default ruleset is extended, never replaced.  Every allowlist entry below
-# is either a non-source tree or a verified false positive, and each states the
-# reason it is exempt.  Anything not listed here fails the gate.
+# The default ruleset is extended, never replaced.  This file holds structural
+# exclusions only: generated scratch trees and non-source directories that are
+# gitignored and never committed.  Every value-level exemption is an entry in
+# `scripts/secret_scan_suppressions.json`, where it carries an owner, a
+# rationale, a decision reference, and an expiry date; an expired or unused
+# entry fails the gate.  Anything not listed in either file fails the gate.
 
 [extend]
 useDefault = true
@@ -10,6 +13,10 @@ useDefault = true
 [[allowlists]]
 description = "Generated .quickscale/ scratch state (linter caches, migration proof projects): gitignored and never committed."
 paths = ['''\.quickscale/''']
+
+[[allowlists]]
+description = "The secret-suppression ledger itself: it records finding fingerprints (which contain rule ids such as stripe-access-token) and written rationales, never a credential value."
+paths = ['''secret_scan_suppressions\.json$''']
 
 [[allowlists]]
 description = "Non-source trees: virtualenvs, Node modules, VCS internals, and coverage/analysis output."
@@ -21,13 +28,7 @@ paths = [
     '''/\.git/''',
     '''htmlcov/''',
     '''graphify-out/''',
+    '''__pycache__/''',
+    '''\.pyc$''',
     '''\.coverage$''',
 ]
-
-[[allowlists]]
-description = "showcase_react asset-routing test: the RFC 6455 Sec-WebSocket-Key handshake sample nonce, a public protocol constant rather than a credential, appears in the test's header fixtures."
-regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']
-
-[[allowlists]]
-description = "billing view tests: the placeholder value PHASE_6A_PUBLISHABLE_KEY is assigned to a settings env-var name to prove the name is read, not a credential."
-regexes = ['''PHASE_6A_PUBLISHABLE_KEY''']

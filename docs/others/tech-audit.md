@@ -1128,18 +1128,25 @@ reviewers.
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
   rejection before `Image.load()`.
 - **No cross-org owner test**: add the CRM serializer test.
-- **Secret scanning is working-tree-only**: `check_secret_scanning.py`/`gitleaks dir` never scans
-  history; a deleted credential is invisible. Add a history scan (or document the limitation) and
-  make the suppression file expiring/justified.
-- **Unwired or weak gates** (all read-only in this sweep): `security-negative-probes` is absent from
-  the registry/CI/`make check`; `check-module-seals` is only in the manual `release-gate`;
-  `sync_migration_hashes.py --check` is invoked nowhere; `check_generated_workflow_lint.py`
-  (actionlint) is explicitly unwired; coverage QUIET modes bypass the policy; the CSRF gate accepts a
-  class-level `csrf_exempt` dispatch if one handler calls `_enforce_csrf`; the org-context gate
-  misses `from ... import current_org` attribute use. Tie these to the release/backup/media classes
-  they would catch, not to individual findings alone.
-- **Gate parity**: CI and the local `make` lanes should share the same coverage/security commands;
-  the `QUIET` bypasses are a release risk.
+- **Secret scanning is working-tree-only (fixed 2026-10-25)**: `check_secret_scanning.py` now runs
+  `gitleaks dir` and `gitleaks git` over every commit reachable from `HEAD`, so a deleted credential
+  stays visible. Value-level exemptions moved out of `gitleaks.toml` into
+  `scripts/secret_scan_suppressions.json`, where each finding fingerprint carries an owner, a
+  rationale, a decision reference, and an expiry; an expired or unused entry fails the gate, and a
+  shallow clone fails closed.
+- **Unwired or weak gates (fixed 2026-10-25)**: `security-negative-probes` is registered in all four
+  executable contexts (`make check-security-negative-probes`, alias `make security-negative-probes`);
+  `check-module-seals` is registry-bound in the publish context and still reachable manually as
+  `make check-module-seals`; `sync_migration_hashes.py --check` is the registered
+  `check-migration-hashes` gate; `check_generated_workflow_lint.py` is registered and acquires the
+  pinned actionlint release when absent; the coverage QUIET modes now capture output around the
+  same commands instead of bypassing the policy; the CSRF gate rejects a class-level `csrf_exempt`
+  dispatch and checks only the named per-handler exemption; the org-context gate refuses
+  `from ... import current_org` and every attribute use through a bound `current_org` module object;
+  rule 17 treats a computed adapter dispatch as destructive by construction. Each tightened gate
+  has a fixture control.
+- **Gate parity (fixed 2026-10-25)**: CI and the local `make` lanes now share the coverage, secret
+  scanning, and security-probe commands; `QUIET` no longer changes which command runs.
 
 ## Watchlist and accepted trade-offs
 

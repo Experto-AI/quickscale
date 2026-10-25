@@ -165,6 +165,46 @@ def test_destructive_operation_evidence_control() -> None:
         "        ADAPTER_FUNCTIONS['prune_backups'](dry_run=False)\n"
     )
     assert any("takes no --dry-run" in violation for violation in adapter)
+    computed = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        operation = options['operation']\n"
+        "        ADAPTER_FUNCTIONS[operation](dry_run=False)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in computed)
+    computed_get = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        function_name = options['function']\n"
+        "        func = ADAPTER_FUNCTIONS.get(function_name)\n"
+        "        func(**options)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in computed_get)
+    computed_with_flag = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def add_arguments(self, parser):\n"
+        "        parser.add_argument('--dry-run', action='store_true')\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        operation = options['operation']\n"
+        "        ADAPTER_FUNCTIONS[operation](dry_run=True)\n"
+    )
+    assert computed_with_flag == []
     overwriting = _sweep(
         "from django.core.management.base import BaseCommand\n"
         "\n"

@@ -155,6 +155,7 @@ class TestHandleDispatch:
         command.handle(
             function_name=function_name,
             args_json=args_json,
+            dry_run=False,
             stderr=StringIO(),
         )
         return stdout
@@ -231,6 +232,7 @@ class TestHandleDispatch:
                 command.handle(
                     function_name="missing_func",
                     args_json="{}",
+                    dry_run=False,
                     stdout=StringIO(),
                     stderr=StringIO(),
                 )
@@ -254,6 +256,7 @@ class TestHandleDispatch:
                 command.handle(
                     function_name="capture_snapshot",
                     args_json="{}",
+                    dry_run=False,
                     stdout=StringIO(),
                     stderr=StringIO(),
                 )

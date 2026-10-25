@@ -39,7 +39,7 @@ show_help() {
     echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
     echo "  4. Module-core import linter (check_module_core_imports)"
     echo "  6. Module app declaration and org-context primitives gates"
-    echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, beta-migration smoke, generated deploy posture, workflow security, and secret scanning gates"
+    echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, security negative-probes, beta-migration smoke, generated deploy posture, workflow security, generated workflow lint, migration hashes, and tree-and-history secret scanning gates"
     echo "  8. Type check (mypy)"
     echo "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
     echo "     (frontend lint runs when Node.js and pnpm are available)"
@@ -538,6 +538,21 @@ describe_local_conformance_gate() {
             LOCAL_GATE_DESCRIPTION="Running migration freeze gate..."
             LOCAL_GATE_SUCCESS="✓ Frozen module migrations match their recorded content identity"
             LOCAL_GATE_FAILURE_LABEL="Migration Freeze Gate"
+            ;;
+        check-security-negative-probes)
+            LOCAL_GATE_DESCRIPTION="Running security negative-probes gate..."
+            LOCAL_GATE_SUCCESS="✓ Security negative-probes gate passed"
+            LOCAL_GATE_FAILURE_LABEL="Security Negative-Probes Gate"
+            ;;
+        check-generated-workflow-lint)
+            LOCAL_GATE_DESCRIPTION="Running generated workflow actionlint gate..."
+            LOCAL_GATE_SUCCESS="✓ Generated workflows pass actionlint"
+            LOCAL_GATE_FAILURE_LABEL="Generated Workflow Lint Gate"
+            ;;
+        check-migration-hashes)
+            LOCAL_GATE_DESCRIPTION="Running migration hash manifest gate..."
+            LOCAL_GATE_SUCCESS="✓ Module migration hash manifest is current"
+            LOCAL_GATE_FAILURE_LABEL="Migration Hash Manifest Gate"
             ;;
         # END GENERATED: local-gate-arms
         *)

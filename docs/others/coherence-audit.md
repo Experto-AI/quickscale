@@ -267,7 +267,7 @@ items:
     first_seen: "2026-10-08"
     last_verified: "2026-10-24"
 gaps:
-  - {id: 21, rule: 17, state: open, last_verified: "2026-10-24"}
+  - {id: 21, rule: 17, state: closed, last_verified: "2026-10-25"}
   - {id: 22, rule: 37, state: open, last_verified: "2026-10-24"}
   - {id: 23, rule: 19, state: open, last_verified: "2026-10-24"}
   - {id: 25, rule: 9, state: open, last_verified: "2026-10-24"}
@@ -278,7 +278,7 @@ gaps:
 
 ## Summary table
 
-Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **7** (prior 21 plus 22, 23, 25, 26, 28, and 29). Cost classes overlap; the unique confirmed-item total is 11: defect 1 · collision 0 · ambiguity 6 · tax 7.
+Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **6** (22, 23, 25, 26, 28, and 29; prior 21 closed 2026-10-25). Cost classes overlap; the unique confirmed-item total is 11: defect 1 · collision 0 · ambiguity 6 · tax 7.
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
@@ -401,11 +401,11 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 | Org selector `--organization-id <uuid>` | billing reconcile; orgs purge (slug preflight beside it) | command flags | present |
 | `--format` / `--org` / `--scheduled` spellings | 0 | flag census | present |
 | Machine output `--json` | backups, billing, forms, orgs where machine output exists | command flags; README | present |
-| Destructive operation chosen from a computed name | backups `pin` dispatches `ADAPTER_FUNCTIONS[operation]`; DR bridge same | gap 21 | unknown |
+| Destructive operation chosen from a computed name | backups `pin` dispatches `ADAPTER_FUNCTIONS[operation]`; DR bridge same | gap 21 | present (computed dispatch requires `--dry-run`) |
 
 **Already consistent (keep):** all commands subclass `BaseCommand`, use `self.stdout`/`self.stderr`/`self.style`, raise `CommandError` for expected failure, and the scheduled commands call `require_scheduled_module_enabled` before work. No `print`/`sys.exit` found. The org selector spelling is uniform after the prior fix.
 
-**Items / gaps:** gap 21 remains open; no new command item.
+**Items / gaps:** gap 21 is closed; no new command item.
 
 ### L — Files, packaging, and generation
 
@@ -707,7 +707,7 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 ## Enforcement gaps
 
-**Gap 21 (prior, reverified 2026-10-24) — rule 17’s computed-operation hole.** `--json` is never required; `--trigger` is checked only when present; the destructive duty keys on the operation name (`_package_commands.py:264-302`). `quickscale_backups_pin` calls `ADAPTER_FUNCTIONS[operation]` (`:14`), and the DR bridge does the same, so a computed destructive operation can escape the `--dry-run` duty. No current command breaks rule 17 because of this; it is a guard hole. Control cases: a fixture computed `prune` without `--dry-run` should fail and the same fixture with `--dry-run` should pass. State `observed-in-source`; unscheduled.
+**Gap 21 (prior, closed 2026-10-25) — rule 17’s computed-operation hole.** `--json` is never required; `--trigger` is checked only when present; the destructive duty keys on the operation name (`_package_commands.py`). `quickscale_backups_pin` called `ADAPTER_FUNCTIONS[operation]` and the DR bridge called `ADAPTER_FUNCTIONS.get(function_name)`, so a computed destructive operation could escape the `--dry-run` duty. The detector now treats a computed adapter dispatch — an adapter-registry subscript with a non-literal key, and a name bound from `ADAPTER_FUNCTIONS.get(...)` and later called — as destructive by construction; both live commands declare `--dry-run` and honor it by reporting the intended call without writing. Control cases pass: a fixture computed `prune` without `--dry-run` fails and the same fixture with the flag passes.
 
 **Gap 22 — rule 37’s template scan sees enumerations, not single-name branches.** `_template_module_literals` counts a bracket/pipeline list only when at least two module names are present (`_identity_module_lists.py:134-164`); `_module_list_violations` applies the branch/constant scan to Python only (`:249-290`). The admin `{% if app_label == "quickscale_backups" %}`, the CI/Makefile `selected_modules ... "orgs"` condition, and the compose credential names are single-name references and pass. Control: a fixture template with a single module branch must fail; the derived discovery template must pass. State `observed-in-source`; linked item 1.
 
@@ -808,9 +808,9 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 **Prior census:** the 2026-10-16 census of 41 IDs remains last-known `resolved`; the retained report does not itemize them, so none is re-verified here. They are excluded from the current confirmed count.
 
-**Prior gap 21:** still open; reverified at `_package_commands.py:264-302` and `quickscale_backups_pin.py:14`.
+**Prior gap 21:** closed 2026-10-25; computed adapter dispatch is destructive by construction, and both live commands declare and honor `--dry-run`.
 
-**This pass:** 11 open items (10 new + 1 regressed); 1 accepted prior item; 7 open gaps (21–23, 25–26, 28–29); 1 pending candidate plus residual leads. Pass 1 walked A–V; pass 2 followed the generator-template, settings, admin, isolation, and notification-sender leads; pass 3 re-opened every cited anchor and the prior hand-offs and added no new item/aspect. Stopping reason: bounded saturation of the inspected scope; theme execution and live deployment remain unassessed.
+**This pass:** 11 open items (10 new + 1 regressed); 1 accepted prior item; 6 open gaps (22–23, 25–26, 28–29; prior 21 closed 2026-10-25); 1 pending candidate plus residual leads. Pass 1 walked A–V; pass 2 followed the generator-template, settings, admin, isolation, and notification-sender leads; pass 3 re-opened every cited anchor and the prior hand-offs and added no new item/aspect. Stopping reason: bounded saturation of the inspected scope; theme execution and live deployment remain unassessed.
 
 - 2026-10-24 — `generated-module-branches`: new, open.
 - 2026-10-24 — `notifications-anymail-wiring-split`: new, open.
@@ -825,3 +825,4 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 - 2026-10-24 — `orgs-invitation-notification-failure`: new, open.
 - 2026-10-24 — `core-cli-module-knowledge`: still accepted; trigger not fired.
 - 2026-10-24 — gap 21: still open; gaps 22, 23, 25, 26, 28 and 29: new, open.
+- 2026-10-25 — gap 21: closed; the computed-operation detector, both fixture controls, and the two commands' `--dry-run` handling landed.

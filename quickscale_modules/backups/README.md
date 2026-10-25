@@ -154,10 +154,12 @@ This module ships no URLs.
   the structured capture report for automation.
 - `quickscale_backups_dr_adapter_call` — thin CLI bridge to call DR adapter functions from
   within a Docker context; not for admin use. `--args-json` carries the adapter's keyword
-  arguments as one JSON object (deprecated; piped stdin is preferred).
+  arguments as one JSON object (deprecated; piped stdin is preferred). `--dry-run` prints the
+  resolved function name and keyword arguments without invoking the adapter.
 - `quickscale_backups_pin` — set or clear a rollback pin on one stored backup snapshot.
   Setting a pin requires `--hours N` and `--reason TEXT`; `--clear` clears an active pin
-  instead; `--json` emits the structured pin report.
+  instead; `--json` emits the structured pin report. `--dry-run` reports the intended pin
+  change without writing it.
 - `quickscale_backups_prune` — delete expired backup files and mark their metadata as deleted,
   according to the active retention policy. The newest complete snapshot and the newest live
   artifact are always retained, even past `retention_days`. `--trigger` defaults to `manual`; `--trigger

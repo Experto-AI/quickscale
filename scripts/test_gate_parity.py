@@ -113,7 +113,7 @@ E2E_YML = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 #: from ``gate_registry.json``, so a registry resize would otherwise flow
 #: through every derived expectation unnoticed.  Adding or removing a gate
 #: fails here until this literal is re-pinned deliberately.
-EXPECTED_GATE_COUNT = 21
+EXPECTED_GATE_COUNT = 25
 
 # These service-backed workflow stations are the only callers allowed to
 # provision hosted PostgreSQL.  This mapping is the test-owned station

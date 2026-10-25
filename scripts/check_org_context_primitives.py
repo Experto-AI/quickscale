@@ -8,6 +8,15 @@ the three underscored primitives (``_tenant_context``,
 compatibility aliases (``tenant_context``, ``set_current_org_for_context``,
 ``set_db_current_org_id``) from ``quickscale_modules_orgs.current_org``.
 
+Two module-object forms are rejected as well: the re-export
+``from quickscale_modules_orgs import current_org`` (the import itself is a
+violation), and every attribute use of a privatized primitive through a bound
+``current_org`` module object — ``import quickscale_modules_orgs.current_org``
+or ``import quickscale_modules_orgs`` followed by
+``<binding>.current_org._tenant_context``.  A re-export that names no
+primitive still defeats the import-only check, so the form is refused rather
+than resolved.
+
 This gate **fails CI** (exit 1) when any violation is found.  All SA13.2/13.3
 migrations are complete — any new direct external import of a privatized
 primitive will hard-fail.
@@ -65,28 +74,47 @@ EXEMPT_MODULES: frozenset[str] = frozenset({"orgs"})
 
 
 class _OrgContextPrimitivesVisitor(ast.NodeVisitor):
-    """Collect imports of the privatized org-context primitives."""
+    """Collect imports and attribute uses of the privatized org-context primitives."""
 
     def __init__(self) -> None:
         super().__init__()
-        # List of (lineno, import_statement) for each flagged import
+        # List of (lineno, description) for each flagged import or attribute use
         self.violations: list[tuple[int, str]] = []
+        # Local names bound to the ``quickscale_modules_orgs.current_org`` module.
+        self.current_org_modules: set[str] = set()
+        # Local names bound to the ``quickscale_modules_orgs`` package.
+        self.orgs_packages: set[str] = set()
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             if alias.name == "quickscale_modules_orgs.current_org":
-                # ``import quickscale_modules_orgs.current_org`` — cannot
-                # detect which symbols are used without deeper analysis,
-                # so we check the alias only.  This is a rare pattern;
-                # module-level ``from ... import`` is the norm.
+                # A module-object binding cannot be judged at the import line;
+                # ``visit_Attribute`` flags every privatized primitive reached
+                # through this name.  ``import a.b`` binds ``a`` unless it is
+                # aliased.
+                if alias.asname:
+                    self.current_org_modules.add(alias.asname)
+                else:
+                    self.orgs_packages.add("quickscale_modules_orgs")
+                continue
+            if alias.name == "quickscale_modules_orgs":
+                self.orgs_packages.add(alias.asname or "quickscale_modules_orgs")
                 continue
             if alias.name.startswith("quickscale_modules_orgs.current_org."):
-                suffix = alias.name.split(".", 2)[2] if "." in alias.name.split(".", 2)[1] else ""
-                if suffix and suffix in PRIVATIZED_PRIMITIVES:
+                suffix = alias.name.removeprefix("quickscale_modules_orgs.current_org.")
+                if suffix in PRIVATIZED_PRIMITIVES:
                     self.violations.append((node.lineno, alias.name))
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module is None:
+            return
+        if node.module == "quickscale_modules_orgs":
+            # The re-export form hides the module object behind a plain name, so
+            # the import itself is refused even when only an exempt symbol is
+            # named later.
+            for alias in node.names:
+                if alias.name == "current_org":
+                    self.violations.append((node.lineno, f"from {node.module} import {alias.name}"))
             return
         if node.module != "quickscale_modules_orgs.current_org":
             return
@@ -95,6 +123,21 @@ class _OrgContextPrimitivesVisitor(ast.NodeVisitor):
             name = alias.name
             if name in PRIVATIZED_PRIMITIVES:
                 self.violations.append((node.lineno, f"from {node.module} import {name}"))
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Flag a privatized primitive reached through a bound module object."""
+        if node.attr in PRIVATIZED_PRIMITIVES:
+            if isinstance(node.value, ast.Name) and node.value.id in self.current_org_modules:
+                self.violations.append((node.lineno, f"{node.value.id}.{node.attr}"))
+            elif (
+                isinstance(node.value, ast.Attribute)
+                and node.value.attr == "current_org"
+                and isinstance(node.value.value, ast.Name)
+                and node.value.value.id in self.orgs_packages
+            ):
+                base = node.value.value.id
+                self.violations.append((node.lineno, f"{base}.current_org.{node.attr}"))
+        self.generic_visit(node)
 
 
 def _check_module_source(source_dir: Path) -> dict[Path, list[tuple[int, str]]]:

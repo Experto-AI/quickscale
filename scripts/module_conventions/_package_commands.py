@@ -61,10 +61,11 @@ def _constant_string(node: ast.expr | None) -> str | None:
 #: is not.  The first word of the operation's name carries the verb —
 #: ``delete_expired`` deletes, while ``select_for_update`` and ``bulk_update``
 #: do not — so a synonym this list does not name stays open-world, the
-#: detector's recorded boundary; an operation resolved from a computed name
+#: detector's recorded boundary.  An operation resolved from a computed name
 #: (the backups DR bridge's ``ADAPTER_FUNCTIONS.get(function_name)``) names no
-#: operation at its call site and stays outside the detector too.  ``save``
-#: and ``update`` are the repository's overwrite verbs; a create-only command
+#: operation at its call site, so the detector treats it as destructive by
+#: construction instead of letting it escape the duty.  ``save`` and
+#: ``update`` are the repository's overwrite verbs; a create-only command
 #: that persists through a bare ``save()`` is over-refused, the fail-closed
 #: direction.
 DESTRUCTIVE_OPERATION_WORDS = (
@@ -246,23 +247,93 @@ def _raise_findings(
     return violations
 
 
+#: Rule 17: a call whose operation is selected at runtime.  The detector
+#: cannot name the operation, so it is treated as destructive by construction
+#: (fail-closed): ``ADAPTER_FUNCTIONS[operation](...)`` and
+#: ``func = ADAPTER_FUNCTIONS.get(operation); func(...)`` both carry it.
+COMPUTED_OPERATION_MARKER = "<computed>"
+
+
+def _is_adapter_mapping(node: ast.expr) -> bool:
+    """Return True when *node* names the DR adapter registry."""
+    if isinstance(node, ast.Name):
+        return node.id == "ADAPTER_FUNCTIONS" or node.id.endswith("_ADAPTER_FUNCTIONS")
+    if isinstance(node, ast.Attribute):
+        return node.attr == "ADAPTER_FUNCTIONS"
+    return False
+
+
+def _registry_key(func: ast.Subscript) -> str:
+    """Return a literal registry key, or the computed-operation marker."""
+    if isinstance(func.slice, ast.Constant) and isinstance(func.slice.value, str):
+        return func.slice.value
+    return COMPUTED_OPERATION_MARKER
+
+
+def _mapping_get_key(node: ast.Call) -> str | None:
+    """
+    Return the operation ``MAPPING.get(...)`` selects, or None.
+
+    Only the adapter registry's ``.get`` is resolved; a literal key names its
+    operation, while a computed key carries the computed-operation marker.
+    ``None`` means the call is not an adapter-registry lookup.
+    """
+    func = node.func
+    if not (isinstance(func, ast.Attribute) and func.attr == "get"):
+        return None
+    if not _is_adapter_mapping(func.value):
+        return None
+    argument = node.args[0] if node.args else None
+    if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+        return argument.value
+    return COMPUTED_OPERATION_MARKER
+
+
 def _callee_operation_name(node: ast.Call) -> str:
     """
     Return the operation name a call invokes, or an empty string.
 
     A call through the adapter registry names its operation in the registry
     key — ``ADAPTER_FUNCTIONS["prune_backups"](...)`` — so the key is the
-    operation name rather than the mapping's uninformative attribute.
+    operation name rather than the mapping's uninformative attribute.  A key
+    selected at runtime carries :data:`COMPUTED_OPERATION_MARKER`.
     """
     func = node.func
-    if isinstance(func, ast.Subscript) and isinstance(func.slice, ast.Constant):
-        if isinstance(func.slice.value, str):
-            return func.slice.value
+    if isinstance(func, ast.Subscript):
+        key = _registry_key(func)
+        if key == COMPUTED_OPERATION_MARKER and not _is_adapter_mapping(func.value):
+            return ""
+        return key
+    if isinstance(func, ast.Call):
+        key = _mapping_get_key(func)
+        return key or ""
     return _call_func_name(node)
 
 
+def _registry_bindings(tree: ast.Module) -> dict[str, str]:
+    """Map local names assigned from an adapter-registry lookup to its operation."""
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            continue
+        value = node.value
+        if isinstance(value, ast.Call):
+            key = _mapping_get_key(value)
+            if key is not None:
+                bindings[node.targets[0].id] = key
+        elif isinstance(value, ast.Subscript) and _is_adapter_mapping(value.value):
+            bindings[node.targets[0].id] = _registry_key(value)
+    return bindings
+
+
 def _is_destructive_operation(name: str) -> bool:
-    """Return True when an operation name begins with a destructive word."""
+    """Return True when an operation name is destructive or computed."""
+    if name == COMPUTED_OPERATION_MARKER:
+        return True
     normalized = name.strip().lower().lstrip("_")
     return any(
         normalized == word or normalized.startswith(f"{word}_")
@@ -272,10 +343,18 @@ def _is_destructive_operation(name: str) -> bool:
 
 def _performs_a_destructive_operation(tree: ast.Module) -> bool:
     """Return whether a command's own code calls a data-destroying operation."""
-    return any(
-        isinstance(node, ast.Call) and _is_destructive_operation(_callee_operation_name(node))
-        for node in ast.walk(tree)
-    )
+    bindings = _registry_bindings(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in bindings:
+            if _is_destructive_operation(bindings[func.id]):
+                return True
+            continue
+        if _is_destructive_operation(_callee_operation_name(node)):
+            return True
+    return False
 
 
 def _command_findings(module_name: str, command: str, tree: ast.Module) -> list[str]:

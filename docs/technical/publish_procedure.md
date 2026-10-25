@@ -131,8 +131,12 @@ the roadmap.
 trust upstream. A gate failing there is a real defect; close it by fixing the cause, never by
 declaring an exclusion. The SA202 supply-chain gates join that set: `check-workflow-security` fails
 on an unpinned `uses:` ref or a workflow missing a top-level `permissions:` block, and
-`check-secret-scanning` fails on any committed secret the reasoned allowlists in
-`scripts/gitleaks.toml` do not cover. Neither gate may be waived to publish.
+`check-secret-scanning` fails on any secret in the working tree or reachable history that the
+expiring, justified entries in `scripts/secret_scan_suppressions.json` and the structural
+exclusions in `scripts/gitleaks.toml` do not cover. The set also runs the publish-bound
+`check-module-seals` freshness check together with `check-generated-workflow-lint`,
+`check-migration-hashes`, and `check-security-negative-probes`. None of these gates may be waived
+to publish.
 
 ---
 

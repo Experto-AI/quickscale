@@ -664,131 +664,29 @@ class TestExtractMethodDecoratorName:
 
 
 class TestCsrfExemptVisitorClassLevel:
-    """Class-level csrf_exempt scans must reject sibling-method bypasses."""
+    """Class-level exemptions are rejected; per-handler exemptions are paired."""
 
-    PASS_CLASS_WITH_HELPER_IN_POST = (
+    DISPATCH_WITH_HELPER_IN_POST = (
         "@method_decorator(csrf_exempt, name='dispatch')\n"
         "class MyView(View):\n"
         "    def post(self, request):\n"
         "        _enforce_csrf(request)\n"
         "        return JsonResponse({})\n"
-        "    def _helper(self):\n"
-        "        pass\n"
     )
 
-    FAIL_CLASS_HELPER_ONLY_IN_SIBLING = (
+    DISPATCH_WITH_HELPER_IN_DISPATCH = (
         "@method_decorator(csrf_exempt, name='dispatch')\n"
         "class MyView(View):\n"
-        "    def post(self, request):\n"
-        "        return JsonResponse({})\n"
-        "    def _helper(self, request):\n"
+        "    def dispatch(self, request, *args, **kwargs):\n"
         "        _enforce_csrf(request)\n"
-    )
-
-    FAIL_CLASS_HELPER_ONLY_IN_NESTED_DEF = (
-        "@method_decorator(csrf_exempt, name='dispatch')\n"
-        "class MyView(View):\n"
-        "    def post(self, request):\n"
-        "        def inner():\n"
-        "            _enforce_csrf(request)\n"
-        "        return JsonResponse({})\n"
-    )
-
-    FAIL_CLASS_NO_HELPER_AT_ALL = (
-        "@method_decorator(csrf_exempt, name='dispatch')\n"
-        "class MyView(View):\n"
+        "        return super().dispatch(request, *args, **kwargs)\n"
         "    def post(self, request):\n"
         "        return JsonResponse({})\n"
     )
 
-    def test_helper_in_post_passes(self) -> None:
-        """Helper call in ``post`` satisfies the check."""
-        assert _get_violation_count(self.PASS_CLASS_WITH_HELPER_IN_POST) == 0
-
-    def test_helper_only_in_sibling_non_handler_fails(self) -> None:
-        """Helper only in ``_helper`` (not a handler) is rejected."""
-        assert _get_violation_count(self.FAIL_CLASS_HELPER_ONLY_IN_SIBLING) == 1
-
-    def test_helper_only_in_nested_def_fails(self) -> None:
-        """Helper only in a nested ``def`` inside handler is rejected."""
-        assert _get_violation_count(self.FAIL_CLASS_HELPER_ONLY_IN_NESTED_DEF) == 1
-
-    def test_no_helper_at_all_fails(self) -> None:
-        """No helper anywhere in the class is rejected."""
-        assert _get_violation_count(self.FAIL_CLASS_NO_HELPER_AT_ALL) == 1
-
-    def test_mixed_sibling_with_surface_billing_pattern_passes(self) -> None:
-        """Real billing-style: post() has _enforce_csrf, sibling helpers ignored."""
-        source = (
-            "from django.utils.decorators import method_decorator\n"
-            "from django.views.decorators.csrf import csrf_exempt\n"
-            "from django.views import View\n"
-            "from django.http import JsonResponse\n"
-            "\n"
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class BillingStyleView(View):\n"
-            "    http_method_names = ['post']\n"
-            "\n"
-            "    def post(self, request):\n"
-            "        csrf_response = _enforce_csrf(request)\n"
-            "        if csrf_response is not None:\n"
-            "            return csrf_response\n"
-            "        return JsonResponse({'ok': True})\n"
-            "\n"
-            "    def _unrelated_helper(self):\n"
-            "        _enforce_csrf(request)\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_removed_webhook_helper_is_not_approved(self) -> None:
-        """A csrf_exempt scope calling a retired webhook helper now fails the gate."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class NotificationWebhookView(View):\n"
-            "    http_method_names = ['post']\n"
-            "\n"
-            "    def post(self, request):\n"
-            "        result = ingest_webhook_event(\n"
-            "            body=request.body,\n"
-            "            svix_id='',\n"
-            "            svix_timestamp='',\n"
-            "            svix_signature='',\n"
-            "        )\n"
-            "        return JsonResponse({'status': 'accepted'})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_sibling_handler_with_helper_passes(self) -> None:
-        """Helper in ``dispatch`` itself also satisfies the check."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    def dispatch(self, request, *args, **kwargs):\n"
-            "        _enforce_csrf(request)\n"
-            "        return super().dispatch(request, *args, **kwargs)\n"
-            "    def post(self, request):\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    # ------------------------------------------------------------------
-    # http_method_names constraint: only allowed handlers are checked
-    # ------------------------------------------------------------------
-
-    FAIL_CLASS_HELPER_ONLY_IN_DISALLOWED_HANDLER = (
-        "@method_decorator(csrf_exempt, name='dispatch')\n"
+    PER_HANDLER_WITH_HELPER = (
+        "@method_decorator(csrf_exempt, name='post')\n"
         "class MyView(View):\n"
-        "    http_method_names = ['get']\n"
-        "    def get(self, request):\n"
-        "        return JsonResponse({})\n"
-        "    def post(self, request):\n"
-        "        _enforce_csrf(request)\n"  # unreachable — post not allowed
-    )
-
-    PASS_CLASS_HELPER_IN_ALLOWED_HANDLER = (
-        "@method_decorator(csrf_exempt, name='dispatch')\n"
-        "class MyView(View):\n"
-        "    http_method_names = ['post']\n"
         "    def post(self, request):\n"
         "        _enforce_csrf(request)\n"
         "        return JsonResponse({})\n"
@@ -796,819 +694,72 @@ class TestCsrfExemptVisitorClassLevel:
         "        return JsonResponse({})\n"
     )
 
-    def test_helper_only_in_disallowed_handler_fails(self) -> None:
-        """Helper only in a handler excluded by ``http_method_names`` fails."""
-        assert _get_violation_count(self.FAIL_CLASS_HELPER_ONLY_IN_DISALLOWED_HANDLER) == 1
+    PER_HANDLER_WITHOUT_HELPER = (
+        "@method_decorator(csrf_exempt, name='post')\n"
+        "class MyView(View):\n"
+        "    def post(self, request):\n"
+        "        return JsonResponse({})\n"
+    )
 
-    def test_helper_in_allowed_handler_passes(self) -> None:
-        """Helper in a handler allowed by ``http_method_names`` passes."""
-        assert _get_violation_count(self.PASS_CLASS_HELPER_IN_ALLOWED_HANDLER) == 0
+    PER_HANDLER_HELPER_ONLY_IN_OTHER_HANDLER = (
+        "@method_decorator(csrf_exempt, name='post')\n"
+        "class MyView(View):\n"
+        "    def post(self, request):\n"
+        "        return JsonResponse({})\n"
+        "    def get(self, request):\n"
+        "        _enforce_csrf(request)\n"
+        "        return JsonResponse({})\n"
+    )
 
-    def test_helper_after_return_in_handler_unreachable_fails(self) -> None:
-        """Helper after unconditional return in a handler body is unreachable."""
+    def test_dispatch_level_helper_in_post_is_rejected(self) -> None:
+        """A helper in one handler no longer excuses a dispatch-level exemption."""
+        assert _get_violation_count(self.DISPATCH_WITH_HELPER_IN_POST) == 1
+
+    def test_dispatch_level_helper_in_dispatch_is_rejected(self) -> None:
+        """A dispatch-level exemption is rejected even when dispatch re-enforces."""
+        assert _get_violation_count(self.DISPATCH_WITH_HELPER_IN_DISPATCH) == 1
+
+    def test_bare_class_decorator_is_rejected(self) -> None:
+        """A bare ``@csrf_exempt`` on a class is a dispatch-level exemption."""
         source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
+            "@csrf_exempt\nclass MyView(View):\n"
             "    def post(self, request):\n"
             "        return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
         )
         assert _get_violation_count(source) == 1
 
-    def test_helper_under_if_false_in_handler_unreachable_fails(self) -> None:
-        """Helper under ``if False`` in a handler body is unreachable."""
+    def test_method_decorator_without_name_is_rejected(self) -> None:
+        """A class-level ``method_decorator`` that names no method is rejected."""
         source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
+            "@method_decorator(csrf_exempt)\nclass MyView(View):\n"
             "    def post(self, request):\n"
-            "        if False:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
             "        return JsonResponse({})\n"
         )
         assert _get_violation_count(source) == 1
 
-    # ------------------------------------------------------------------
-    # Compile-time truthy literal handling — class-level (CR-SA46-001)
-    # ------------------------------------------------------------------
+    def test_per_handler_exemption_with_helper_passes(self) -> None:
+        """A per-handler exemption whose handler re-enforces CSRF passes."""
+        assert _get_violation_count(self.PER_HANDLER_WITH_HELPER) == 0
 
-    def test_class_helper_under_if_true_else_unreachable_fails(self) -> None:
-        """Helper in ``else`` of ``if True: return ...`` in class handler."""
+    def test_per_handler_exemption_without_helper_fails(self) -> None:
+        """A per-handler exemption without a helper in that handler fails."""
+        assert _get_violation_count(self.PER_HANDLER_WITHOUT_HELPER) == 1
+
+    def test_per_handler_helper_in_another_handler_fails(self) -> None:
+        """A helper in a different handler cannot satisfy the named handler."""
+        assert _get_violation_count(self.PER_HANDLER_HELPER_ONLY_IN_OTHER_HANDLER) == 1
+
+    def test_dispatch_helper_under_constant_true_is_still_rejected(self) -> None:
+        """Reachability analysis does not soften the class-level rejection."""
         source = (
             "@method_decorator(csrf_exempt, name='dispatch')\n"
             "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
             "    def post(self, request):\n"
             "        if True:\n"
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "    return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_nonempty_string_is_reachable_passes(self) -> None:
-        r"""Helper inside ``if \"x\":`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            '        if "x":\n'
             "            _enforce_csrf(request)\n"
             "        return JsonResponse({})\n"
         )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_nonempty_string_else_unreachable_fails(self) -> None:
-        r"""Helper in ``else`` of ``if \"x\": return ...`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            '        if "x":\n'
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "    return JsonResponse({})\n"
-        )
         assert _get_violation_count(source) == 1
-
-    # ------------------------------------------------------------------
-    # Additional literal type coverage — class-level (CR-SA46-001)
-    # ------------------------------------------------------------------
-
-    def test_class_helper_under_if_nonzero_float_is_reachable_passes(self) -> None:
-        """Helper inside ``if 1.0:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if 1.0:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_nonzero_float_else_unreachable_fails(self) -> None:
-        """Helper in ``else`` of ``if 1.0: return ...`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if 1.0:\n"
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "    return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_empty_bytes_unreachable_fails(self) -> None:
-        r"""Helper inside ``if b"":`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            '        if b"":\n'
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_empty_tuple_unreachable_fails(self) -> None:
-        """Helper inside ``if ():`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if ():\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_empty_list_unreachable_fails(self) -> None:
-        """Helper inside ``if []:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if []:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_empty_dict_unreachable_fails(self) -> None:
-        """Helper inside ``if {}:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if {}:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_nonempty_tuple_is_reachable_passes(self) -> None:
-        """Helper inside ``if (1,):`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if (1,):\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_nonempty_list_is_reachable_passes(self) -> None:
-        """Helper inside ``if [1]:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if [1]:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_nonempty_dict_is_reachable_passes(self) -> None:
-        """Helper inside ``if {'k': 'v'}:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if {'k': 'v'}:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    # ------------------------------------------------------------------
-    # complex and Ellipsis literal coverage — class-level (CR-SA46-REV-002)
-    # ------------------------------------------------------------------
-
-    def test_class_helper_under_if_nonzero_complex_is_reachable_passes(self) -> None:
-        """Helper inside ``if 1j:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if 1j:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_zero_complex_is_unreachable_fails(self) -> None:
-        """Helper inside ``if 0j:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if 0j:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_nonzero_complex_else_unreachable_fails(self) -> None:
-        """Helper in ``else`` of ``if 1j: return ...`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if 1j:\n"
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "    return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_ellipsis_is_reachable_passes(self) -> None:
-        """Helper inside ``if ...:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if ...:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_ellipsis_else_unreachable_fails(self) -> None:
-        """Helper in ``else`` of ``if ...: return ...`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if ...:\n"
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "    return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    # ------------------------------------------------------------------
-    # ast.Set literal coverage  (CR-SA46-REV-002)
-    # ------------------------------------------------------------------
-
-    def test_class_helper_under_if_nonempty_set_is_reachable_passes(self) -> None:
-        """Helper inside ``if {1}:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if {1}:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    # ------------------------------------------------------------------
-    # Terminal-exit propagation through if/elif/else  (CR-SA46-REV-001)
-    # ------------------------------------------------------------------
-
-    def test_class_helper_after_if_true_return_unreachable_fails(self) -> None:
-        """Helper after ``if True: return`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if True:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_true_return_dead_trailing_stmt_unreachable_fails(
-        self,
-    ) -> None:
-        """Helper after ``if True: return; x=1`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if True:\n"
-            "            return JsonResponse({})\n"
-            "            x = 1\n"  # dead trailing statement
-            "        _enforce_csrf(request)\n"  # unreachable
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_return_dead_trailing_stmt_unreachable_fails(
-        self,
-    ) -> None:
-        """Helper after ``return; x=1`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        return JsonResponse({})\n"
-            "        x = 1\n"  # dead trailing statement
-            "        _enforce_csrf(request)\n"  # unreachable
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_true_return_dead_trailing_if_unreachable_fails(
-        self,
-    ) -> None:
-        """Helper after ``if True: return; if True: pass`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if True:\n"
-            "            return JsonResponse({})\n"
-            "        if True:\n"
-            "            pass\n"  # dead trailing if (unreachable)
-            "        _enforce_csrf(request)\n"  # unreachable
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_false_else_return_unreachable_fails(self) -> None:
-        """Helper after ``if False: pass; else: return`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if False:\n"
-            "            pass\n"
-            "        else:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_nonconstant_if_both_return_unreachable_fails(self) -> None:
-        """Helper after ``if x: return; else: return`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if some_condition:\n"
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_no_http_method_names_allows_all_handlers(self) -> None:
-        """Without ``http_method_names``, all standard handlers are checked."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    def post(self, request):\n"
-            "        _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_disallowed_handler_no_helper_elsewhere_fails(self) -> None:
-        """http_method_names restricts, and no allowed handler has a helper."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['get']\n"
-            "    def get(self, request):\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    # ------------------------------------------------------------------
-    # Signed numeric literal reachability — class-level (CR-SA46-REV-002)
-    # ------------------------------------------------------------------
-
-    def test_class_helper_under_if_neg_int_reachable_passes(self) -> None:
-        """Helper inside ``if -1:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if -1:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_neg_float_zero_unreachable_fails(self) -> None:
-        """Helper inside ``if -0.0:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if -0.0:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_neg_complex_reachable_passes(self) -> None:
-        """Helper inside ``if -1j:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if -1j:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_neg_complex_zero_unreachable_fails(self) -> None:
-        """Helper inside ``if -0j:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if -0j:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    # ------------------------------------------------------------------
-    # Unary literal reachability — class-level (CR-SA46-REV-003)
-    # ------------------------------------------------------------------
-
-    def test_class_helper_under_if_not_zero_is_reachable_passes(self) -> None:
-        """Helper inside ``if not 0:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not 0:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_not_one_is_unreachable_fails(self) -> None:
-        """Helper inside ``if not 1:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not 1:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_not_zero_else_unreachable_fails(self) -> None:
-        """Helper in ``else`` of ``if not 0: return ...`` in class handler."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not 0:\n"
-            "            return JsonResponse({})\n"
-            "        else:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "    return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_invert_zero_is_reachable_passes(self) -> None:
-        """Helper inside ``if ~0:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if ~0:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_plus_true_is_reachable_passes(self) -> None:
-        """Helper inside ``if +True:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if +True:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_minus_true_is_reachable_passes(self) -> None:
-        """Helper inside ``if -True:`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if -True:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_minus_false_is_unreachable_fails(self) -> None:
-        """Helper inside ``if -False:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if -False:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_not_nonempty_str_is_unreachable_fails(self) -> None:
-        r"""Helper inside ``if not \"x\":`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            '        if not "x":\n'
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_not_empty_str_is_reachable_passes(self) -> None:
-        r"""Helper inside ``if not \"\":`` in class handler is reachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            '        if not "":\n'
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    # --- Unpacked-container reachability — class-level (CR-SA46-REV-UNPACK-001)
-
-    def test_class_helper_under_if_not_starred_list_is_reachable_passes(self) -> None:
-        """Helper inside ``if not [*x]:`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not [*x]:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_not_starred_tuple_is_reachable_passes(self) -> None:
-        """Helper inside ``if not (*x,):`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not (*x,):\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_not_starred_set_is_reachable_passes(self) -> None:
-        """Helper inside ``if not {*x}:`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not {*x}:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_under_if_not_starred_dict_is_reachable_passes(self) -> None:
-        """Helper inside ``if not {**x}:`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not {**x}:\n"
-            "            _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_after_if_not_starred_list_return_is_reachable_passes(self) -> None:
-        """Helper after ``if not [*x]: return`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not [*x]:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_after_if_not_starred_tuple_return_is_reachable_passes(self) -> None:
-        """Helper after ``if not (*x,): return`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not (*x,):\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_after_if_not_starred_set_return_is_reachable_passes(self) -> None:
-        """Helper after ``if not {*x}: return`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not {*x}:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    def test_class_helper_after_if_not_starred_dict_return_is_reachable_passes(self) -> None:
-        """Helper after ``if not {**x}: return`` in class handler is reachable (uncertain)."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not {**x}:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 0
-
-    # --- Mixed fixed+unpack container reachability — class-level (CR-SA46-REV-UNPACK-001)
-
-    def test_class_helper_under_if_not_mixed_list_is_unreachable_fails(self) -> None:
-        """Helper inside ``if not [1, *x]:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not [1, *x]:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_not_mixed_tuple_is_unreachable_fails(self) -> None:
-        """Helper inside ``if not (1, *x):`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not (1, *x):\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_not_mixed_set_is_unreachable_fails(self) -> None:
-        """Helper inside ``if not {1, *x}:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not {1, *x}:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_under_if_not_mixed_dict_is_unreachable_fails(self) -> None:
-        r"""Helper inside ``if not {\"k\": 1, **x}:`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if not {'k': 1, **x}:\n"
-            "            _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_mixed_list_return_is_unreachable_fails(self) -> None:
-        """Helper after ``if [1, *x]: return`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if [1, *x]:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_mixed_tuple_return_is_unreachable_fails(self) -> None:
-        """Helper after ``if (1, *x): return`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if (1, *x):\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_mixed_set_return_is_unreachable_fails(self) -> None:
-        """Helper after ``if {1, *x}: return`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if {1, *x}:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-    def test_class_helper_after_if_mixed_dict_return_is_unreachable_fails(self) -> None:
-        r"""Helper after ``if {\"k\": 1, **x}: return`` in class handler is unreachable."""
-        source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
-            "class MyView(View):\n"
-            "    http_method_names = ['post']\n"
-            "    def post(self, request):\n"
-            "        if {'k': 1, **x}:\n"
-            "            return JsonResponse({})\n"
-            "        _enforce_csrf(request)\n"  # unreachable
-            "        return JsonResponse({})\n"
-        )
-        assert _get_violation_count(source) == 1
-
-
-# ---------------------------------------------------------------------------
-# _CsrfExemptVisitor  —  function-level scans (nested-def gate)
-# ---------------------------------------------------------------------------
 
 
 class TestCsrfExemptVisitorFunctionLevel:
@@ -2508,9 +1659,9 @@ class TestCurrentCallSites:
     """All existing csrf_exempt call-sites in the repo pass the tightened gate."""
 
     def test_billing_session_view_pattern(self) -> None:
-        """Billing session-authed view: post() has _enforce_csrf."""
+        """Billing session-authed view: the POST handler is exempt and re-enforces."""
         source = (
-            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "@method_decorator(csrf_exempt, name='post')\n"
             "class CreateCheckoutSessionView(View):\n"
             "    http_method_names = ['post']\n"
             "    def post(self, request, *args, **kwargs):\n"
