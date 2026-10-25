@@ -59,11 +59,14 @@ django-stubs = "^6.0.7"
 # Testing utilities
 factory-boy = "^3.3.3"
 psycopg2-binary = "^2.9.12"
-# Generated-project settings import decouple and dj-database-url; runtime
-# tests load them. dj-database-url was present only ad hoc, so a venv rebuild
-# failed the facade-boot runtime tests.
+# Generated-project runtime deps that the runtime and automation tests load
+# in this venv; constraints follow the generator's pyproject.toml.j2.
+# dj-database-url, whitenoise and gunicorn were present only ad hoc, so a
+# venv rebuild failed the facade-boot and generated-project automation tests.
 python-decouple = "^3.8"
 dj-database-url = "^3.1.2"
+whitenoise = "^6.12.0"
+gunicorn = "^26.0.0"
 bandit = "1.9.4"
 zizmor = "1.30.1"
 
