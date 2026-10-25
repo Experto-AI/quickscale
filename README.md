@@ -20,6 +20,19 @@ dumps. JSON artifacts are export-only: they are useful for non-PostgreSQL develo
 fixture export and for operator inspection, but they are not a supported restore input for
 generated PostgreSQL projects.
 
+## Artifact format
+
+A backup artifact is version 1: one PostgreSQL 18 custom-format dump plus four sidecars under the
+snapshot root (`media-sync-manifest.json`, `env-var-manifest.json`, `release-metadata.json`,
+`promotion-verification.json`). `release-metadata.json` is the manifest: it carries the format
+version and the migration content identity of installed QuickScale modules and project-owned apps,
+and the artifact row's capture metadata carries the same fields.
+
+A missing or unknown manifest version, a manifest without project identity, or any recorded module
+or project migration file that changed or is not installed blocks restore before `pg_restore` runs.
+Backup directories are created owner-only (0700), dump and sidecar files owner-only (0600), and
+filenames carry a short random token so two captures in the same second never collide.
+
 ## Dependency on quickscale-core
 
 The module imports `quickscale_core.dr_engine` at runtime. Fresh projects already declare the

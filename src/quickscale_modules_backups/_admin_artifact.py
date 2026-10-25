@@ -23,7 +23,7 @@ from django.http import (
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from quickscale_core.runtime import BackupRestoreBlocked
+from quickscale_core.runtime import BackupError, BackupRestoreBlocked
 from quickscale_modules_backups.models import (
     BackupArtifact,
     BackupPolicy,
@@ -483,12 +483,15 @@ class BackupArtifactAdminBase(admin.ModelAdmin):
             "outside that admin surface."
         )
 
-    @admin.action(description="Validate selected backups")
+    @admin.action(description="Validate selected backups", permissions=["change"])
     def validate_selected_backups(self, request: HttpRequest, queryset: Any) -> None:
         """Validate selected artifacts and report any failures."""
         issues_found = 0
         for artifact in queryset:
-            issues = self._validate_backup_artifact(artifact)
+            try:
+                issues = self._validate_backup_artifact(artifact)
+            except BackupError as exc:
+                issues = [str(exc)]
             if issues:
                 issues_found += 1
 

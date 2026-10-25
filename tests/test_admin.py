@@ -2582,6 +2582,17 @@ class TestBackupArtifactAdmin:
         assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in rendered
         assert "<script>alert('xss')</script>" not in rendered
 
+    def test_validate_selected_backups_requires_change_permission(self) -> None:
+        artifact_admin = _artifact_admin()
+
+        allowed = getattr(
+            artifact_admin.validate_selected_backups,
+            "allowed_permissions",
+            (),
+        )
+
+        assert "change" in allowed
+
     def test_validate_selected_backups_updates_status(
         self,
         backup_artifact: BackupArtifact,
