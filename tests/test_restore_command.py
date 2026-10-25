@@ -157,10 +157,10 @@ class TestBackupsRestoreCommand:
                 ),
                 "warnings": [
                     {
-                        "code": "artifact_row_missing_after_restore",
+                        "code": "admin_restore_upload_cleanup_failed",
                         "message": (
-                            "Restore executed, but the original backup artifact row "
-                            "no longer exists in the restored database."
+                            "Restore completed, but the staged admin upload directory "
+                            "could not be cleaned up automatically."
                         ),
                     },
                 ],
@@ -191,7 +191,7 @@ class TestBackupsRestoreCommand:
         )
         assert stdout.getvalue() == (
             f"Restore executed for {postgresql_backup_artifact.filename}.\n"
-            "Warning [artifact_row_missing_after_restore]: Restore executed, but the original backup artifact row no longer exists in the restored database.\n"
+            "Warning [admin_restore_upload_cleanup_failed]: Restore completed, but the staged admin upload directory could not be cleaned up automatically.\n"
         )
         assert stderr.getvalue() == ""
 

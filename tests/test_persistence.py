@@ -15,13 +15,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
+from django.db import connection
 from django.test import override_settings
 
-from quickscale_core.dr_engine.primitives import BackupPolicySnapshot
+from quickscale_core.dr_engine.primitives import BackupError, BackupPolicySnapshot
 from quickscale_core.dr_engine.recovery import BackupRestoreBlocked
 from quickscale_modules_backups.models import (
     BackupArtifact,
@@ -394,6 +396,240 @@ class TestArtifactProviderTrustResolution:
                 checksum_sha256=postgresql_backup_artifact.checksum_sha256,
                 size_bytes=postgresql_backup_artifact.size_bytes,
             )
+
+
+# ---------------------------------------------------------------------------
+# Artifact provider — restore metadata and recovery-point queries
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestArtifactProviderRestoreMetadata:
+    """A restore re-records the artifact row and relinks its snapshot."""
+
+    def test_recreates_artifact_row_and_relinks_snapshot(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        snapshot = _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-provider-restored",
+        )
+        artifact_id = postgresql_backup_artifact.pk
+        original_created_at = postgresql_backup_artifact.created_at
+        snapshot_descriptors = snapshot.child_descriptors_json
+
+        # The dump contains the snapshot row but not the post-dump artifact row.
+        BackupArtifact.objects.filter(pk=artifact_id).delete()
+        snapshot.refresh_from_db()
+        assert snapshot.authoritative_dump_id is None
+
+        restored_at = datetime.now(timezone.utc)
+        warnings = artifact_provider.update_artifact_after_restore(
+            postgresql_backup_artifact,
+            restored_at=restored_at,
+            snapshot=snapshot,
+        )
+
+        assert warnings == ()
+        restored = BackupArtifact.objects.get(
+            filename=postgresql_backup_artifact.filename
+        )
+        assert restored.pk != artifact_id
+        assert restored.status == BackupArtifact.Status.RESTORED
+        assert restored.restored_at == restored_at
+        assert restored.created_at == original_created_at
+        snapshot.refresh_from_db()
+        assert snapshot.authoritative_dump_id == restored.pk
+        assert snapshot.status == BackupSnapshot.Status.READY
+        assert snapshot.child_descriptors_json == snapshot_descriptors
+
+    def test_raises_when_the_restored_snapshot_row_is_missing(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        postgresql_backup_artifact.metadata_json = {
+            **postgresql_backup_artifact.metadata_json,
+            "snapshot_id": "snap-missing-from-dump",
+        }
+
+        with pytest.raises(
+            BackupError,
+            match="does not contain the snapshot row 'snap-missing-from-dump'",
+        ):
+            artifact_provider.update_artifact_after_restore(
+                postgresql_backup_artifact,
+                restored_at=datetime.now(timezone.utc),
+            )
+
+    @pytest.mark.skipif(
+        connection.vendor != "postgresql",
+        reason="identity-sequence behavior is PostgreSQL-specific",
+    )
+    def test_recreation_leaves_the_identity_sequence_usable(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        artifact_id = postgresql_backup_artifact.pk
+        table = BackupArtifact._meta.db_table
+        quoted_table = connection.ops.quote_name(table)
+
+        # Simulate the dump: the artifact row is absent and the sequence still
+        # points at the pre-dump maximum.
+        BackupArtifact.objects.filter(pk=artifact_id).delete()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT setval(pg_get_serial_sequence(%s, 'id'), "
+                f"COALESCE((SELECT MAX(id) FROM {quoted_table}), 1), "
+                f"(SELECT MAX(id) FROM {quoted_table}) IS NOT NULL)",
+                [table],
+            )
+
+        artifact_provider.update_artifact_after_restore(
+            postgresql_backup_artifact,
+            restored_at=datetime.now(timezone.utc),
+        )
+        restored = BackupArtifact.objects.get(
+            filename=postgresql_backup_artifact.filename
+        )
+        created = artifact_provider.create_artifact(
+            filename="next-after-restore.dump",
+            local_path="/tmp/next-after-restore.dump",
+            checksum_sha256="checksum-next",
+            size_bytes=4,
+            backup_format="pg_dump_custom",
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+            metadata_json={},
+        )
+
+        assert created.pk > restored.pk
+
+    def test_newest_live_snapshot_ignores_a_deleted_newer_snapshot(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        live = _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-live",
+        )
+        deleted_artifact = BackupArtifact.objects.create(
+            filename="deleted-newer.dump",
+            local_path="/tmp/deleted-newer.dump",
+            checksum_sha256="checksum-deleted",
+            size_bytes=4,
+            backup_format="pg_dump_custom",
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+            metadata_json={},
+        )
+        BackupSnapshot.objects.create(
+            snapshot_id="snap-newer-deleted",
+            authoritative_dump=deleted_artifact,
+            status=BackupSnapshot.Status.DELETED,
+            source_environment="local",
+            local_root_path=str(tmp_path / "snap-newer-deleted"),
+            child_descriptors_json={},
+        )
+
+        assert artifact_provider.get_newest_live_snapshot().pk == live.pk
+
+    def test_newest_live_snapshot_ignores_a_failed_newer_snapshot(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        complete = _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-complete",
+        )
+        failed_artifact = BackupArtifact.objects.create(
+            filename="failed-newer.dump",
+            local_path="/tmp/failed-newer.dump",
+            checksum_sha256="checksum-failed",
+            size_bytes=4,
+            backup_format="pg_dump_custom",
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+            metadata_json={},
+        )
+        BackupSnapshot.objects.create(
+            snapshot_id="snap-newer-failed",
+            authoritative_dump=failed_artifact,
+            status=BackupSnapshot.Status.FAILED,
+            source_environment="local",
+            local_root_path=str(tmp_path / "snap-newer-failed"),
+            child_descriptors_json={},
+        )
+
+        assert artifact_provider.get_newest_live_snapshot().pk == complete.pk
+
+    def test_newest_live_snapshot_ignores_a_newer_failed_dump(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        complete = _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-complete-dump",
+        )
+        invalid_artifact = BackupArtifact.objects.create(
+            filename="invalid-newer.dump",
+            local_path="/tmp/invalid-newer.dump",
+            checksum_sha256="checksum-invalid",
+            size_bytes=4,
+            backup_format="pg_dump_custom",
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+            metadata_json={},
+            status=BackupArtifact.Status.FAILED,
+        )
+        BackupSnapshot.objects.create(
+            snapshot_id="snap-newer-invalid-dump",
+            authoritative_dump=invalid_artifact,
+            status=BackupSnapshot.Status.READY,
+            source_environment="local",
+            local_root_path=str(tmp_path / "snap-newer-invalid-dump"),
+            child_descriptors_json={},
+        )
+
+        assert artifact_provider.get_newest_live_snapshot().pk == complete.pk
+
+    def test_newest_live_artifact_ignores_a_deleted_newer_artifact(
+        self,
+        artifact_provider: _BackupArtifactPersistenceProvider,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        newer = BackupArtifact.objects.create(
+            filename="newer-deleted.dump",
+            local_path="/tmp/newer-deleted.dump",
+            checksum_sha256="checksum-newer",
+            size_bytes=4,
+            backup_format="pg_dump_custom",
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+            metadata_json={},
+            status=BackupArtifact.Status.DELETED,
+            deleted_at=datetime.now(timezone.utc),
+        )
+
+        assert (
+            artifact_provider.get_newest_live_artifact().pk
+            == postgresql_backup_artifact.pk
+        )
+        assert newer.pk != postgresql_backup_artifact.pk
 
 
 # ---------------------------------------------------------------------------
