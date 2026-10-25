@@ -517,7 +517,6 @@ docker:
                     "AWS_SECRET_ACCESS_KEY\n"
                     "\n"
                     "n\n"
-                    "n\n"
                     "y\n"
                 ),
             )
@@ -553,7 +552,6 @@ class TestPlanNewProjectConfigureModules:
                     "AWS_ACCESS_KEY_ID\n"
                     "AWS_SECRET_ACCESS_KEY\n"
                     "\n"
-                    "n\n"
                     "n\n"
                     "y\n"
                 ),

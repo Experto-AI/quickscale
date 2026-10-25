@@ -19,8 +19,6 @@ from typing import Any, Final
 
 ANALYTICS_PROVIDER_POSTHOG: Final[str] = "posthog"
 
-ANALYTICS_POSTHOG_DEFAULT_HOST: Final[str] = "https://us.i.posthog.com"
-
 
 # ---------------------------------------------------------------------------
 # Constants: backups
@@ -421,7 +419,6 @@ def _raise_for_retired_module_options(
 
 __all__ = [
     # Analytics constants
-    "ANALYTICS_POSTHOG_DEFAULT_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
     # Backups constants
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",

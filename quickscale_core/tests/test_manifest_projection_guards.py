@@ -270,7 +270,11 @@ def test_alias_removal_and_optional_blanks_are_governed_by_manifest() -> None:
 def test_presence_guards_fail_closed_at_loader(guard) -> None:
     path = Path(__file__).resolve().parents[2] / "quickscale_modules/storage/module.yml"
     raw = yaml.safe_load(path.read_text())
-    entry = raw["derivation"]["derived_settings"][1]
+    entry = next(
+        item
+        for item in raw["derivation"]["derived_settings"]
+        if item["setting_key"] == "AWS_ACCESS_KEY_ID"
+    )
     entry["expression"] = {"template": "__QS_ENV__:{access_key_id_env_var}", **guard}
     with pytest.raises(ManifestError, match="expression"):
         load_manifest(yaml.safe_dump(raw))
@@ -280,7 +284,13 @@ def test_presence_guards_are_generic_and_require_all_conditions() -> None:
     path = Path(__file__).resolve().parents[2] / "quickscale_modules/storage/module.yml"
     raw = yaml.safe_load(path.read_text())
     raw["name"] = "demo"
-    entry = copy.deepcopy(raw["derivation"]["derived_settings"][1])
+    entry = copy.deepcopy(
+        next(
+            item
+            for item in raw["derivation"]["derived_settings"]
+            if item["setting_key"] == "AWS_ACCESS_KEY_ID"
+        )
+    )
     entry["setting_key"] = "DEMO_ALIAS"
     entry["expression"]["when"]["enabled"] = [True]
     raw["derivation"]["derived_settings"] = [entry]

@@ -80,6 +80,20 @@ def test_missing_backend_setting_fails_startup(settings) -> None:
         apps.get_app_config("quickscale_storage").ready()
 
 
+@pytest.mark.parametrize("value", [True, False])
+def test_retired_private_media_setting_is_refused(settings, value) -> None:
+    """Rule 6: a retired projected setting is refused at startup by name."""
+    from django.apps import apps
+    from django.core.exceptions import ImproperlyConfigured
+
+    settings.QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED = value
+
+    with pytest.raises(
+        ImproperlyConfigured, match="QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED"
+    ):
+        apps.get_app_config("quickscale_storage").ready()
+
+
 def test_missing_credentials_fail_check_migrate_and_runserver(settings) -> None:
     """The registered check fails check, migrate, and runserver alike."""
     settings.QUICKSCALE_STORAGE_BACKEND = "s3"

@@ -115,9 +115,9 @@ def _normalize_backend(raw_backend: str | None) -> str:
 
 
 def _normalize_media_prefix(media_url: str) -> str:
-    cleaned = (media_url or "/media/").strip()
+    cleaned = (media_url or "").strip()
     if not cleaned:
-        return "/media/"
+        raise ImproperlyConfigured("MEDIA_URL setting is required.")
     if (
         not cleaned.startswith("/")
         and not cleaned.startswith("http://")
@@ -304,9 +304,14 @@ def build_public_media_url(
     *,
     request: Any | None = None,
     public_base_url: str | None = None,
-    media_url: str = "/media/",
+    media_url: str,
 ) -> str:
-    """Build a public media URL from a storage path or relative/absolute reference."""
+    """Build a public media URL from a storage path or relative/absolute reference.
+
+    Rule 3: the manifest owns the media prefix's only default.  A caller
+    supplies the applied setting, and a blank value fails closed instead of
+    falling back to a code literal.
+    """
     reference = (stored_reference or "").strip()
     if not reference:
         return ""

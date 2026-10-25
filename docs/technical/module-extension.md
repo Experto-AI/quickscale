@@ -361,7 +361,9 @@ Operations, Extending — in that order, with no versions in headings. Rule 38 a
 Configuration heading names every manifest option key and the Management commands heading
 names every command the module ships and every flag those commands declare.
 
-The extension contract belongs inside the README's Extending section, covering:
+The extension contract belongs inside the README's Extending section: the five answers below are
+mandatory and appear as level-three (`###`) subsections, in this order, each with a non-blank
+answer. Module Conventions rule 38's conformance test checks them.
 
 1. **What QuickScale owns**
 2. **What the project owns**
@@ -369,7 +371,7 @@ The extension contract belongs inside the README's Extending section, covering:
 4. **Structured extension points**
 5. **Upgrade expectations**
 
-Suggested material for that section:
+Suggested supporting material for those answers (not separately checked):
 
 | Section | Purpose |
 | --- | --- |
@@ -696,7 +698,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] `on_delete` on `User` is `SET_NULL` (never `PROTECT`), `CASCADE` only on the listed fields (rule 27; the user-FK conformance gate); package files use the allowed names or a private `_<name>.py` (rule 28); test files are `test_<subject>.py`, with no ticket number in the name, docstrings, comments, identifiers, or string literals, and a manifest description carries no ticket number or release stamp (rule 29)
 - [ ] Wiring writes a Django or third-party setting another module also writes only with the same value, or `apply` fails (rule 30); throttle scopes are `quickscale_<module>_<purpose>` with the rate from a `_RATE_LIMIT` option (rule 32); every name in a namespace shared with the project carries the `quickscale_<module>` stem (rule 33)
 - [ ] The module names no higher-layer module anywhere in its source — by import, app label, `get_model`, or `is_installed` (rule 34); secrets arrive as settings rendered by `apply` from the `_ENV_VAR` option, never through `os.getenv`, and `checks.py` fails startup when a needed secret is empty (rule 35)
-- [ ] The README names every option key under Configuration and every command and flag under Management commands (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
+- [ ] The README names every option key under Configuration, every command and flag under Management commands, and answers the five Extending questions as `###` subsections (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**

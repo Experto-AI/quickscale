@@ -166,8 +166,41 @@ anonymization runs only when the command is invoked.
 
 ## Extending
 
-- The module provides a React mount point template: the Django template renders
-  `<div id="form-root" data-form-slug="contact"></div>`, and your React entry point mounts the
-  `FormRenderer` component into it, reading the slug from the `data-*` attributes. The
-  generated project ships `FormRenderer` and `FormFieldRenderer` in `src/components/forms/`
-  and the `useFormSchema` hook in `src/hooks/`.
+### What QuickScale owns
+
+The module package under `modules/forms/` — models, migrations, admin, public and admin APIs,
+the retention command, and its templates — its manifest options and derived settings, and the
+managed wiring `quickscale apply` writes (`<package>/settings/modules.py`,
+`<package>/urls_modules.py`).
+
+### What the project owns
+
+The actual forms, fields, preset choices, and submission data operators create; `quickscale.yml`
+values for the options above; project template overrides; the React entry point and components
+that consume the schema and submit APIs; and all project-owned apps.
+
+### Update-safe customizations
+
+Change option values, override templates, and mount project React components into the documented
+`#form-root` markers with the `data-*` attributes. QuickScale never rewrites user-owned frontend
+or template files.
+
+### Structured extension points
+
+The public schema and submit APIs, the submission-management API contract, and the
+`quickscale_forms.submission` notification template are the documented surfaces. The form model
+is data-driven, so adding or changing a form is configuration in the admin, not code. Forms
+emits `quickscale_forms_submitted` through analytics' generic `capture_event` service.
+
+### Upgrade expectations
+
+Tier 1 settings, API contracts, service events, and template overrides survive normal module
+updates. Preset rows created by migrations keep their historical values; new rows inherit the
+runtime settings. Never edit `modules/forms/`: `quickscale update` refuses a local edit unless
+`--allow-local-changes`, and managed wiring is regenerated.
+
+The module provides a React mount point template: the Django template renders
+`<div id="form-root" data-form-slug="contact"></div>`, and your React entry point mounts the
+`FormRenderer` component into it, reading the slug from the `data-*` attributes. The generated
+project ships `FormRenderer` and `FormFieldRenderer` in `src/components/forms/` and the
+`useFormSchema` hook in `src/hooks/`.

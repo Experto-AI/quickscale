@@ -213,10 +213,7 @@ def _display_analytics_next_steps(modules: Mapping[str, Any]) -> None:
             analytics_options.get("posthog_api_key_env_var") or ""
         )
         posthog_host_env_var = str(analytics_options.get("posthog_host_env_var") or "")
-        posthog_host = str(
-            analytics_options.get("posthog_host")
-            or _module_options.ANALYTICS_POSTHOG_DEFAULT_HOST
-        )
+        posthog_host = str(analytics_options.get("posthog_host") or "")
         click.echo("  PostHog dashboard: https://app.posthog.com")
         click.echo(
             "  Live events: https://app.posthog.com/project/<project-id>/activity/explore"

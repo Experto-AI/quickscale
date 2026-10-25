@@ -268,7 +268,6 @@ RULE_37_ALLOWED_CONSTANTS: dict[tuple[str, str, str], str] = {
             "env-sync and secret-projection plumbing and the CLI's operator output read"
         )
         for name in (
-            "ANALYTICS_POSTHOG_DEFAULT_HOST",
             "ANALYTICS_PROVIDER_POSTHOG",
             "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",

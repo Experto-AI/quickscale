@@ -29,6 +29,46 @@ def test_readme_content_control() -> None:
     )
 
 
+def test_readme_extending_contract_control() -> None:
+    """Coherence proposal 9: Extending answers the five standard questions."""
+    module = _golden_module()
+    assert _violations(checker.rule_38_readme_content, module) == []
+    readme = module.root_files["README.md"]
+    bullet_only = readme[: readme.index("## Extending")] + (
+        "## Extending\n\n- Module-specific extension notes.\n"
+    )
+    broken = replace(module, root_files={**module.root_files, "README.md": bullet_only})
+    assert any(
+        "Extending does not answer 'What QuickScale owns'" in violation
+        for violation in _violations(checker.rule_38_readme_content, broken)
+    )
+    empty_answer = replace(
+        module,
+        root_files={
+            **module.root_files,
+            "README.md": readme.replace(
+                "The module's manifest wiring, managed settings, and migrations.",
+                "",
+            ),
+        },
+    )
+    assert any(
+        "Extending 'What QuickScale owns' has no answer" in violation
+        for violation in _violations(checker.rule_38_readme_content, empty_answer)
+    )
+    empty_section = replace(
+        module,
+        root_files={
+            **module.root_files,
+            "README.md": readme[: readme.index("## Extending")] + "## Extending\n",
+        },
+    )
+    assert any(
+        "Extending does not answer 'What QuickScale owns'" in violation
+        for violation in _violations(checker.rule_38_readme_content, empty_section)
+    )
+
+
 def test_readme_command_flag_control() -> None:
     module = _with_files(
         _golden_module(),

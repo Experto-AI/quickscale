@@ -149,8 +149,40 @@ selector before the dashboard or API runs.
 
 ## Extending
 
-- The module's admin, API viewsets, serializers, and filters are the supported customization
-  points; the tenant behavior comes from orgs' `TenantModel` and `TenantModelAdmin`.
+### What QuickScale owns
+
+The module package under `modules/crm/` — models, migrations, admin, API viewsets,
+serializers, filters, and the dashboard — its manifest options, and the managed wiring
+`quickscale apply` writes (`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+CRM records and organization data, `quickscale.yml` values for the options above, project
+frontend code consuming the API, and any project-owned views, templates, or apps.
+
+### Update-safe customizations
+
+Change option values, consume the documented `crm/api/` contract, and override project
+templates or frontend files; QuickScale never rewrites user-owned files. Project-owned
+subclasses of the module's viewsets, serializers, or filters live in the project and are
+registered from project URLs or admin code.
+
+### Structured extension points
+
+The module's admin, API viewsets, serializers, and filters are the documented customization
+points, and the tenant behavior comes from orgs' `TenantModel` and `TenantModelAdmin`. The
+`crm/api/stats/` totals contract and the snake_case route names are stable API surface; the
+terminal stage semantics stay internal.
+
+### Upgrade expectations
+
+Tier 1 settings and API contracts survive normal module updates; Tier 2 subclasses of the
+module's documented bases survive minor updates while their contract is documented. Never edit
+`modules/crm/`: `quickscale update` refuses a local edit unless `--allow-local-changes`, and
+managed wiring is regenerated.
+
+### Development and support
+
 - Development from the maintainer repository:
 
   ```bash

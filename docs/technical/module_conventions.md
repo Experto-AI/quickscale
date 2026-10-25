@@ -100,7 +100,7 @@ dependencies. A conformance test enforces each rule.
   their models as read-only mirrors of settings; settings are the only switch (rule 20), and the
   models' initial values come from settings.
 - ❌ `getattr(settings, NAME, default)`, a settings reader that defaults or coerces, or defaults
-  written in code.
+  written in code, including a `*DEFAULT*` constant or fallback that repeats one.
 - ❌ Reading a setting the module's manifest does not declare, or another module's setting.
 - ❌ A runtime accessor, generated per-module settings file, or Pydantic-style second schema.
 
@@ -318,8 +318,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 **12. Manifest option schema.**
 - ✅ Every option has `type`, `default`, and `description`. A mutable option has `django_setting`;
   an immutable one has none and is read by the module's `adapter.py` at apply time (auth's
-  `authentication_method`, storage's `private_media_enabled`), as
+  `authentication_method`), as
   §[Module Manifest Architecture](module_architecture.md#module-manifest-architecture) already requires.
+- ✅ Every accepted option has a live consumer: a `QUICKSCALE_` derived setting is read by module,
+  core, CLI, or script source; an option with no consumer is removed or refused as unsupported.
 - ✅ The manifest is the only place option values are checked (rule 3). Each option carries its
   checks in its own `validation` block (the authoring form §[Module Derivation
   Schema](module_architecture.md#module-derivation-schema) records). `plan`, `apply`, and the startup check read that block;
@@ -371,7 +373,7 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ✅ A mutable option's `django_setting` is its only projection when the setting equals the option
   value; `derivation.option_derivations.<option>.derived_settings` is only for a setting computed
   from several options or transformed, and never repeats a setting name or a default. The
-  option's `default` is the manifest's only default (rule 3).
+  option's `default` is the manifest's only default (rule 3), so no source constant repeats it.
 - ✅ `config` always has `mutable` and `immutable` (`{}` when empty); `dependencies` is always
   present (`[]` when empty). Top-level key order is not a rule.
 - ✅ A runtime predicate that decides module behavior from resolved options — notifications'
@@ -630,8 +632,8 @@ ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`, in any case and embedded in a l
 test checks all of them. Other files in `tests/` are `conftest.py`, `__init__.py`, `settings*.py`,
 `urls*.py`, private `_`-prefixed files and folders, `templates/` for test-only templates, and test apps
 named `<purpose>_app/`. Shipped module source and `module.yml` follow the same no-ticket-id rule;
-a `module.yml` description also carries no release stamp (`v0.80.0` or `0.80.0`), naming behavior
-rather than the release that introduced it.
+a `module.yml` description and a shipped source message (error, log, docstring, or template text)
+also carry no release stamp (`v0.80.0` or `0.80.0`); `__version__` is an identity, not a message.
 
 **30. Settings written by module wiring.**
 - ✅ A module's wiring (`adapter.py`, `module.yml`) writes its own settings and the Django or
@@ -807,8 +809,12 @@ rather than the release that introduced it.
 
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
 Management commands heading every command the module ships and every flag those commands declare;
-the test checks all three, besides the headings. A module whose views authorize through
-orgs' role tools lists the minimum role per action in its README's Public surface (rule 19).
+the test checks all three, besides the headings. The Extending section answers the five standard
+questions (What QuickScale owns, What the project owns, Update-safe customizations, Structured
+extension points, Upgrade expectations) as level-three subsections, in order, each non-blank;
+[module-extension.md](module-extension.md#standard-documentation-contract-for-every-module) owns
+their wording. A module whose views authorize through orgs' role tools lists the minimum role per
+action in its README's Public surface (rule 19).
 
 **39. Module dependencies.**
 - ✅ `required_modules` and `dependencies` are always present; an empty list declares none.

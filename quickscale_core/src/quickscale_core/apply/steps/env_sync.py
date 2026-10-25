@@ -36,7 +36,6 @@ from typing import Any
 
 from quickscale_core.apply.steps.types import StepContext, StepOutcome
 from quickscale_core.contracts.module_options import (
-    ANALYTICS_POSTHOG_DEFAULT_HOST,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
@@ -138,7 +137,10 @@ def _notifications_prose(resolved: Mapping[str, Any]) -> list[str]:
 
 
 def _analytics_prose(resolved: Mapping[str, Any]) -> list[str]:
-    host = str(resolved.get("posthog_host") or ANALYTICS_POSTHOG_DEFAULT_HOST).strip()
+    host = str(
+        resolved.get("posthog_host")
+        or _declared_option_default("analytics", "posthog_host")
+    ).strip()
     host_env_var = str(resolved.get("posthog_host_env_var") or "").strip()
     if not host_env_var:
         host_env_var = _declared_option_default("analytics", "posthog_host_env_var")

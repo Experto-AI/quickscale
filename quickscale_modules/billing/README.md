@@ -48,7 +48,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `publishable_key_env_var` | string | `STRIPE_PUBLISHABLE_KEY` | `QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR` | Environment-variable name containing the Stripe publishable key used by billing checkout flows. |
 | `secret_key_env_var` | string | `STRIPE_SECRET_KEY` | `QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR` | Environment-variable name containing the Stripe secret key for server-side API calls. |
 | `webhook_secret_env_var` | string | `QUICKSCALE_BILLING_WEBHOOK_SECRET` | `QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR` | Environment-variable name containing the Stripe webhook signing secret. |
-| `currency` | string | `usd` | `QUICKSCALE_BILLING_CURRENCY` | ISO 4217 billing currency code used for plan metadata and Checkout validation. |
+| `currency` | string | `usd` | `QUICKSCALE_BILLING_CURRENCY` | ISO 4217 billing currency code; Checkout refuses a plan whose currency differs from this value or from its Stripe price. |
 | `api_rate_limit` | string | `30/hour` | `QUICKSCALE_BILLING_API_RATE_LIMIT` | Throttle rate per client for billing's Stripe-calling checkout and portal endpoints. Format: `<count>/<period>`. |
 | `transactions_per_page` | integer | `25` | `QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE` | Number of credit transactions per page in the ledger list API. |
 | `plans_per_page` | integer | `25` | `QUICKSCALE_BILLING_PLANS_PER_PAGE` | Number of plans per page in the public plan catalog API. |
@@ -281,11 +281,40 @@ is the current shipped surface.
 
 ## Extending
 
-- **Service API**: `debit_user` is the approved service API for credit consumption; the module
-  also exposes `credit_user`, `handle_stripe_event`, and the reconciliation helpers in
-  `services.py` for project-owned integration code.
-- **Explicit non-goals** for the current contract: no Stripe catalog authoring from the Django
-  admin, no coupons, tax/VAT workflows, metered billing, or custom invoice-history UI, no seat
-  billing or seat-based enforcement, and no rewrites of user-owned frontend files.
-- **Roadmap**: see the [technical roadmap](../../docs/technical/roadmap.md) for active
-  billing work.
+### What QuickScale owns
+
+The module package under `modules/billing/` — models, migrations, admin, JSON APIs, Django
+pages, webhook handling, and services — its manifest options, and the managed wiring
+`quickscale apply` writes (`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+`quickscale.yml` values for the options above, the Stripe account's catalog and webhook
+endpoint, deployment secrets, the project's frontend and React integration, and all
+project-owned apps and data.
+
+### Update-safe customizations
+
+Change option values, consume the JSON APIs from project-owned frontend code, and adopt the
+module's Django pages or treat them as mount points; QuickScale never rewrites user-owned
+frontend files. Project code calls the documented service API instead of reaching into module
+internals.
+
+### Structured extension points
+
+`debit_user` is the approved service API for credit consumption; the module also publishes
+`credit_user`, `handle_stripe_event`, and the reconciliation helpers in `services.py`.
+`require_org_feature(feature_key)` is the published plan-feature gate, and the module declares
+the `account_deletion_handlers` and `organization_pricing_url_hooks` capabilities that auth and
+orgs collect. Stripe catalog authoring, coupons, tax/VAT, metered billing, seat billing, and
+custom invoice-history UI are explicit non-goals of the current contract.
+
+### Upgrade expectations
+
+Tier 1 settings, documented services, capabilities, and the webhook contract survive normal
+module updates; a Stripe API-version change is called out in the release note and the module's
+webhook section. Never edit `modules/billing/`: `quickscale update` refuses a local edit unless
+`--allow-local-changes`, and managed wiring is regenerated.
+
+Related documentation: [technical roadmap](../../docs/technical/roadmap.md) for active billing
+work.

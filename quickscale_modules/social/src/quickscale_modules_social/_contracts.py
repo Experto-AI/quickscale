@@ -41,6 +41,10 @@ from quickscale_core.runtime.manifest import (
 
 from quickscale_modules_social.exceptions import SocialConfigurationError
 
+#: The one message for an embed whose provider has no inline preview support.
+#: Rule 29: it names the behavior, not the release that introduced it.
+_EMBED_PROVIDER_UNSUPPORTED_MESSAGE = "Embeds support only TikTok and YouTube."
+
 SOCIAL_LINK_TREE_PATH = "/social"
 SOCIAL_EMBEDS_PATH = "/social/embeds"
 SOCIAL_INTEGRATION_BASE_PATH = "/_quickscale/social/"
@@ -190,7 +194,7 @@ def resolve_social_embed_metadata(
     if resolved.provider == "tiktok":
         return _resolve_tiktok_embed_metadata(resolved.url)
 
-    raise ValueError("Embeds support only TikTok and YouTube in v0.79.0.")
+    raise ValueError(_EMBED_PROVIDER_UNSUPPORTED_MESSAGE)
 
 
 __all__ = [

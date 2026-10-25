@@ -11,6 +11,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from quickscale_modules_social._contracts import (
+    _EMBED_PROVIDER_UNSUPPORTED_MESSAGE,
     SOCIAL_EMBEDS_CACHE_KEY,
     SOCIAL_LINKS_CACHE_KEY,
     SOCIAL_PROVIDER_CHOICES,
@@ -99,11 +100,7 @@ class BaseSocialItem(TenantModel):
             resolved.provider
         ):
             raise ValidationError(
-                {
-                    "provider_name": (
-                        "Embeds support only TikTok and YouTube in v0.79.0."
-                    )
-                }
+                {"provider_name": _EMBED_PROVIDER_UNSUPPORTED_MESSAGE}
             )
 
         self.provider_name = resolved.provider

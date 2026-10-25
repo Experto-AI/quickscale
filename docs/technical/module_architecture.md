@@ -348,9 +348,12 @@ The **adapter** is the machine-readable form of Django's "add this app to
   are inventory metadata, never a second wiring authority
 - ❌ **No parsed-but-unread declarative surface.** A key accepted by the manifest
   loader MUST be projected into wiring by a live code path, or MUST be removed from
-  the schema. A key that looks authoritative and is inert is a false-green. The
-  loader's top-level key set is closed: a key outside the parsed set is refused at load, so a
-  stray or misspelled top-level section fails hard instead of loading silently
+  the schema. A `QUICKSCALE_`-named derived setting MUST be read by module source or
+  rendered/read by core, CLI, or script source; an option with no consumer is removed
+  or refused by name with a "not supported" message. A key that looks authoritative
+  and is inert is a false-green. The loader's top-level key set is closed: a key outside the
+  parsed set is refused at load, so a stray or misspelled top-level section fails hard instead
+  of loading silently
 
 **Tie-breaker:** When two places state which apps a module contributes, the module's
 own `module.yml` wins and the other copy is deleted, not reconciled.

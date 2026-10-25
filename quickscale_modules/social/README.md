@@ -182,8 +182,40 @@ This module ships no management commands.
 
 ## Extending
 
-- The public pages consume the payload endpoints through the `window.__QUICKSCALE__` seam; a
-  project that wants to change the presentation adopts the social page templates and frontend
-  files rather than editing module source.
-- Related documentation: [roadmap](../../docs/technical/roadmap.md),
-  [changelog](../../CHANGELOG.md), and the [module workspace README](../README.md).
+### What QuickScale owns
+
+The module package under `modules/social/` — models, migrations, admin, services, embed
+resolution, and payload builders — its manifest options, the module-declared managed output
+under `<package>/quickscale_managed/`, the managed wiring, and the managed seam files
+`quickscale apply` regenerates.
+
+### What the project owns
+
+Curated link and embed records; `quickscale.yml` values for the options above; the public page
+templates and frontend files when a project adopts the React presentation; and all project-owned
+apps and data.
+
+### Update-safe customizations
+
+Change option values and adopt the social page templates and frontend files into the project
+when a different presentation is wanted; QuickScale does not rewrite user-owned routes,
+navigation, templates, or page source. Existing projects keep the backend surfaces and adopt
+the public pages manually.
+
+### Structured extension points
+
+The services `list_published_social_links()`, `list_published_social_embeds()`,
+`build_social_link_tree_payload()`, and `build_social_embeds_payload()` are the documented
+runtime surface. Public pages consume the payload endpoints through the `window.__QUICKSCALE__`
+seam. The provider allowlist option and the option-declared layout variant shape the payload;
+YouTube and TikTok remain the only embed-capable providers.
+
+### Upgrade expectations
+
+Tier 1 settings, services, payload shapes, and the seam survive normal module updates. Managed
+files under `<package>/quickscale_managed/` are never edited; `quickscale update` refuses a
+local edit under `modules/social/` unless `--allow-local-changes`, and managed wiring and seam
+files are regenerated.
+
+Related documentation: [roadmap](../../docs/technical/roadmap.md),
+[changelog](../../CHANGELOG.md), and the [module workspace README](../README.md).

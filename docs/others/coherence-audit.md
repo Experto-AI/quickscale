@@ -135,20 +135,6 @@ items:
     handoff: [arch]
     first_seen: "2026-10-24"
     last_verified: "2026-10-24"
-  - id: manifest-declared-surface
-    kind: rule-violation
-    status: open
-    regressed: true
-    verification: confirmed
-    aspect: B
-    cost: [ambiguity, tax]
-    population: modules
-    members_affected: [storage]
-    rule_ref: "module_conventions rule 12; module_architecture §Module Manifest Architecture"
-    check: {kind: structural, state: proposed, model: contract-based}
-    handoff: [tech]
-    first_seen: "2026-10-08"
-    last_verified: "2026-10-24"
   - id: billing-feature-gate
     kind: rule-violation
     status: open
@@ -215,19 +201,6 @@ items:
     handoff: []
     first_seen: "2026-10-24"
     last_verified: "2026-10-24"
-  - id: readme-extending-contract
-    kind: rule-violation
-    status: open
-    verification: confirmed
-    aspect: O
-    cost: [tax]
-    population: module-readmes
-    members_affected: null
-    rule_ref: "module-extension.md §Standard Documentation Contract"
-    check: {kind: docs, state: proposed, model: contract-based}
-    handoff: []
-    first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
   - id: public-read-marker-mixins
     kind: rule-violation
     status: open
@@ -254,19 +227,6 @@ items:
     handoff: [tech]
     first_seen: "2026-10-24"
     last_verified: "2026-10-24"
-  - id: duplicated-default-constants
-    kind: drift
-    status: open
-    verification: confirmed
-    aspect: B
-    cost: [tax]
-    population: modules
-    members_affected: [analytics, notifications, storage]
-    rule_ref: "module_conventions rules 3 and 12"
-    check: {kind: structural, state: proposed, model: contract-based}
-    handoff: []
-    first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
   - id: stale-isolation-narratives
     kind: drift
     status: open
@@ -277,19 +237,6 @@ items:
     members_affected: [crm, social]
     rule_ref: "module_conventions rules 11 and 29; test evidence accuracy"
     check: {kind: review, state: proposed, model: contract-based}
-    handoff: []
-    first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
-  - id: stale-version-error-strings
-    kind: drift
-    status: open
-    verification: confirmed
-    aspect: O
-    cost: [ambiguity]
-    population: modules
-    members_affected: [analytics, social]
-    rule_ref: "module_conventions rule 29 (release-stamp spirit)"
-    check: {kind: structural, state: proposed, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
     last_verified: "2026-10-24"
@@ -323,36 +270,28 @@ gaps:
   - {id: 21, rule: 17, state: open, last_verified: "2026-10-24"}
   - {id: 22, rule: 37, state: open, last_verified: "2026-10-24"}
   - {id: 23, rule: 19, state: open, last_verified: "2026-10-24"}
-  - {id: 24, rule: 12, state: open, last_verified: "2026-10-24"}
   - {id: 25, rule: 9, state: open, last_verified: "2026-10-24"}
   - {id: 26, rule: 30, state: open, last_verified: "2026-10-24"}
-  - {id: 27, rule: 38, state: open, last_verified: "2026-10-24"}
   - {id: 28, rule: 11, state: open, last_verified: "2026-10-24"}
   - {id: 29, rule: 23, state: open, last_verified: "2026-10-24"}
-  - {id: 30, rule: 3, state: open, last_verified: "2026-10-24"}
-  - {id: 31, rule: 29, state: open, last_verified: "2026-10-24"}
 ```
 
 ## Summary table
 
-Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **11** (prior 21 plus new 22–31). Cost classes overlap; the unique confirmed-item total is 15: defect 1 · collision 0 · ambiguity 5 · tax 9.
+Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **7** (prior 21 plus 22, 23, 25, 26, 28, and 29). Cost classes overlap; the unique confirmed-item total is 11: defect 1 · collision 0 · ambiguity 6 · tax 7.
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
 | `generated-module-branches` | rule-violation | L / generator-templates | tax, ambiguity | 4 template groups / all generated projects | open | confirmed · high |
 | `notifications-anymail-wiring-split` | rule-violation | B / modules | tax | 1/12 modules | open | confirmed · high |
-| `manifest-declared-surface` | rule-violation | B / modules | ambiguity, tax | 1/12 modules | open (regressed) | confirmed · high |
 | `billing-feature-gate` | rule-violation | H / modules | ambiguity | 1/12 modules | open (regressed) | confirmed · medium-high |
 | `billing-admin-org-filter` | drift | E / tenant-models | tax | 4/20 admin classes | open | confirmed · high |
 | `forms-tenant-isolation-evidence` | drift | M / tenant-isolation-suites | tax | 1/6 suites | open | confirmed · high |
 | `tenant-suite-default-role` | drift | M / test-settings | tax | 3/12 suites | open | confirmed · medium-high |
 | `crm-null-org-legacy` | rule-violation | G / tenant-models | tax, ambiguity | CRM + orgs shared admin | open | confirmed · high |
-| `readme-extending-contract` | rule-violation | O / module-readmes | tax | 12/12 READMEs | open | confirmed · high |
 | `public-read-marker-mixins` | rule-violation | E / modules | ambiguity | 2/4 public-read mixins | open | confirmed · high |
 | `listings-publish-org-fallback` | drift | D / modules | ambiguity | 1/2 publish services | open | confirmed · high on code, medium on reachability |
-| `duplicated-default-constants` | drift | B / modules | tax | 3/12 modules | open | confirmed · high |
 | `stale-isolation-narratives` | drift | O / tenant-isolation-suites | tax | 2/6 suites | open | confirmed · high |
-| `stale-version-error-strings` | drift | O / modules | ambiguity | 2/12 modules | open | confirmed · high |
 | `orgs-invitation-notification-failure` | drift | F / modules | defect, ambiguity | 1/2 senders | open | confirmed · medium-high |
 | `core-cli-module-knowledge` | drift | C / modules | tax | 6/12 modules | accepted | confirmed · high |
 
@@ -366,19 +305,17 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 
 | Variant | Count / members | Effective value | Evidence | State |
 |---|---|---|---|---|
-| Manifest default is the only default | 9/12 modules | defaults live in `module.yml`; runtime reads settings directly | `*/module.yml`; `*/_settings.py` | present |
-| Duplicated default constant in module code | analytics, notifications, storage | `ANALYTICS_POSTHOG_DEFAULT_HOST`; `_DEFAULT_ALLOWED_TAGS` / `_DEFAULT_DEFAULT_TAGS`; `/media/` fallback in `_normalize_media_prefix` | `analytics/services.py:23`; `notifications/_sanitization.py:21,30`; `storage/_helpers.py:117-120,307` | divergent |
+| Manifest default is the only default | 12/12 modules | defaults live in `module.yml`; runtime reads settings directly; rule 3 rejects a repeated code default | `*/module.yml`; `*/_settings.py`; harness rule 3 | present |
 | Immutable option read by adapter | auth (`authentication_method`) | adapter branches on it and builds login/signup composites | `auth/adapter.py:29-42` | present |
-| Immutable option with no consumer | storage (`private_media_enabled`) | projected to `QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED`; no reader | `storage/module.yml:93-98,139-144`; `storage/README.md:53`; `storage/adapter.py:98-160` | absent |
 | Option validation vocabulary | 12/12 | `choices`, `min`/`max`, `pattern`, `not_empty`, cross-option keys | `*/module.yml`; `module_conventions.md:318-391` | present |
 | `required_modules` / `dependencies` present | 12/12 | both keys present; Django excluded as baseline; `quickscale-core` present | `*/module.yml`; harness rule 39 | present |
 | Bundled manifests equal source manifests | 12/12 | byte-identical | `cmp` over `data/manifests/*/module.yml` | present |
 
 **Already consistent (keep):** 12/12 modules have `QUICKSCALE_<MODULE>_ENABLED`, a manifest default for every mutable option, and a settings check registered from `ready()`. 12/12 adapters route through `build_generic_manifest_spec`; no adapter carries an `apps` literal. 4/4 `contract_vintage` declarations carry an `sa<NNN>-<slug>` id.
 
-**Items:** `duplicated-default-constants`, `manifest-declared-surface`, `notifications-anymail-wiring-split` (settings half).
+**Items:** `notifications-anymail-wiring-split` (settings half).
 
-**Unknowns / exceptions:** The manifest default for `storage.media_url` is `/media/`; whether a blank `MEDIA_URL` is a supported project state is not declared. `storage.private_media_enabled` is documented as “reserved”; whether it is a committed product switch or a placeholder is a team question (§12 Q1).
+**Unknowns / exceptions:** A blank `MEDIA_URL` fails closed in the storage helper instead of falling back to a code literal.
 
 ### C — Dependencies, layering, vocabulary ownership
 
@@ -487,7 +424,7 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 
 **Already consistent (keep):** 12/12 module layouts, versions, pyprojects, bundled manifests, and migration freeze. `quickscale_modules/*/` contains no placeholder directory without `module.yml`. The four contract vintages all carry ids.
 
-**Items:** `generated-module-branches`; `notifications-anymail-wiring-split` (settings half). `manifest-declared-surface` is an option-consumption issue, not a layout issue.
+**Items:** `generated-module-branches`; `notifications-anymail-wiring-split` (settings half).
 
 **Unknowns / exceptions:** `docker-compose.yml` is not in the retained U1/U3 ownership list; whether `apply` regenerates it is not established here. The admin index templates are U3 user-owned; the CI/Makefile are U1 user-owned. The backups admin shortcut and orgs CI/Makefile branches therefore cannot reach an existing project by update.
 
@@ -518,14 +455,14 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 |---|---|---|---|---|
 | Required headings in order | 12/12 | Overview, Configuration, Public surface, URLs, Management commands, Operations, Extending | `*/README.md`; harness rule 38 | present |
 | Every option key / command / flag named | 12/12 | all found | README/options/commands census | present |
-| Extending section covers the five standard items | 0/12 | none names What QuickScale owns / What the project owns / Update-safe customizations / Structured extension points / Upgrade expectations | `module-extension.md:356-380`; all `## Extending` sections | divergent |
-| Release stamps in module error strings | analytics, social | `v0.80.0`, `v0.79.0` | `analytics/services.py:119`; `social/models.py:104`; `social/_contracts.py:193` | divergent |
+| Extending section covers the five standard items | 12/12 | each answers What QuickScale owns / What the project owns / Update-safe customizations / Structured extension points / Upgrade expectations | `module-extension.md:356-380`; all `## Extending` sections; harness rule 38 | present |
+| Release stamps in module error strings | 12/12 | none | `*/src/**/*.py`; harness rule 29 | present |
 | Isolation-test narratives describe current state | 4/6 current; CRM/social stale | CRM says no org FK/expected failure; social says assertion “confirms the gap” when it proves isolation | `crm/tests/test_isolation.py:1-22,126-134,232-240`; `social/tests/test_isolation.py:83,132` | divergent |
 | Docs links resolve | 12/12 module READMEs; docs tree | only the prior coherence report had a broken `**kwargs` link, replaced by this rewrite | relative-link scan | present |
 
 **Already consistent (keep):** README outline, option/command coverage, no versioned headings, no ticket ids in shipped source, module.yml descriptions have no release stamps, and rule documents are discoverable from `module-extension.md`/`START_HERE.md`.
 
-**Items:** `readme-extending-contract`, `stale-version-error-strings`, `stale-isolation-narratives`.
+**Items:** `stale-isolation-narratives`.
 
 ### P — Frontend and client
 
@@ -613,19 +550,6 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 - **Migration / acceptance:** move the block to notifications; regenerate managed settings; existing projects adopt through a contract vintage or manual step; rollback by restoring the block. Acceptance: changing a notifications env-var option changes only module-owned output. Responsibility: notifications owner.
 - **Confidence / hand-off:** high · arch.
 
-### 3. `manifest-declared-surface` (reopened) — storage’s private-media switch is inert
-
-- **ID / kind / status:** `manifest-declared-surface` · `rule-violation` · `open` · `regressed: true` (prior ID resolved 2026-10-13; this cell remains).
-- **Aspect / population / context:** B (secondary D) · `modules` · storage; 1/2 immutable options.
-- **Table / evidence:** §A/B.1 rows 3–4. `storage/module.yml:93-98` declares `private_media_enabled` immutable; `:139-144` projects `QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED`; `storage/README.md:53` calls it a “reserved extension point”; no module source reads the derived setting (only the manifest and tests mention it). The storage adapter never reads `resolved.private_media_enabled` (`storage/adapter.py:98-160`).
-- **Difference and cost:** **ambiguity / tax.** An operator can set the option `true` and expect private media authorization, but nothing changes; the README and rule 12 disagree about whether the adapter reads it (`module_conventions.md:318-320` cites it as the example of an immutable option read at apply time). If it is a placeholder, it should not be an accepted option; if it is a switch, it must be enforced.
-- **Declared rule:** rule 12 and `module_architecture.md:338` (“No parsed-but-unread declarative surface”).
-- **Options:** (a) remove the option and README row until private-media authorization exists; (b) wire it through the adapter and enforce private storage access; (c) keep it as an explicit, unsupported placeholder with a validator that rejects `true`.
-- **Recommended rule:** *coherence proposal 3* — Every accepted option has a live consumer on a supported path, or is rejected with a clear “not supported” message; an option documented as reserved is not accepted silently.
-- **Enforcement:** proposed manifest/adapter check that each derived setting is read (or the option is removed/rejected); control case rejects the current inert option and accepts a wired option. Evidence state: `proposed`.
-- **Migration / acceptance:** remove or wire; if removed, update the README, tests, and any project config; if wired, add an authorization test. Acceptance: setting the option changes the effective media access path or is refused. Responsibility: storage owner/product decision (Q1).
-- **Confidence / hand-off:** high · tech (a privacy expectation that currently has no effect).
-
 ### 4. `billing-feature-gate` (reopened) — published gate returns an unshaped 402
 
 - **ID / kind / status:** `billing-feature-gate` · `rule-violation` · `open` · `regressed: true` (prior `unauthenticated-status-code` cell).
@@ -691,19 +615,6 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 - **Migration / acceptance:** remove constraints/branches/tests; no data migration (state cannot exist); rollback by reverting code. Acceptance: no NULL-org branch/constraint remains outside a documented exception. Responsibility: CRM + orgs owners.
 - **Confidence / hand-off:** high · none.
 
-### 9. `readme-extending-contract` — none of the twelve Extending sections follows the declared five-item contract
-
-- **ID / kind / status:** `readme-extending-contract` · `rule-violation` · `open`.
-- **Aspect / population / context:** O · `module-readmes` · 12/12 modules.
-- **Table / evidence:** §O.1 row 3. `module-extension.md:356-380` says the extension contract “belongs inside the README’s Extending section, covering” What QuickScale owns, What the project owns, Update-safe customizations, Structured extension points, and Upgrade expectations. The 12 `## Extending` sections are short module-specific bullet lists (analytics template tags, backups persistence port, billing service API, social page adoption); none covers the five items or the suggested table.
-- **Difference and cost:** **tax.** A project developer looking for update-safe customization across modules gets a different shape in each README and cannot find ownership/update expectations; a new module author has no template to fill. The harness checks headings, options, commands, and role listings, but not this contract.
-- **Declared rule:** `module-extension.md` §Standard Documentation Contract (a documented contract, not a settled exception).
-- **Options:** enforce the five items in all 12 READMEs (or a shared template); amend the document to say the five are suggested and keep the current variety; add a per-module “managed files/update expectations” table.
-- **Recommended rule:** *coherence proposal 9* — Every module README’s Extending section answers the five standard questions (or the document explicitly marks them suggested); managed files and update expectations are named.
-- **Enforcement:** proposed rule 38 extension for the five subsections; control case rejects a README with only a bullet list and accepts one with the five answers. Evidence state: `proposed`.
-- **Migration / acceptance:** update 12 READMEs or amend the doc; no runtime change. Acceptance: each Extending section answers the five questions or the doc records the reduced requirement. Responsibility: module owners + docs owner (Q3).
-- **Confidence / hand-off:** high · none.
-
 ### 10. `public-read-marker-mixins` — two “public read” mixins do not prime public context
 
 - **ID / kind / status:** `public-read-marker-mixins` · `rule-violation` · `open`.
@@ -730,19 +641,6 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 - **Migration / acceptance:** change the signature and view; update callers/tests; no data migration. Acceptance: omitting the organization raises `TypeError` or a module validation error, not a System-org write. Responsibility: listings owner.
 - **Confidence / hand-off:** high on code divergence, medium on reachability (the HTTP middleware usually supplies an org) · tech.
 
-### 12. `duplicated-default-constants` — three modules keep a second copy of a manifest default
-
-- **ID / kind / status:** `duplicated-default-constants` · `drift` · `open`.
-- **Aspect / population / context:** B · `modules` · analytics, notifications, storage; 3/12 modules.
-- **Table / evidence:** §A/B.1 row 2. `analytics/services.py:23` exports `ANALYTICS_POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com"`, matching `analytics/module.yml:40`; only tests use it (`tests/test_services.py:139`). `notifications/_sanitization.py:21,30` declares `_DEFAULT_ALLOWED_TAGS`/`_DEFAULT_DEFAULT_TAGS` matching `notifications/module.yml:80-89`; only the facade test names them. `storage/_helpers.py:117-120,307` falls back to `"/media/"`, matching `storage/module.yml:24`.
-- **Difference and cost:** **tax.** The manifest is declared the only default (`module_conventions.md:86-105,318-391`), but there are two homes; a manifest change does not update the constants, and tests that use the constants can pass while the manifest default drifts.
-- **Declared rule:** rules 3 and 12.
-- **Options:** remove the constants and read the manifest/derived settings in tests; derive the constant from the manifest at import; leave them with a parity test.
-- **Recommended rule:** *coherence proposal 12* — A manifest default has one home; code constants either derive from the manifest or are removed.
-- **Enforcement:** proposed check that a module-source constant matching a manifest default is derived/tested against it; control case. Evidence state: `proposed`.
-- **Migration / acceptance:** remove/derive; update tests; no runtime change for a valid applied project. Acceptance: changing a manifest default changes the only consumed value. Responsibility: analytics/notifications/storage owners.
-- **Confidence / hand-off:** high · none.
-
 ### 13. `stale-isolation-narratives` — two isolation suites describe a pre-fix world
 
 - **ID / kind / status:** `stale-isolation-narratives` · `drift` · `open`.
@@ -754,19 +652,6 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 - **Recommended rule:** *coherence proposal 13* — A test’s module/class docstring and assertion messages describe the current contract; a historical failure belongs in the changelog, not as present-tense test evidence.
 - **Enforcement:** review-only (no reliable static check for stale prose); control is a review of the tenant isolation suite. Evidence state: `proposed`.
 - **Migration / acceptance:** rewrite CRM/social prose; no code change. Acceptance: no present-tense “leak exists”/“expected to fail” claim in a passing isolation test. Responsibility: CRM/social owners.
-- **Confidence / hand-off:** high · none.
-
-### 14. `stale-version-error-strings` — three error strings name a release as current
-
-- **ID / kind / status:** `stale-version-error-strings` · `drift` · `open`.
-- **Aspect / population / context:** O (secondary D) · `modules` · analytics, social; 2/12 modules.
-- **Table / evidence:** §O.1 row 4. `analytics/services.py:119` says “only supports the PostHog provider in v0.80.0”; `social/models.py:104` and `social/_contracts.py:193` say “Embeds support only TikTok and YouTube in v0.79.0.” The current version is 0.89.0; the limitations are current product facts, but the stamps are stale.
-- **Difference and cost:** **ambiguity.** An operator may read the limitation as version-specific and expect newer support; the message ages with no code change. Rule 29 already bans release stamps in `module.yml` descriptions and test names for exactly this reason.
-- **Declared rule:** rule 29’s no-release-stamp principle (`module_conventions.md:627-635`), applied to source error messages.
-- **Options:** remove the version stamps (“currently supports…”); derive the version from `__version__` (still confusing); keep a changelog note.
-- **Recommended rule:** *coherence proposal 14* — Module error messages name behavior, not the release that introduced it; a change in support is a release note, not a stamp.
-- **Enforcement:** proposed source-string scan for release stamps in module messages; control case. Evidence state: `proposed`.
-- **Migration / acceptance:** edit three strings; no runtime behavior. Acceptance: no release stamp in a module error message. Responsibility: analytics/social owners.
 - **Confidence / hand-off:** high · none.
 
 ### 15. `orgs-invitation-notification-failure` — the invitation is committed, then a send failure escapes as 500
@@ -788,13 +673,13 @@ Current confirmed open items: **15**. Prior accepted: **1** (`core-cli-module-kn
 
 ## Proposed rules
 
-These are paste-ready proposals, not settled decisions. They are separated from settled-rule compliance work.
+These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and retained as the settled rule text; the rest are not settled decisions. They are separated from settled-rule compliance work.
 
 **Coherence proposal 1 — Generated templates name no module.** Generator templates outside the listed presentation/diagnostic exceptions contain no per-module branch, constant, URL, or module-prefixed setting. Module-specific admin, CI, compose, or settings behaviour is declared by the module (manifest or module-owned template) or emitted from a managed generic block. Allowed: the 404 path diagnostics (rule 41), the theme’s module surfaces (rules 31/37), the seam tables, and the `.env.example` managed catalog.
 
 **Coherence proposal 2 — One home for module settings.** Every setting a module needs, including nested vendor settings, is written by that module’s adapter or manifest. Core templates carry only generic composition and never name `QUICKSCALE_<MODULE>_*` or a vendor block owned by one module.
 
-**Coherence proposal 3 — Every option has a live consumer.** An accepted manifest option projects a setting that a supported path reads or enforces. An option with no consumer is removed or rejected with a clear “not supported” message; a “reserved” option is not accepted silently.
+**Coherence proposal 3 — Every option has a live consumer (adopted).** An accepted manifest option projects a setting that a supported path reads or enforces. An option with no consumer is removed or rejected with a clear “not supported” message; a “reserved” option is not accepted silently.
 
 **Coherence proposal 4 — Published gates return the API shape.** A published gate decorator that may wrap a JSON endpoint returns the one QuickScale error shape with a stable code and the correct 401/403/402 class; an HTML-only gate is named and documented as such.
 
@@ -806,17 +691,17 @@ These are paste-ready proposals, not settled decisions. They are separated from 
 
 **Coherence proposal 8 — No NULL-tenant compatibility.** Tenant-scoped relations are NOT NULL. A compatibility branch for a NULL organization is removed with its constraint and test, or backed by a named legacy-data decision and a reachable migration.
 
-**Coherence proposal 9 — README Extending standard.** Every module README’s Extending section answers the five standard questions (What QuickScale owns, What the project owns, Update-safe customizations, Structured extension points, Upgrade expectations), or the document explicitly marks them suggested; managed files and update expectations are named.
+**Coherence proposal 9 — README Extending standard (adopted).** Every module README’s Extending section answers the five standard questions (What QuickScale owns, What the project owns, Update-safe customizations, Structured extension points, Upgrade expectations) as mandatory level-three subsections; managed files and update expectations are named.
 
 **Coherence proposal 10 — Public-read mixins prime context.** A `*PublicReadMixin` either inherits the orgs public-context mixin or is documented as a no-DB presentation marker; a page that reads tenant data uses the priming mixin.
 
 **Coherence proposal 11 — Write services require an organization.** A write service requires an explicit organization (or an explicit public-context marker); it never selects the System org silently.
 
-**Coherence proposal 12 — One default home.** A manifest default has one home; code constants either derive from the manifest or are removed.
+**Coherence proposal 12 — One default home (adopted).** A manifest default has one home; code constants either derive from the manifest or are removed.
 
 **Coherence proposal 13 — Test evidence is current.** A test’s module/class docstring and assertion messages describe the current contract; a historical failure belongs in the changelog, not as present-tense test evidence.
 
-**Coherence proposal 14 — Error messages name behaviour, not releases.** A module error message names the current behaviour; a support change is a release note, not a version stamp.
+**Coherence proposal 14 — Error messages name behaviour, not releases (adopted).** A module error message names the current behaviour; a support change is a release note, not a version stamp.
 
 **Coherence proposal 15 — Post-commit send failure policy.** A sender’s post-commit failure has one recorded policy: either the committed write remains and the failure is surfaced/logged, or the write is not committed until the send is accepted; no sender leaves an unhandled exception after commit.
 
@@ -828,21 +713,13 @@ These are paste-ready proposals, not settled decisions. They are separated from 
 
 **Gap 23 — rule 19 accepts a public-read mixin by name only.** `PUBLIC_READ_MIXIN_SUFFIX` and `_is_sanctioned_guard_name` accept any `*PublicReadMixin` (`_routes_authorization.py:31-62`); there is no check that it subclasses `PublicSystemOrgReadMixin` or primes context. Control: an empty mixin should fail; the blog/listings mixin should pass. State `observed-in-source`; linked item 10.
 
-**Gap 24 — rule 12 does not prove a derived setting has a consumer.** The loader validates option/derivation shape, but nothing checks that a projected derived setting is read or enforced. `storage.private_media_enabled` is projected and unread. Control: a fixture derived setting with no reader should fail; a wired setting should pass. State `observed-in-source`; linked item 3.
-
 **Gap 25 — rule 9 does not scan published gate decorators.** The harness scans module views and module-owned helpers; `require_org_feature` is a decorator returning `HttpResponse`, not a view, so the bare 402 is invisible. Control: a decorator that returns a shaped 402 passes; the current one fails. State `observed-in-source`; linked item 4.
 
 **Gap 26 — rule 30 checks module adapters, not core templates.** The notifications `ANYMAIL` block is written in `settings/base.py.j2`, outside the adapter/manifest the harness reads. Control: a core template that reads `QUICKSCALE_<MODULE>_*` fails; a generic composition passes. State `observed-in-source`; linked items 1–2.
 
-**Gap 27 — rule 38 does not check the Extending five-item contract.** It checks headings, options, commands, and role listings, not the five ownership/update answers. Control: a README with only a bullet list fails; one with the five answers passes. State `observed-in-source`; linked item 9.
-
 **Gap 28 — rule 11 checks file presence, not isolation evidence.** It does not require every tenant table in the RLS boundary, a regular-member view test, or a restricted default role in `tests/settings.py`. Control: a one-table/one-operator-path suite fails; the all-table/restricted suite passes. State `observed-in-source`; linked items 6–7.
 
 **Gap 29 — rule 23/3 does not require an explicit organization on a write service.** Listings’ optional `organization` and System-org fallback pass the signature and service-surface checks. Control: a write service with a defaulted organization fails; a keyword-only required organization passes. State `observed-in-source`; linked item 11.
-
-**Gap 30 — rule 3/12 does not detect duplicated defaults in module code.** Analytics’ host constant and notifications’ tag constants match manifest defaults and are used only by tests; storage’s `/media/` fallback is in a helper. Control: a code constant equal to a manifest default fails unless derived/tested against it. State `observed-in-source`; linked item 12.
-
-**Gap 31 — rule 29 does not scan source error messages for release stamps.** Its no-release-stamp clause covers `module.yml` descriptions and test names; the three stale strings are in module source messages. Control: a fixture message with a release stamp fails; a behaviour-only message passes. State `observed-in-source`; linked item 14.
 
 ## Consistent by design
 
@@ -859,7 +736,6 @@ These are paste-ready proposals, not settled decisions. They are separated from 
 **To the technical audit (live defects or live-defect risk).**
 
 - `orgs-invitation-notification-failure` — a committed invitation plus an unhandled post-commit sender error; source links in item 15.
-- `manifest-declared-surface` — the storage private-media switch has no effect; a security expectation without enforcement.
 - `listings-publish-org-fallback` — a supported service call can write public content into the System org.
 - Pending candidate `notifications-validation-status` — public `NotificationValidationError` has no `status_code`/`default_code`; no confirmed shipped API lets it escape except the orgs post-commit path. Not promoted without a reachable API trace.
 
@@ -887,13 +763,11 @@ These are paste-ready proposals, not settled decisions. They are separated from 
 - No repository test, harness, generator, build, linter, migration, or service was run. Every “present” in a test table is a source-inventory state, not a pass.
 - The 2026-10-16 41-item census is not itemized in the retained report; its last-known resolved status is not re-established. A future pass should recover that index and reconcile each ID.
 - Pending leads: `notifications-validation-status`; `backups/_settings.py` uses `build_policy_snapshot_from_settings()` rather than a `from_settings()` classmethod (rule 42 wording; possible accepted core-engine exception); `quickscale_cli/pyproject.toml` inert `[[tool.mypy.overrides]]`; `SeamModule.app_label` actually holds a package path; auth account-template nesting; leaf tenant admin org reassignment; `docker-compose.yml` ownership/regeneration. None passes §0 as a confirmed item on current evidence.
-- Deployment unknowns: whether a live project uses `private_media_enabled`, whether invitation email failure is considered fatal, whether tenant suites are ever run directly under `postgres`, and whether any non-superuser staff account exists.
+- Deployment unknowns: whether invitation email failure is considered fatal, whether tenant suites are ever run directly under `postgres`, and whether any non-superuser staff account exists.
 
 ## Questions that would change a rule
 
-1. **Q1 (`manifest-declared-surface`):** Is `private_media_enabled` a committed product switch that must be enforced, or a placeholder to remove until private-media authorization exists?
 2. **Q2 (`orgs-invitation-notification-failure`):** Is an invitation email failure fatal (do not keep the invitation unless the send is accepted), or best-effort (keep the invitation, record/surface the failure)?
-3. **Q3 (`readme-extending-contract`):** Are the five Extending-section items a mandatory contract or suggested material? The document currently says “covering”; the table says “suggested.”
 4. **Q4 (`tenant-suite-default-role`):** Is a direct `pytest` run under the default `postgres` role a supported workflow, or must every tenant suite default to the restricted role?
 5. **Q5 (consistent-by-design trigger):** May a leaf tenant admin row be reassigned to another organization? If not, listings/social should use the shared immutable-org admin behavior.
 
@@ -908,13 +782,13 @@ These are paste-ready proposals, not settled decisions. They are separated from 
 | `module-enabled-switch` | resolved (prior; off parity still checked); no regression found |
 | `markdownx-shared-mount` | resolved (storage owns the shared mount) |
 | `tenant-authorization` | resolved (20/20 tenant admins use `TenantModelAdmin`; guards present) |
-| `option-schema-and-validation` | resolved (manifest schema/validation remains; storage’s inert option is a separate reopened cell) |
+| `option-schema-and-validation` | resolved (manifest schema/validation remains; the storage switch is retired) |
 | `unauthenticated-status-code` | **regressed** — `billing-feature-gate` returns 402 for anonymous |
 | `module-error-http-mapping` | resolved for module errors; `notifications-validation-status` remains a pending candidate |
 | `startup-checks-and-errors` | resolved (no literal setting-list in `checks.py`; rule 6 allows prose) |
 | `upward-name-references` | resolved (no runtime higher-layer references; docstring examples excluded) |
 | `core-cli-module-knowledge` | accepted (decision 2026-10-13; trigger not fired) |
-| `manifest-declared-surface` | **regressed** — `storage.private_media_enabled` is a projected, unread option |
+| `manifest-declared-surface` | resolved (regression closed; the inert switch is retired) |
 | `http-api-shape` | resolved (billing per-page options; shared paginator) |
 | `throttle-attachment` | resolved (manifest `throttle_scopes`; scoped class) |
 | `optional-sender-guard` | resolved (forms/orgs guard per `required_modules`) |
@@ -936,22 +810,18 @@ These are paste-ready proposals, not settled decisions. They are separated from 
 
 **Prior gap 21:** still open; reverified at `_package_commands.py:264-302` and `quickscale_backups_pin.py:14`.
 
-**This pass:** 15 open items (13 new + 2 regressed/reopened); 1 accepted prior item; 11 open gaps (21–31); 1 pending candidate plus residual leads. Pass 1 walked A–V; pass 2 followed the generator-template, settings, admin, isolation, and notification-sender leads; pass 3 re-opened every cited anchor and the prior hand-offs and added no new item/aspect. Stopping reason: bounded saturation of the inspected scope; theme execution and live deployment remain unassessed.
+**This pass:** 11 open items (10 new + 1 regressed); 1 accepted prior item; 7 open gaps (21–23, 25–26, 28–29); 1 pending candidate plus residual leads. Pass 1 walked A–V; pass 2 followed the generator-template, settings, admin, isolation, and notification-sender leads; pass 3 re-opened every cited anchor and the prior hand-offs and added no new item/aspect. Stopping reason: bounded saturation of the inspected scope; theme execution and live deployment remain unassessed.
 
 - 2026-10-24 — `generated-module-branches`: new, open.
 - 2026-10-24 — `notifications-anymail-wiring-split`: new, open.
-- 2026-10-24 — `manifest-declared-surface`: regressed (storage private media); prior resolved status retained in history.
 - 2026-10-24 — `billing-feature-gate`: new, open; reopens `unauthenticated-status-code` for this decorator.
 - 2026-10-24 — `billing-admin-org-filter`: new, open.
 - 2026-10-24 — `forms-tenant-isolation-evidence`: new, open.
 - 2026-10-24 — `tenant-suite-default-role`: new, open.
 - 2026-10-24 — `crm-null-org-legacy`: new, open.
-- 2026-10-24 — `readme-extending-contract`: new, open.
 - 2026-10-24 — `public-read-marker-mixins`: new, open.
 - 2026-10-24 — `listings-publish-org-fallback`: new, open.
-- 2026-10-24 — `duplicated-default-constants`: new, open.
 - 2026-10-24 — `stale-isolation-narratives`: new, open.
-- 2026-10-24 — `stale-version-error-strings`: new, open.
 - 2026-10-24 — `orgs-invitation-notification-failure`: new, open.
 - 2026-10-24 — `core-cli-module-knowledge`: still accepted; trigger not fired.
-- 2026-10-24 — gap 21: still open; gaps 22–31: new, open.
+- 2026-10-24 — gap 21: still open; gaps 22, 23, 25, 26, 28 and 29: new, open.

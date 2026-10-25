@@ -11,10 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from quickscale_core.contracts.module_options import (
-    ANALYTICS_POSTHOG_DEFAULT_HOST,
-    ANALYTICS_PROVIDER_POSTHOG,
-)
+from quickscale_core.contracts.module_options import ANALYTICS_PROVIDER_POSTHOG
 from quickscale_core.manifest.loader import load_manifest_from_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -127,8 +124,15 @@ class TestAnalyticsPublicConstants:
     def test_provider_constants_are_stable(self) -> None:
         assert ANALYTICS_PROVIDER_POSTHOG == "posthog"
 
-    def test_host_constants_are_stable(self) -> None:
-        assert ANALYTICS_POSTHOG_DEFAULT_HOST == "https://us.i.posthog.com"
+    def test_host_default_has_one_home(self) -> None:
+        """The manifest owns the host default; core authors no second copy."""
+        from quickscale_core.contracts import module_options
+
+        assert "ANALYTICS_POSTHOG_DEFAULT_HOST" not in module_options.__all__
+        assert (
+            _load_analytics_manifest().get_defaults()["posthog_host"]
+            == "https://us.i.posthog.com"
+        )
 
     def test_core_contract_names_no_feature_events(self) -> None:
         """Feature event names belong to their sending modules (rule 22)."""

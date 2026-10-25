@@ -2491,7 +2491,6 @@ class TestSA167bRelocationParity:
                 "bucket_name": "bucket",
                 "endpoint_url": "https://account.r2.cloudflarestorage.com",
                 "region_name": "auto",
-                "private_media_enabled": True,
             },
             {
                 "backend": "s3",
@@ -2510,6 +2509,8 @@ class TestSA167bRelocationParity:
                 "default_acl": " ",
             },
             {"backend": "invalid"},
+            {"private_media_enabled": True},
+            {"private_media_enabled": False},
             {"backend": "s3", "access_key_id_env_var": "AKIA1234567890123456"},
             {"backend": "s3", "secret_access_key_env_var": "literal-secret"},
             {

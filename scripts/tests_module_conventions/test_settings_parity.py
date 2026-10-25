@@ -51,6 +51,7 @@ _GOLDEN_EXTRA_SETTINGS = (
     "QUICKSCALE_DEMO_BACKEND = 'local'\n"
     "QUICKSCALE_DEMO_CDN_URL = '/demo/'\n"
     "QUICKSCALE_DEMO_MARKETING_HOST = ''\n"
+    "QUICKSCALE_DEMO_ALLOWED_TAGS = ['quickscale', 'transactional']\n"
 )
 
 
@@ -890,6 +891,7 @@ EXACT_FINDINGS = (
         "rule3_missing_setting",
         "rule_3_settings_reads",
         (
+            "rule 3: demo: tests/settings.py does not define QUICKSCALE_DEMO_ALLOWED_TAGS",
             "rule 3: demo: tests/settings.py does not define QUICKSCALE_DEMO_API_RATE_LIMIT",
             "rule 3: demo: tests/settings.py does not define QUICKSCALE_DEMO_BACKEND",
             "rule 3: demo: tests/settings.py does not define QUICKSCALE_DEMO_CDN_URL",

@@ -61,7 +61,6 @@ _EXPECTED_DEFAULTS: dict[str, object] = {
     _SECRET_KEY_OPTION: "AWS_SECRET_ACCESS_KEY",
     "default_acl": "",
     "querystring_auth": False,
-    "private_media_enabled": False,
 }
 
 _CLOUD_OPTIONS: dict[str, object] = {
@@ -92,11 +91,11 @@ class TestManifestDeclaration:
     def test_defaults_match_the_manifest(self) -> None:
         assert resolve_manifest_module_options("storage") == _EXPECTED_DEFAULTS
 
-    def test_immutable_private_media_default_is_declared(self) -> None:
-        assert _EXPECTED_DEFAULTS["private_media_enabled"] is False
-        assert (
-            resolve_manifest_module_options("storage")["private_media_enabled"] is False
-        )
+    def test_private_media_switch_is_retired_as_unsupported(self) -> None:
+        assert _manifest().get_option("private_media_enabled") is None
+        message = _manifest().retired_options["private_media_enabled"]
+        assert "not supported" in message
+        assert "private-media authorization" in message
 
     def test_backend_choices_are_declared(self) -> None:
         option = _manifest().get_option("backend")
@@ -121,10 +120,15 @@ class TestManifestDeclaration:
 
     def test_retired_raw_credential_and_domain_keys_are_declared(self) -> None:
         retired = _manifest().retired_options
-        assert set(retired) == {*_RETIRED_OPTIONS, "custom_domain"}
+        assert set(retired) == {
+            *_RETIRED_OPTIONS,
+            "custom_domain",
+            "private_media_enabled",
+        }
         assert "access_key_id_env_var" in retired["access_key_id"]
         assert "secret_access_key_env_var" in retired["secret_access_key"]
         assert "public_base_url" in retired["custom_domain"]
+        assert "not supported" in retired["private_media_enabled"]
 
     def test_normalization_rules_are_declared(self) -> None:
         derivations = _manifest().option_derivations

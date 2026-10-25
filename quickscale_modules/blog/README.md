@@ -171,11 +171,44 @@ Troubleshooting:
 
 ## Extending
 
-- **Model extension**: subclass `Post` (a proxy model works when no extra columns are needed)
-  and register the subclass in the admin with `MarkdownxModelAdmin`.
-- **RSS customization**: subclass `quickscale_modules_blog.feeds.LatestPostsFeed`, override its
-  `title`, `description`, or `items()`, and mount your class at `blog/feed/` under the
-  `QUICKSCALE_BLOG_RSS_ENABLED` gate.
+### What QuickScale owns
+
+The module package under `modules/blog/` — models, migrations, admin, views, API, feed,
+templates, and static assets — its manifest options, and the managed wiring and seam files
+`quickscale apply` regenerates (`<package>/settings/modules.py`, `<package>/urls_modules.py`,
+`frontend/src/quickscaleSeam.hooks.ts`).
+
+### What the project owns
+
+Post, category, tag, and media content; `quickscale.yml` values for the options above; project
+template overrides under `templates/`; the project frontend and its automation clients; and all
+project-owned apps and data.
+
+### Update-safe customizations
+
+Change option values, override templates under `templates/quickscale_blog/`, and use the
+publish/media-upload services from project-owned code. Template overrides survive updates
+because QuickScale never rewrites them; they also stop receiving later module fixes to that
+template.
+
+### Structured extension points
+
+Subclass `Post` (a proxy model works when no extra columns are needed) and register the
+subclass in the admin with `MarkdownxModelAdmin`. Subclass
+`quickscale_modules_blog.feeds.LatestPostsFeed`, override its `title`, `description`, or
+`items()`, and mount it at `blog/feed/` under the `QUICKSCALE_BLOG_RSS_ENABLED` gate.
+`BlogMediaAssetImageField`'s import path is a stability promise. The automation API contract is
+documented under Public surface.
+
+### Upgrade expectations
+
+Tier 1 settings, documented services, and template overrides survive normal module updates;
+Tier 2 subclassing survives minor updates while the documented contract holds. Never edit
+`modules/blog/`: `quickscale update` refuses a local edit unless `--allow-local-changes`, and
+managed wiring and seam files are regenerated, never hand-edited.
+
+### Development and support
+
 - **Development**: `make MODULE=blog test -- --modules` from the repository root; Ruff and MyPy
   run through the repository's shared configuration.
 - **License**: Apache 2.0, see the LICENSE file for details.

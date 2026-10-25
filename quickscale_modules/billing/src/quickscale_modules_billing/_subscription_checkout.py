@@ -180,7 +180,11 @@ def _create_subscription_checkout_session(
         settings_snapshot=snapshot
     )
     stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
-    _validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
+    _validate_stripe_price_parity(
+        plan=plan,
+        stripe_price=stripe_price,
+        settings_snapshot=snapshot,
+    )
     reconciled_customer_id = reconcile_elapsed_subscription_checkout(
         organization.pk,
         stripe_client=resolved_client,

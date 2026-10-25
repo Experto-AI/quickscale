@@ -14,6 +14,7 @@ from typing import Any
 from scripts.module_conventions.core import (
     SETTING_NAME_EXCEPTIONS,
     SNAKE_CASE,
+    Corpus,
     Module,
     _parse,
 )
@@ -208,6 +209,75 @@ def _compiled_pattern_lines(tree: ast.Module) -> list[int]:
         ):
             lines.append(node.lineno)
     return sorted(lines)
+
+
+def _derived_setting_keys(manifest: Mapping[str, Any]) -> list[str]:
+    """Return every ``derivation.derived_settings`` setting key, in order."""
+    keys: list[str] = []
+    derivation = manifest.get("derivation")
+    if not isinstance(derivation, Mapping):
+        return keys
+    bodies = [derivation]
+    option_derivations = derivation.get("option_derivations")
+    if isinstance(option_derivations, Mapping):
+        bodies.extend(body for body in option_derivations.values() if isinstance(body, Mapping))
+    for body in bodies:
+        derived = body.get("derived_settings")
+        if not isinstance(derived, list):
+            continue
+        for entry in derived:
+            if not isinstance(entry, Mapping):
+                continue
+            setting_key = entry.get("setting_key")
+            if isinstance(setting_key, str) and setting_key not in keys:
+                keys.append(setting_key)
+    return keys
+
+
+def _module_source_names(module: Module) -> set[str]:
+    """Return the derived setting names the module's own source mentions."""
+    return {
+        name
+        for name in _derived_setting_keys(module.manifest)
+        if any(name in text for text in module.files.values())
+    }
+
+
+def _wider_source_mentions(corpus: Corpus, setting_key: str) -> bool:
+    """Return whether core, CLI, or script source renders or reads a setting."""
+    for files in (corpus.core_files, corpus.cli_files, corpus.script_files):
+        for rel, text in files.items():
+            if rel.endswith((".yml", ".yaml")) or rel.startswith("data/manifests/"):
+                # The manifest's own projection is not a consumer.
+                continue
+            if setting_key in text:
+                return True
+    return False
+
+
+def _derived_consumer_violations(corpus: Corpus, module: Module) -> list[str]:
+    """
+    Rule 12: every QuickScale-named derived setting has a live consumer.
+
+    A derived setting projects a value the manifest computes, so an unread one
+    is a parsed-but-unread declarative surface (module architecture §Module
+    Manifest Architecture).  A ``QUICKSCALE_``-named setting must be mentioned
+    by module source or by core/CLI/script source; a framework or vendor
+    setting (``MEDIA_URL``, ``LOGOUT_REDIRECT_URL``, ``AWS_*``) is consumed by
+    Django, a vendor, or the framework itself and stays outside this static
+    scan's scope.
+    """
+    module_names = _module_source_names(module)
+    violations: list[str] = []
+    for setting_key in _derived_setting_keys(module.manifest):
+        if not setting_key.startswith("QUICKSCALE_"):
+            continue
+        if setting_key in module_names or _wider_source_mentions(corpus, setting_key):
+            continue
+        violations.append(
+            f"rule 12: {module.name}: derived setting {setting_key} has no live consumer"
+        )
+    return violations
 
 
 def _adapter_pattern_compilation_violations(module: Module) -> list[str]:

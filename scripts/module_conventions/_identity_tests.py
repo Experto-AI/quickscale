@@ -223,6 +223,52 @@ def _test_code_ticket_violations(module: Module, rel: str, text: str) -> list[st
     return violations
 
 
+def _version_constant_ids(tree: ast.AST) -> set[int]:
+    """Return the string constants assigned to a ``*VERSION*`` name."""
+    constants: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        else:
+            continue
+        if not isinstance(node.value, ast.Constant):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name) and "version" in target.id.lower():
+                constants.add(id(node.value))
+    return constants
+
+
+def _shipped_source_release_violations(module: Module) -> list[str]:
+    """
+    Return rule 29's release stamps in shipped module source messages.
+
+    The manifest-description scan covers ``module.yml`` prose; this clause
+    covers the shipped error, log, and template strings that age the same way.
+    A package's ``__version__`` assignment is a version declaration, not a
+    message, and stays outside the scan.
+    """
+    violations: list[str] = []
+    for rel, text in module.files.items():
+        if not rel.endswith(".py"):
+            continue
+        tree = _parse(text)
+        version_constants = _version_constant_ids(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if id(node) in version_constants:
+                continue
+            if VERSION_STAMP_IN_DESCRIPTION.search(node.value):
+                violations.append(
+                    f"rule 29: {module.name}: {rel}:{node.lineno} message carries a "
+                    f"release stamp: {node.value!r}"
+                )
+    return violations
+
+
 def rule_29_test_names(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -232,6 +278,7 @@ def rule_29_test_names(corpus: Corpus) -> list[str]:
                     f"rule 29: {module.name}: {rel} is outside rule 29's tests file set"
                 )
         violations.extend(_shipped_ticket_violations(module))
+        violations.extend(_shipped_source_release_violations(module))
         violations.extend(_manifest_description_prose_violations(module))
         for rel, text in module.tests.items():
             violations.extend(_test_file_ticket_violations(module, rel, text))

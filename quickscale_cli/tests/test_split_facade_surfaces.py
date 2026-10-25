@@ -16,7 +16,6 @@ import pytest
 SURFACES: dict[str, dict[str, object]] = {
     "quickscale_cli.commands.apply_command": {
         "expected": {
-            "ANALYTICS_POSTHOG_DEFAULT_HOST",
             "APPLY_MODULE_EXECUTION_MODE",
             "APPLY_STEPS",
             "AdvisoryLock",
@@ -114,7 +113,6 @@ SURFACES: dict[str, dict[str, object]] = {
             "validate_theme_preflight",
         },
         "identity": {
-            "ANALYTICS_POSTHOG_DEFAULT_HOST": "quickscale_core.contracts.module_options",
             "APPLY_MODULE_EXECUTION_MODE": "quickscale_cli.commands.module_commands",
             "APPLY_STEPS": "quickscale_core.apply",
             "AdvisoryLock": "quickscale_core.advisory_lock",

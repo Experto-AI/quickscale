@@ -24,6 +24,7 @@ from quickscale_modules_billing._payload import (
 )
 from quickscale_modules_billing._settings import (
     _STRIPE_RECURRING_INTERVAL_BY_PLAN_INTERVAL as _STRIPE_RECURRING_INTERVAL_BY_PLAN_INTERVAL,
+    BillingSettingsSnapshot,
 )
 from quickscale_modules_billing.exceptions import (
     BillingValidationError,
@@ -79,6 +80,7 @@ def _validate_stripe_price_parity(
     *,
     plan: Plan,
     stripe_price: Mapping[str, Any],
+    settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> None:
     unit_amount = _normalize_integer(stripe_price.get("unit_amount"))
     if unit_amount is None or unit_amount != plan.price_cents:
@@ -90,6 +92,15 @@ def _validate_stripe_price_parity(
     if currency != plan.currency.casefold():
         raise BillingValidationError(
             "Billing plan currency does not match the referenced Stripe price."
+        )
+    configured_currency = (
+        (settings_snapshot or BillingSettingsSnapshot.from_settings())
+        .billing_currency.strip()
+        .lower()
+    )
+    if currency != configured_currency:
+        raise BillingValidationError(
+            "Billing plan currency does not match the configured billing currency."
         )
 
     price_type = str(stripe_price.get("type") or "").strip().lower()

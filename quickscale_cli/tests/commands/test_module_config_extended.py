@@ -941,7 +941,6 @@ class TestModuleWiringSpecs:
                     "backend": "local",
                     "media_url": "/media/",
                     "public_base_url": "",
-                    "private_media_enabled": False,
                 }
             }
         )
@@ -967,7 +966,6 @@ class TestModuleWiringSpecs:
                     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "AWS_SECRET_ACCESS_KEY",
                     "default_acl": "",
                     "querystring_auth": False,
-                    "private_media_enabled": False,
                 }
             }
         )
@@ -998,7 +996,6 @@ class TestModuleWiringSpecs:
                         "backend": "invalid",
                         "media_url": "media",
                         "public_base_url": "",
-                        "private_media_enabled": True,
                     }
                 }
             )
@@ -1018,7 +1015,6 @@ class TestModuleWiringSpecs:
                     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "AWS_MY_SECRET_ACCESS_KEY",
                     "default_acl": "public-read",
                     "querystring_auth": True,
-                    "private_media_enabled": False,
                 }
             }
         )
