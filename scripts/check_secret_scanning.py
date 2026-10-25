@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """
-Blocking secret-scanning gate for committed credentials (SA202).
+Blocking secret-scanning gate for committed credentials (SA202, SA326).
 
-Acquires a checksum-pinned ``gitleaks`` release and scans the repository
-working tree for committed secrets.  The scan is scoped by
-``scripts/gitleaks.toml``, which extends the default ruleset and records every
-verified false positive with a reason and a value-scoped exemption: the theme's
-``viteAssetRouting`` test fixture carries the RFC 6455 Sec-WebSocket-Key sample
-nonce, the billing view tests assign the placeholder value
-``PHASE_6A_PUBLISHABLE_KEY`` to a settings env-var name, and the generated
-``.quickscale/`` scratch tree is never committed.
+Acquires a checksum-pinned ``gitleaks`` release and scans two surfaces:
+
+* the repository working tree (``gitleaks dir``), and
+* the full commit history reachable from ``HEAD`` (``gitleaks git``), so a
+  credential deleted from the tree stays visible.
+
+``scripts/gitleaks.toml`` extends the default ruleset with structural
+exclusions only (generated scratch trees and non-source directories).  Every
+value-level exemption lives in ``scripts/secret_scan_suppressions.json``: each
+entry names one finding fingerprint, its owner, a rationale, a decision
+reference, and an ISO expiry.  An entry that matches no finding, an expired
+entry, and a finding with no entry all fail the gate.  A shallow clone fails
+closed because ``gitleaks git`` would silently scan only the fetched depth.
 
 Failure policy: any unsuppressed finding fails the gate as exit 1.  A missing or
 unsupported host, a download or checksum failure, an unsafe archive, an
-unexpected tool version, or a report that disagrees with the process exit status
-fails closed as infrastructure exit 2.  Secrets are never silently skipped.
+unexpected tool version, a shallow clone, a malformed or stale suppression
+ledger, or a report that disagrees with the process exit status fails closed as
+infrastructure exit 2.  Secrets are never silently skipped.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -57,11 +64,27 @@ GITLEAKS_ASSETS: dict[tuple[str, str], tuple[str, str]] = {
     ),
 }
 CONFIG_PATH = ROOT / "scripts" / "gitleaks.toml"
+SUPPRESSIONS_PATH = ROOT / "scripts" / "secret_scan_suppressions.json"
 COMMAND_TIMEOUT = 600.0
 # Distinguishes "the scanner found leaks" from an infrastructure failure.
 FINDINGS_EXIT_CODE = 7
 EXIT_FINDINGS = 1
 EXIT_INFRASTRUCTURE = 2
+SCAN_MODES = frozenset({"tree", "history"})
+SUPPRESSION_KEYS = frozenset(
+    {
+        "scanner",
+        "rule_id",
+        "path",
+        "mode",
+        "fingerprints",
+        "owner",
+        "rationale",
+        "decision_ref",
+        "expires",
+    }
+)
+LEDGER_KEYS = frozenset({"schema_version", "description", "suppressions"})
 
 
 class GateError(RuntimeError):
@@ -162,14 +185,14 @@ def acquire_gitleaks() -> Path:
     return executable
 
 
-def scan(executable: Path, target: Path, config: Path) -> list[dict[str, Any]]:
-    """Scan ``target`` and return the adjudicated finding records."""
+def _run_scan(executable: Path, mode: str, target: Path, config: Path) -> list[dict[str, Any]]:
+    """Run one gitleaks scan mode and return its adjudicated finding records."""
     if not config.is_file():
         raise GateError(f"gitleaks config not found: {config}")
     completed = _run(
         [
             str(executable),
-            "dir",
+            mode,
             str(target),
             "--config",
             str(config),
@@ -206,22 +229,210 @@ def scan(executable: Path, target: Path, config: Path) -> list[dict[str, Any]]:
     return report
 
 
+def scan(executable: Path, target: Path, config: Path) -> list[dict[str, Any]]:
+    """Scan the working tree at *target*."""
+    return _run_scan(executable, "dir", target, config)
+
+
+def scan_history(executable: Path, repo_root: Path, config: Path) -> list[dict[str, Any]]:
+    """Scan every commit reachable from ``HEAD`` in *repo_root*."""
+    _ensure_full_history(repo_root)
+    return _run_scan(executable, "git", repo_root, config)
+
+
+def _ensure_full_history(repo_root: Path) -> None:
+    """Fail closed when the clone is shallow: gitleaks would scan only its depth."""
+    completed = _run(["git", "-C", str(repo_root), "rev-parse", "--is-shallow-repository"])
+    if completed.returncode != 0:
+        detail = completed.stderr.strip().splitlines()
+        raise GateError(
+            "could not determine whether the clone is shallow: "
+            f"{detail[-1] if detail else 'git rev-parse failed'}"
+        )
+    if completed.stdout.strip() == "true":
+        raise GateError(
+            "secret history scan needs a full-history clone; "
+            f"run `git -C {repo_root} fetch --unshallow` and retry"
+        )
+
+
+def _read_ledger(path: Path) -> list[Any]:
+    """Read the ledger document and return its raw suppression entries."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise GateError(f"could not read secret suppressions {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise GateError(f"unparseable secret suppressions {path}: {exc}") from exc
+    if not isinstance(document, dict) or set(document) != LEDGER_KEYS:
+        raise GateError(f"secret suppressions {path} must declare exactly {sorted(LEDGER_KEYS)}")
+    if document.get("schema_version") != 1:
+        raise GateError("secret suppressions schema_version must be 1")
+    if not isinstance(document.get("description"), str) or not document["description"]:
+        raise GateError("secret suppressions description must be a non-empty string")
+    entries = document.get("suppressions")
+    if not isinstance(entries, list):
+        raise GateError("secret suppressions entries must be a list")
+    return entries
+
+
+def _require_entry_text(entry: dict[str, Any], label: str) -> None:
+    """Require the entry's accountability fields to be non-empty strings."""
+    for key in ("rule_id", "path", "owner", "rationale", "decision_ref"):
+        if not isinstance(entry[key], str) or not entry[key]:
+            raise GateError(f"{label}.{key} must be a non-empty string")
+
+
+def _validate_expiry(entry: dict[str, Any], label: str) -> None:
+    """Reject a malformed or passed expiry."""
+    try:
+        expires = date.fromisoformat(entry["expires"])
+    except (TypeError, ValueError) as exc:
+        raise GateError(f"{label}.expires must be an ISO date: {exc}") from exc
+    if expires <= date.today():
+        raise GateError(f"{label} expired on {entry['expires']}; re-review or remove it")
+
+
+def _validate_fingerprints(entry: dict[str, Any], label: str, seen_fingerprints: set[str]) -> None:
+    """Require a non-empty, globally unique fingerprint list."""
+    fingerprints = entry["fingerprints"]
+    if not isinstance(fingerprints, list) or not fingerprints:
+        raise GateError(f"{label}.fingerprints must be a non-empty list")
+    for fingerprint in fingerprints:
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise GateError(f"{label}.fingerprints entries must be non-empty strings")
+        if fingerprint in seen_fingerprints:
+            raise GateError(f"duplicate secret suppression fingerprint: {fingerprint}")
+        seen_fingerprints.add(fingerprint)
+
+
+def _validate_suppression(entry: Any, index: int, seen_fingerprints: set[str]) -> dict[str, Any]:
+    """Validate one suppression entry and return it unchanged."""
+    label = f"secret suppressions[{index}]"
+    if not isinstance(entry, dict) or set(entry) != SUPPRESSION_KEYS:
+        raise GateError(f"{label} must declare exactly {sorted(SUPPRESSION_KEYS)}")
+    if entry["scanner"] != "gitleaks":
+        raise GateError(f"{label}.scanner must be 'gitleaks'")
+    _require_entry_text(entry, label)
+    mode = entry["mode"]
+    if not isinstance(mode, str) or (mode not in SCAN_MODES and mode != "any"):
+        raise GateError(f"{label}.mode must be one of tree, history, any")
+    _validate_expiry(entry, label)
+    _validate_fingerprints(entry, label, seen_fingerprints)
+    return entry
+
+
+def _load_suppressions(path: Path) -> list[dict[str, Any]]:
+    """Load and validate the expiring suppression ledger."""
+    seen_fingerprints: set[str] = set()
+    return [
+        _validate_suppression(entry, index, seen_fingerprints)
+        for index, entry in enumerate(_read_ledger(path))
+    ]
+
+
+def _finding_identity(finding: dict[str, Any]) -> tuple[str, str, str]:
+    """Return ``(fingerprint, rule_id, path)`` for a finding, failing closed."""
+    fingerprint = finding.get("Fingerprint")
+    rule = finding.get("RuleID")
+    path = finding.get("File")
+    if not all(isinstance(value, str) and value for value in (fingerprint, rule, path)):
+        raise GateError("gitleaks finding is missing Fingerprint, RuleID, or File")
+    return _repo_relative_fingerprint(fingerprint), rule, _repo_relative_path(path)
+
+
+def _repo_relative_fingerprint(value: str) -> str:
+    """Strip an absolute scan-target prefix from a gitleaks fingerprint."""
+    root = ROOT.as_posix()
+    if value.startswith(f"{root}/"):
+        value = value[len(root) + 1 :]
+    return value.replace(f":{root}/", ":")
+
+
+def _repo_relative_path(value: str) -> str:
+    """Normalize an absolute finding path to its repository-relative spelling."""
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        return value
+    try:
+        return candidate.relative_to(ROOT).as_posix()
+    except ValueError:
+        return candidate.as_posix()
+
+
+def _suppression_matches(
+    entry: dict[str, Any], mode: str, rule: str, path: str, fingerprint: str
+) -> bool:
+    """Return whether *entry* suppresses this finding."""
+    return (
+        entry["mode"] in (mode, "any")
+        and entry["rule_id"] == rule
+        and entry["path"] == path
+        and fingerprint in entry["fingerprints"]
+    )
+
+
+def adjudicate(
+    findings_by_mode: dict[str, list[dict[str, Any]]],
+    suppressions: list[dict[str, Any]],
+) -> tuple[list[tuple[str, dict[str, Any]]], list[dict[str, Any]]]:
+    """Return unsuppressed findings and suppressions that matched nothing."""
+    matched: set[int] = set()
+    unsuppressed: list[tuple[str, dict[str, Any]]] = []
+    for mode, findings in findings_by_mode.items():
+        for finding in findings:
+            fingerprint, rule, path = _finding_identity(finding)
+            match = next(
+                (
+                    index
+                    for index, entry in enumerate(suppressions)
+                    if _suppression_matches(entry, mode, rule, path, fingerprint)
+                ),
+                None,
+            )
+            if match is None:
+                unsuppressed.append((mode, finding))
+            else:
+                matched.add(match)
+    stale = [entry for index, entry in enumerate(suppressions) if index not in matched]
+    return unsuppressed, stale
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the secret-scanning gate and return its process exit code."""
     args = sys.argv[1:] if argv is None else argv
     target = Path(args[0]) if args else ROOT
     if not target.is_dir():
         raise GateError(f"scan target not found: {target}")
-    report = scan(acquire_gitleaks(), target, CONFIG_PATH)
-    if report:
-        for finding in report:
+    executable = acquire_gitleaks()
+    tree_findings = scan(executable, target, CONFIG_PATH)
+    history_findings = scan_history(executable, ROOT, CONFIG_PATH)
+    suppressions = _load_suppressions(SUPPRESSIONS_PATH)
+    unsuppressed, stale = adjudicate(
+        {"tree": tree_findings, "history": history_findings}, suppressions
+    )
+    if stale:
+        for entry in stale:
+            print(
+                f"stale secret suppression: {entry['path']} ({entry['rule_id']}) "
+                "matched no finding",
+                file=sys.stderr,
+            )
+        print(f"stale secret suppressions: {len(stale)}", file=sys.stderr)
+        return EXIT_INFRASTRUCTURE
+    if unsuppressed:
+        for mode, finding in unsuppressed:
             rule = finding.get("RuleID", "<unknown>")
-            path = finding.get("File", "<unknown>")
+            path = _repo_relative_path(finding.get("File", "<unknown>"))
             line = finding.get("StartLine", "?")
-            print(f"{path}:{line}: {rule}", file=sys.stderr)
-        print(f"secret scanning findings: {len(report)}", file=sys.stderr)
+            print(f"{mode} {path}:{line}: {rule}", file=sys.stderr)
+        print(f"secret scanning findings: {len(unsuppressed)}", file=sys.stderr)
         return EXIT_FINDINGS
-    print(f"secret scanning gate clean: {target}")
+    print(
+        "secret scanning gate clean: "
+        f"tree={len(tree_findings)} history={len(history_findings)} "
+        f"suppressed={len(suppressions)}"
+    )
     return 0
 
 

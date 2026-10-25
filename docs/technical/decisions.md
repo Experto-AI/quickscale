@@ -660,10 +660,11 @@ endpoints are DRF views with session authentication only, and `BLOG_API_TOKENS` 
 `publish_post_api` were function views paired with `authenticate_blog_api_request()` for
 session-or-Bearer-token authentication. Both are now DRF views with session authentication only,
 and `BLOG_API_TOKENS` is removed; the CSRF CI gate (`scripts/check_csrf_exempt_gate.py`) no longer
-recognizes the retired helper. No new function-view endpoints may use this exception without
-explicit approval.
+recognizes the retired helper. No new function-view endpoints may use this exception without explicit approval.
 
 The CSRF CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
+It rejects a class-level (dispatch) exemption outright, because one dispatch-level exemption covers
+every verb; only a per-handler `method_decorator(csrf_exempt, name='<handler>')` whose handler calls `_enforce_csrf` is accepted.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md)
 
@@ -751,7 +752,7 @@ identity binds every release whose applied vintage is at or after this one:
 transaction's journal open with the committed pull, so the next update re-checks
 the refusal; the operator reconciles the module content or moves to a fresh
 database. `make check-migration-freeze` holds the recorded identity append-only
-against the latest release tag. A project on an earlier release keeps
+against the latest release tag, and `make check-migration-hashes` requires the committed manifest to match every shipped migration file. A project on an earlier release keeps
 the fresh-database upgrade path and may still have a migration rewritten in
 place.
 

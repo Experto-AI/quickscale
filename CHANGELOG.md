@@ -115,9 +115,21 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     command recreates each matched submission and field value in the form's organization with its
     timestamp, status, spam flag, IP, and user agent. It reports unmatched forms, fields, and
     old-only columns, and a rerun or `--dry-run` writes nothing twice.
-  - **A stale module seal fails the release check.** `make release-gate` names any module whose
-    `X.Y.Z` split tag no longer matches its current split, and `make publish-module-status` reports
+  - **A stale module seal fails the release check.** The publish workflow runs the seal-freshness
+    check automatically before publication, and `make release-gate` names any module whose
+    `X.Y.Z` split tag no longer matches its current split; `make publish-module-status` reports
     the same **sealed but stale** state with the Phase 5 reseal path.
+  - **The release and security gates are wired.** `make check` and the publish workflow run the
+    security negative-probe controls, generated-workflow actionlint, migration-hash currency, and
+    tree-and-history secret scanning; a newly registered gate cannot silently miss either context.
+  - **Secret scanning covers history.** Gitleaks scans every commit reachable from `HEAD` as well as
+    the working tree, and each surviving finding needs a fingerprint-scoped, expiring entry with an
+    owner, rationale, and decision reference.
+  - **Quiet checks are not weaker.** `make check QUIET=1` and `make test-cov QUIET=1` capture output
+    but run the same coverage commands and thresholds as their non-quiet forms.
+  - **Rule 17 covers computed dispatch.** A destructive operation selected through
+    `ADAPTER_FUNCTIONS[operation]` or `ADAPTER_FUNCTIONS.get(name)` requires `--dry-run`, and the
+    backups pin and DR bridge commands report the intended call without writing.
   - **Local module edits block an update.** `quickscale update` compares each embedded module with
     the split commit recorded in `.quickscale/state.yml`, stops with the changed paths before
     pulling, and lets `--allow-local-changes` override; `quickscale status` reports the same drift,

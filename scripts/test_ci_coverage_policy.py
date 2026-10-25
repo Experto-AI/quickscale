@@ -1435,6 +1435,55 @@ class TestMakefileCoveragePipeline:
         assert "Error 143" in output
         assert not Path(phase1["coverage_file"]).parent.exists()
 
+    def test_quiet_mode_reinvokes_the_same_pipeline(self) -> None:
+        """QUIET=1 captures the same five-phase pipeline; it does not shortcut it."""
+        section = self._read_makefile_section("test-cov")
+        assert "$(MAKE) test-cov QUIET=" in section
+        assert "pytest_cov_log.txt" not in section
+        assert "--cov-fail-under=90" not in section
+
+    def test_quiet_mode_delegates_and_clears_quiet(self, tmp_path: Path) -> None:
+        """``make test-cov QUIET=1`` re-enters the target with QUIET cleared."""
+        script = tmp_path / "fake_make.py"
+        log = tmp_path / "make.jsonl"
+        script.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import json, sys
+                with open(sys.argv[1], "a", encoding="utf-8") as stream:
+                    json.dump({"args": sys.argv[2:]}, stream)
+                    stream.write("\\n")
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+        env = _isolated_make_environment()
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "--silent",
+                "-f",
+                os.path.join(os.path.dirname(__file__), "..", "Makefile"),
+                f"MAKE={script} {log}",
+                "PYTHON=python3",
+                "QUIET=1",
+                "test-cov",
+            ],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.strip() == ""
+        assert json.loads(log.read_text(encoding="utf-8").strip())["args"] == [
+            "test-cov",
+            "QUIET=",
+        ]
+
 
 class TestCheckCILocallyStageNumbering:
     """Structural assertions for ``check_ci_locally.sh`` stage numbering."""
@@ -1591,7 +1640,7 @@ class TestCheckQuietSectionDispatch:
                 log_path = Path(os.environ["FAKE_MAKE_LOG"])
                 target = sys.argv[1] if len(sys.argv) > 1 else ""
                 with log_path.open("a", encoding="utf-8") as stream:
-                    json.dump({"kind": "make", "target": target}, stream)
+                    json.dump({"kind": "make", "target": target, "args": sys.argv[1:]}, stream)
                     stream.write("\\n")
                 fail_target = os.environ.get("FAKE_MAKE_FAIL_TARGET", "")
                 if fail_target and target == fail_target:
@@ -1703,13 +1752,34 @@ class TestCheckQuietSectionDispatch:
         """Return args for each ``pytest`` invocation."""
         return [e["args"] for e in events if "pytest" in e["args"]]
 
+    @staticmethod
+    def _make_events(make_log: Path) -> list[dict]:
+        """Return the fake make's recorded invocations."""
+        events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        events.append(json.loads(line))
+        return events
+
+    def _delegated_unit_args(self, make_log: Path) -> str:
+        """Return the joined arguments of the single delegated test-unit call."""
+        unit_calls = [
+            event for event in self._make_events(make_log) if event["target"] == "test-unit"
+        ]
+        assert len(unit_calls) == 1, f"expected one test-unit call; got {unit_calls}"
+        return " ".join(unit_calls[0]["args"])
+
     # ------------------------------------------------------------------
     # Default (all sections)
     # ------------------------------------------------------------------
 
     def test_default_all_sections_uses_all_dirs(self, tmp_path: Path) -> None:
-        """Default QUIET=1 includes all source and test dirs."""
-        result, events = self._run_quiet_check(tmp_path)
+        """Default QUIET=1 delegates the unit lane to the same test-unit command."""
+        _, make_log, fake_make = self._write_fake_make(tmp_path)
+        result, events = self._run_quiet_check(tmp_path, make_override=str(fake_make))
         assert result.returncode == 0, (
             f"make check QUIET=1 (default) failed: {result.stdout}\n{result.stderr}"
         )
@@ -1721,10 +1791,12 @@ class TestCheckQuietSectionDispatch:
         assert "quickscale_cli/src" in ruff_check_str
         assert "quickscale_devtools/src" in ruff_check_str
 
-        pytest_calls = self._pytest_invocations(events)
-        pytest_str = " ".join(" ".join(a) for a in pytest_calls)
-        assert "quickscale_core/tests" in pytest_str
-        assert "quickscale_cli/tests" in pytest_str
+        assert self._pytest_invocations(events) == [], (
+            "QUIET=1 must delegate the unit lane instead of running an inline pytest"
+        )
+        delegated = self._delegated_unit_args(make_log)
+        assert "SECTIONS=quickscale core cli devtools" in delegated
+        assert "MODULE=" in delegated
 
     def test_default_includes_modules_when_present(self, tmp_path: Path) -> None:
         """Default QUIET=1 with a real module dir present runs module ruff/mypy."""
@@ -1749,17 +1821,22 @@ class TestCheckQuietSectionDispatch:
     # ------------------------------------------------------------------
 
     def test_modules_only_skips_pytest(self, tmp_path: Path) -> None:
-        """Modules-only QUIET=1 does not run pytest (no core/cli test dirs)."""
-        result, events = self._run_quiet_check(tmp_path, sections="modules")
+        """Modules-only QUIET=1 does not run the unit lane (no core/cli sections)."""
+        _, make_log, fake_make = self._write_fake_make(tmp_path)
+        result, events = self._run_quiet_check(
+            tmp_path, sections="modules", make_override=str(fake_make)
+        )
         assert result.returncode == 0, (
             f"make check QUIET=1 SECTIONS=modules failed: {result.stdout}\n{result.stderr}"
         )
 
-        # Should have no pytest invocations
+        # Should have no pytest invocations and no delegated unit lane
         pytest_calls = self._pytest_invocations(events)
         assert len(pytest_calls) == 0, (
             f"modules-only QUIET=1 must skip pytest; got invocations: {pytest_calls}"
         )
+        targets = [event["target"] for event in self._make_events(make_log)]
+        assert "test-unit" not in targets
 
         # Should have ruff runs but only for module dirs, not core/cli
         ruff_check = self._ruff_check_invocations(events)
@@ -1793,8 +1870,11 @@ class TestCheckQuietSectionDispatch:
     # ------------------------------------------------------------------
 
     def test_core_only_includes_core_dirs(self, tmp_path: Path) -> None:
-        """Core-only QUIET=1 includes core src and core tests only."""
-        result, events = self._run_quiet_check(tmp_path, sections="core")
+        """Core-only QUIET=1 delegates core to the unit lane and nothing else."""
+        _, make_log, fake_make = self._write_fake_make(tmp_path)
+        result, events = self._run_quiet_check(
+            tmp_path, sections="core", make_override=str(fake_make)
+        )
         assert result.returncode == 0
 
         ruff_check_str = " ".join(" ".join(a) for a in self._ruff_check_invocations(events))
@@ -1802,26 +1882,28 @@ class TestCheckQuietSectionDispatch:
         assert "quickscale/src" not in ruff_check_str
         assert "quickscale_cli/src" not in ruff_check_str
 
-        pytest_str = " ".join(" ".join(a) for a in self._pytest_invocations(events))
-        assert "quickscale_core/tests" in pytest_str
-        assert "quickscale_cli/tests" not in pytest_str
+        delegated = self._delegated_unit_args(make_log)
+        assert "SECTIONS=core" in delegated
+        assert "cli" not in delegated.replace("SECTIONS=core", "")
 
     # ------------------------------------------------------------------
     # Core + CLI
     # ------------------------------------------------------------------
 
     def test_core_cli_includes_both_test_dirs(self, tmp_path: Path) -> None:
-        """Core+CLI QUIET=1 includes both core and CLI test dirs."""
-        result, events = self._run_quiet_check(tmp_path, sections="core cli")
+        """Core+CLI QUIET=1 delegates both sections to the unit lane."""
+        _, make_log, fake_make = self._write_fake_make(tmp_path)
+        result, events = self._run_quiet_check(
+            tmp_path, sections="core cli", make_override=str(fake_make)
+        )
         assert result.returncode == 0
 
         ruff_str = " ".join(" ".join(a) for a in self._ruff_check_invocations(events))
         assert "quickscale_core/src" in ruff_str
         assert "quickscale_cli/src" in ruff_str
 
-        pytest_str = " ".join(" ".join(a) for a in self._pytest_invocations(events))
-        assert "quickscale_core/tests" in pytest_str
-        assert "quickscale_cli/tests" in pytest_str
+        delegated = self._delegated_unit_args(make_log)
+        assert "SECTIONS=core cli" in delegated
 
     # ------------------------------------------------------------------
     # Structural — Makefile source patterns
@@ -1866,7 +1948,7 @@ class TestCheckQuietSectionDispatch:
         assert "$(filter devtools,$(ACTIVE_SECTIONS))" in section
 
     def test_quiet_path_skips_pytest_when_no_core_cli(self) -> None:
-        """Makefile QUIET=1 pytest section checks for core/cli before running."""
+        """Makefile QUIET=1 unit delegation is guarded by the section filter."""
         with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
             content = fh.read()
 
@@ -1874,11 +1956,8 @@ class TestCheckQuietSectionDispatch:
         assert check_start >= 0
         section = content[check_start:]
 
-        # The QUIET path should build test dirs from core/cli ACTIVE_SECTIONS guards
-        quiet_q_test = section.find('q_test_dirs=""')
-        assert quiet_q_test >= 0, "QUIET path should build q_test_dirs"
-        # Verify pytest only runs when q_test_dirs is non-empty
-        assert '-n "$$q_test_dirs"' in section
+        assert 'sections_for_test_unit="$(filter-out modules,$(ACTIVE_SECTIONS))"' in section
+        assert 'if [ -n "$$sections_for_test_unit" ]' in section
 
     def test_quiet_path_runs_modules_with_per_module_mypy(self) -> None:
         """Makefile QUIET=1 path runs per-module mypy with MYPYPATH for modules."""
@@ -1988,143 +2067,57 @@ class TestCheckQuietSectionDispatch:
         else:
             raise AssertionError("Expected a Ruff invocation for quickscale_modules/testmod")
 
-    def test_quiet_pytest_core_cli_only(self, tmp_path: Path) -> None:
-        """QUIET=1 pytest covers only core and CLI test dirs, not module tests."""
+    def test_quiet_unit_delegates_the_non_quiet_command(self, tmp_path: Path) -> None:
+        """QUIET=1 delegates the unit lane and never runs an inline pytest."""
+        _, make_log, fake_make = self._write_fake_make(tmp_path)
         mod_dir = tmp_path / "quickscale_modules" / "testmod"
         (mod_dir / "src" / "__init__.py").parent.mkdir(parents=True)
         (mod_dir / "src" / "__init__.py").write_text("", encoding="utf-8")
         (mod_dir / "tests" / "__init__.py").parent.mkdir(parents=True)
         (mod_dir / "tests" / "__init__.py").write_text("", encoding="utf-8")
 
-        result, events = self._run_quiet_check(tmp_path)
+        result, events = self._run_quiet_check(tmp_path, make_override=str(fake_make))
         assert result.returncode == 0, (
             f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
         )
 
-        pytest_calls = self._pytest_invocations(events)
-        pytest_str = " ".join(" ".join(a) for a in pytest_calls)
-        assert "quickscale_core/tests" in pytest_str
-        assert "quickscale_cli/tests" in pytest_str
-        assert "quickscale_modules/testmod/tests" not in pytest_str, (
-            "QUIET=1 pytest must NOT include module test dirs"
+        assert self._pytest_invocations(events) == [], (
+            "QUIET=1 must not bypass the non-quiet unit command with inline pytest"
+        )
+        delegated = self._delegated_unit_args(make_log)
+        assert "SECTIONS=quickscale core cli devtools" in delegated
+        assert "quickscale_modules/testmod" not in delegated, (
+            "the delegated unit lane must not include module test dirs"
         )
 
-    def test_quiet_pytest_excludes_integration_and_e2e_markers(self, tmp_path: Path) -> None:
-        """
-        QUIET=1 pytest excludes integration and e2e tests via marker.
-
-        Behavioural contract test: the ``make check QUIET=1`` pytest command
-        must include ``-m "not integration and not e2e"`` so that the quiet
-        check gate runs only unit/static tests while integration and E2E
-        tests remain in the CI E2E lane.
-        """
-        result, events = self._run_quiet_check(tmp_path)
-        assert result.returncode == 0, (
-            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
-        )
-
-        pytest_calls = self._pytest_invocations(events)
-        assert len(pytest_calls) >= 1, "Expected at least one pytest invocation"
-        for args in pytest_calls:
-            # Skip the ``python -m pytest`` prefix to find pytest's own ``-m``.
-            pytest_args = args[args.index("pytest") + 1 :]
-            marker_idx = pytest_args.index("-m") if "-m" in pytest_args else -1
-            assert marker_idx >= 0, f"QUIET pytest invocation missing pytest -m flag: {args}"
-            marker_value = pytest_args[marker_idx + 1]
-            assert "not integration" in marker_value and "not e2e" in marker_value, (
-                f"QUIET pytest must exclude integration and e2e markers; got -m {marker_value!r}"
-            )
-
-    def test_quiet_pytest_forwards_xdist_args(self, tmp_path: Path) -> None:
-        """
-        QUIET=1 pytest forwards configured xdist arguments.
-
-        The parallel case with an explicit worker count proves the
-        forwarding end-to-end.  Serial disable is covered by the
-        structural Makefile assertion in
-        ``test_quiet_pytest_xdist_serial_filter``.
-        """
-        parallel_result, parallel_events = self._run_quiet_check(
+    def test_quiet_unit_failure_replays_the_captured_log(self, tmp_path: Path) -> None:
+        """A failing delegated unit lane exits nonzero with its captured output."""
+        _, _, fake_make = self._write_fake_make(tmp_path)
+        result, _events = self._run_quiet_check(
             tmp_path,
-            extra_env={"PYTEST_XDIST_WORKERS": "3"},
+            make_override=str(fake_make),
+            extra_env={"FAKE_MAKE_FAIL_TARGET": "test-unit"},
         )
-        assert parallel_result.returncode == 0
+        assert result.returncode != 0
+        assert "FAKE_MAKE: target 'test-unit' failed" in result.stdout + result.stderr
 
-        parallel_calls = self._pytest_invocations(parallel_events)
-        for args in parallel_calls:
-            pytest_args = args[args.index("pytest") + 1 :]
-            worker_idx = pytest_args.index("-n")
-            assert pytest_args[worker_idx : worker_idx + 4] == [
-                "-n",
-                "3",
-                "--dist",
-                "loadfile",
-            ]
-
-    def test_quiet_pytest_xdist_serial_filter(self) -> None:
-        """
-        Makefile QUIET=1 pytest uses ``$(PYTEST_XDIST_ARGS)`` for serial worker filtering.
-
-        Structural assertion: the Makefile recipe includes
-        ``$(PYTEST_XDIST_ARGS)`` which, per the ``$(filter ...)``
-        definition, produces empty args for serial worker counts.
-        """
+    def test_quiet_path_has_no_inline_unit_pytest(self) -> None:
+        """The quiet branch carries the same test-unit command, not a copy."""
         with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
             content = fh.read()
 
         check_start = content.find("\ncheck:")
         assert check_start >= 0
         section = content[check_start:]
-
-        # Find the QUIET pytest line specifically
         quiet_start = section.find("$(QUIET)")
         assert quiet_start >= 0
         quiet_section = section[quiet_start:]
         else_start = quiet_section.find("\n\telse")
         quiet_then = quiet_section[:else_start] if else_start >= 0 else quiet_section
 
-        assert "$(PYTEST_XDIST_ARGS)" in quiet_then, (
-            "QUIET=1 pytest must reference $(PYTEST_XDIST_ARGS) for xdist forwarding"
-        )
-
-    def test_quiet_pytest_forwards_timeout_args(self, tmp_path: Path) -> None:
-        """QUIET=1 pytest forwards configured timeout arguments."""
-        result, events = self._run_quiet_check(
-            tmp_path,
-            extra_env={"PYTEST_TIMEOUT": "60"},
-        )
-        assert result.returncode == 0, (
-            f"make check QUIET=1 with PYTEST_TIMEOUT=60 failed: {result.stdout}\n{result.stderr}"
-        )
-
-        pytest_calls = self._pytest_invocations(events)
-        assert len(pytest_calls) >= 1
-        for args in pytest_calls:
-            pytest_args = args[args.index("pytest") + 1 :]
-            timeout_flag = next((a for a in pytest_args if a.startswith("--timeout=")), None)
-            assert timeout_flag is not None, (
-                f"QUIET pytest invocation missing --timeout flag: {args}"
-            )
-            assert timeout_flag == "--timeout=60", f"Expected --timeout=60, got {timeout_flag!r}"
-            assert "--timeout-method=thread" in pytest_args, (
-                f"QUIET pytest invocation missing --timeout-method=thread: {args}"
-            )
-
-    def test_quiet_pytest_timeout_disabled_when_zero(self, tmp_path: Path) -> None:
-        """QUIET=1 pytest omits timeout args when PYTEST_TIMEOUT=0."""
-        result, events = self._run_quiet_check(
-            tmp_path,
-            extra_env={"PYTEST_TIMEOUT": "0"},
-        )
-        assert result.returncode == 0
-
-        pytest_calls = self._pytest_invocations(events)
-        assert len(pytest_calls) >= 1
-        for args in pytest_calls:
-            pytest_args = args[args.index("pytest") + 1 :]
-            assert not any(a.startswith("--timeout=") for a in pytest_args), (
-                f"QUIET pytest must not include --timeout when PYTEST_TIMEOUT=0: {args}"
-            )
+        assert "$(MAKE) test-unit SECTIONS=" in quiet_then
+        assert "$(PYTHON) -m pytest" not in quiet_then
+        assert "q_test_dirs" not in quiet_then
 
     # ------------------------------------------------------------------
     # SA120 — QUIET=1 frontend lint dispatch parity
@@ -2635,7 +2628,7 @@ class TestCheckNormalFrontendLint:
                 log_path = Path(os.environ["FAKE_MAKE_LOG"])
                 target = sys.argv[1] if len(sys.argv) > 1 else ""
                 with log_path.open("a", encoding="utf-8") as stream:
-                    json.dump({"kind": "make", "target": target}, stream)
+                    json.dump({"kind": "make", "target": target, "args": sys.argv[1:]}, stream)
                     stream.write("\\n")
                 fail_target = os.environ.get("FAKE_MAKE_FAIL_TARGET", "")
                 if fail_target and target == fail_target:

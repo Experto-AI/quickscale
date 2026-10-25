@@ -2,7 +2,7 @@
 # Do not edit by hand; `make check` fails when this file is not current.
 # Refresh with `poetry run python scripts/sync_ci_gate_jobs.py --write`.
 
-.PHONY: check-core-compat check-module-core-imports check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze
+.PHONY: check-core-compat check-module-core-imports check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze check-security-negative-probes check-generated-workflow-lint check-migration-hashes release-check-module-seals
 
 # Check each module's quickscale_core imports against the current core API.
 # This verifies that every import from quickscale_core in a module's source
@@ -98,8 +98,10 @@ check-generated-project-automation:
 check-workflow-security:
 	@$(PYTHON) scripts/check_workflow_security.py --generated-template
 
-# Fail on any committed secret gitleaks reports after applying the reasoned
-# allowlists in scripts/gitleaks.toml.
+# Fail on any committed secret gitleaks reports in the working tree or in
+# reachable history after applying the expiring, justified entries in
+# scripts/secret_scan_suppressions.json and the structural path exclusions in
+# scripts/gitleaks.toml.
 check-secret-scanning:
 	@$(PYTHON) scripts/check_secret_scanning.py
 
@@ -128,3 +130,28 @@ quality:
 # regeneration records it.
 check-migration-freeze:
 	@$(PYTHON) scripts/check_migration_freeze.py
+
+# Acquire the pinned Trivy and Bandit tools and prove the dependency,
+# static-analysis, and misconfiguration gates still fail closed on known-bad
+# inputs. Security-negative-probes is the manual alias.
+check-security-negative-probes:
+	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
+
+# Render one fresh showcase_react project offline and run the pinned
+# actionlint release over every emitted workflow, so a generated workflow that
+# GitHub would refuse cannot ship.
+check-generated-workflow-lint:
+	@$(PYTHON) scripts/check_generated_workflow_lint.py
+
+# Run sync_migration_hashes.py --check: the committed manifest must match
+# every shipped module migration file byte for byte. The freeze gate owns the
+# released baseline; this gate owns manifest currency.
+check-migration-hashes:
+	@$(PYTHON) scripts/sync_migration_hashes.py --check
+
+# Fail when a module changed after its immutable VERSION split tag was
+# sealed, or when its published split branch moved from the seal. Runs in the
+# publish workflow before publication; make check-module-seals remains the
+# manual release-gate entry because seals are provisional until a release is cut.
+release-check-module-seals:
+	@$(PYTHON) scripts/check_module_seals.py

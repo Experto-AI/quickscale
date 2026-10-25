@@ -26,11 +26,14 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
 - `make check-commit-testimony` - Require each behavioural control commit to carry a vNN roadmap reference, bare (`v88`) or dotted (`v0.88.0`). Merge commits are exempt. Authorship-time enforcement is the `commit-msg` hook from `poetry run pre-commit install`; this target re-checks a range and is a hosted gate, not part of the local static fan-out.
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
-- `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of the committed root Poetry lockfile.
+- `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of the root and `quickscale_core` Poetry lockfiles plus the generated-project Dockerfile misconfiguration scan.
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
 - `make check-beta-migration-smoke` - Exercise fresh-first beta migration compatibility on isolated generated fixtures.
 - `make check-generated-deploy-posture` - Run Django's deployment checks on a freshly generated project in both forwarding cells and fail on a new warning.
-- `make security-negative-probes` - Prove scanner, checksum, archive-safety, and stale-database failures remain fail-closed.
+- `make check-security-negative-probes` - Prove the dependency, static-analysis, and Dockerfile-misconfiguration gates still fail closed on known-bad inputs (alias: `make security-negative-probes`).
+- `make check-generated-workflow-lint` - Render a fresh generated project and lint every emitted workflow with the pinned actionlint release.
+- `make check-migration-hashes` - Verify `scripts/migration_hashes.json` matches every shipped module migration file.
+- `make check-secret-scanning` - Scan the working tree and every commit reachable from `HEAD` for committed secrets, adjudicating the expiring ledger and structural path exclusions.
 - `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.
 - `make check-module-conventions` - Run the rule 40 Module Conventions conformance check over every module manifest and source tree, recording the rules whose convention ticket has not landed.
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input. The ordered release sequence that invokes it, and the pre-publish quality gate, live in [publish_procedure.md](publish_procedure.md).
@@ -86,6 +89,12 @@ pick the tier, run its command once.
   tier that owns it. `K=`/`ARGS=` apply those two flags for you and print
   `coverage gate disabled` so a scoped green is never read as a coverage pass;
   `make test-cov` deliberately accepts neither variable.
+- **`QUIET=1` changes output only.** `make check QUIET=1` delegates its unit lane
+  to the same `make test-unit` command as the non-quiet form, and
+  `make test-cov QUIET=1` re-enters the full five-phase pipeline. Neither mode
+  relaxes a coverage threshold, skips a phase, or runs a different gate; only
+  the success output is captured. Hosted CI and the local lanes therefore share
+  the same coverage commands.
 - **A wider tier is never run to establish a baseline.** It runs when the delta
   reaches its surface. A pre-existing failure is discovered at the tier that
   reaches it, and no baseline run precedes implementation.
@@ -190,6 +199,7 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 - Thresholds are enforced across both unit and integration gates — `make test-unit` (via `scripts/test_unit.sh`) covers core and CLI code, while `make test-integration` (via `scripts/test_integration.sh`) covers module suites. Non-quarantined integration suites enforce the normal dual overall and per-file thresholds. Quarantined suites are excluded from gate failure and from the overall mean; each quarantine entry is removed independently as its own owning ticket lands/completes — quarantine is per-entry, not held for a single simultaneous closeout across all entries.
 - **Combined coverage path**: `make test-cov` aggregates coverage from core + CLI unit tests and (when PostgreSQL is available) the backups module's DR-engine exercise into a single combined measurement. The dual-threshold policy (90% equal-weight package mean, 80% per-file) is enforced via `scripts/check_coverage_policy.py`, which is invoked as Phase 4 of the `test-cov` recipe. Standalone `make test-cov` skips the backups module when PostgreSQL is unavailable.
 - **Required-backups mode**: Set `REQUIRE_BACKUPS_COVERAGE=1` (e.g., `make test-cov REQUIRE_BACKUPS_COVERAGE=1`) to fail if PostgreSQL or the DR toolchain is not available, ensuring CI cannot silently skip backups-module coverage. This mode is used by `make ci` and `make ci-e2e` via `scripts/check_ci_locally.sh`.
+- **Quiet-mode parity**: `make check QUIET=1` runs the same unit command as `make check`, and `make test-cov QUIET=1` runs the same five-phase pipeline as `make test-cov`. `QUIET` captures output; it never disables the coverage policy helper, the per-file floor, or the package mean.
 - **Coverage policy helper**: `scripts/check_coverage_policy.py` is a standalone Python script that validates `coverage.json` output against the dual-threshold policy. It accepts `--mean-threshold` and `--per-file-threshold` overrides and exits with code 0 (pass), 1 (fail), or 2 (data error). Tests are in `scripts/test_ci_coverage_policy.py`.
 
 **Test Requirements:**
@@ -236,6 +246,10 @@ Every listed gate runs in each of its declared contexts.
 | `check-split-facade-imports` | `make check-split-facade-imports` | local-serial, local-parallel, hosted, publish | 7 | `split-facade-gate` |
 | `quality` | `make quality` | local-serial, local-parallel | 7 | — |
 | `check-migration-freeze` | `make check-migration-freeze` | local-serial, local-parallel, hosted, publish | 7 | `migration-freeze-gate` |
+| `check-security-negative-probes` | `make check-security-negative-probes` | local-serial, local-parallel, hosted, publish | 7 | `security-negative-probes-gate` |
+| `check-generated-workflow-lint` | `make check-generated-workflow-lint` | local-serial, local-parallel, hosted, publish | 7 | `generated-workflow-lint-gate` |
+| `check-migration-hashes` | `make check-migration-hashes` | local-serial, local-parallel, hosted, publish | 7 | `migration-hashes-gate` |
+| `check-module-seals` | `make release-check-module-seals` | publish | — | — |
 <!-- END GENERATED: gate-registry-table -->
 
 `make check-gate-suites` is the owning execution context for all current
@@ -247,7 +261,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for twenty-four jobs total. Eighteen registered gates run
+separately justified unowned jobs, for twenty-seven jobs total. Twenty-one registered gates run
 locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by
@@ -261,7 +275,20 @@ macOS x86_64/arm64 and verified against the official release-manifest SHA-256
 before extraction. Windows uses WSL and therefore the Linux asset. Unsupported
 native hosts fail explicitly; there is no skip path. Network/database refresh is
 an explicit online prerequisite for the vulnerability target, while Bandit and
-the committed gate/parity checks remain local.
+the committed gate/parity checks remain local. `check-generated-workflow-lint`
+uses a matching actionlint 1.7.12 on `PATH` when present and otherwise acquires
+the same checksum-pinned release archive; `check-secret-scanning` acquires
+gitleaks 8.30.1 the same way.
+
+**Secret scanning covers history.** `check-secret-scanning` runs gitleaks over
+the working tree and every commit reachable from `HEAD`, so a credential deleted
+from the tree stays visible. Structural exclusions (generated scratch trees and
+non-source directories) live in `scripts/gitleaks.toml`; every value-level
+exemption lives in `scripts/secret_scan_suppressions.json` with an owner, a
+rationale, a decision reference, and an ISO expiry. An expired entry, an entry
+that matches no finding, and a finding with no entry all fail the gate. A shallow
+clone fails closed because `gitleaks git` would silently scan only the fetched
+depth; fetch a full-history clone before running the gate locally.
 
 **Generated Projects Include:**
 - a sample `pytest-django` test demonstrating patterns

@@ -5,8 +5,12 @@ SA46 — Hard-fail AST lint gate requiring csrf_exempt + an approved verificatio
 Scans ``quickscale_modules/*/src/`` for function and class definitions that
 apply ``csrf_exempt`` (directly, via ``@method_decorator(csrf_exempt, ...)``,
 or via the blog's ``@_typed_csrf_exempt`` wrapper) and verifies the same
-callable (or a method of the same class) calls at least one approved
-verification helper.
+callable calls at least one approved verification helper.  A class-level
+exemption is rejected outright: a dispatch-level exemption covers every HTTP
+verb, including handlers added later, so no sibling handler can prove the
+whole request path re-enforces CSRF.  A per-handler
+``method_decorator(csrf_exempt, name='<handler>')`` remains the supported
+shape and must call the helper from that handler.
 
 Approved verification helpers:
   - ``_enforce_csrf`` — explicit CSRF re-enforcement.
@@ -148,22 +152,6 @@ def _node_walks_helper_call(node: ast.AST) -> bool:
             return True
 
     return False
-
-
-# Standard Django HTTP handler method names that form the actual request
-# path when ``method_decorator(..., name='dispatch')`` is used.
-_HTTP_HANDLER_NAMES: frozenset[str] = frozenset(
-    {
-        "get",
-        "post",
-        "put",
-        "patch",
-        "delete",
-        "head",
-        "options",
-        "trace",
-    }
-)
 
 
 def _extract_method_decorator_name(decorator: ast.AST) -> str | None:
@@ -469,28 +457,6 @@ def _has_reachable_helper_in_body(body: list[ast.stmt]) -> bool:
     return False
 
 
-def _extract_http_method_names(body: list[ast.stmt]) -> set[str] | None:
-    """
-    Extract ``http_method_names`` from a class body, or ``None`` if unset.
-
-    Returns the set of allowed HTTP method names when the attribute is
-    assigned as a list of string literals.  Returns ``None`` when the
-    attribute is not found (meaning all standard Django HTTP handlers are
-    allowed by default).
-    """
-    for stmt in body:
-        if isinstance(stmt, ast.Assign):
-            for target in stmt.targets:
-                if isinstance(target, ast.Name) and target.id == "http_method_names":
-                    if isinstance(stmt.value, ast.List):
-                        methods: set[str] = set()
-                        for elt in stmt.value.elts:
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                methods.add(elt.value)
-                        return methods
-    return None
-
-
 # ---------------------------------------------------------------------------
 # AST visitor
 # ---------------------------------------------------------------------------
@@ -516,58 +482,62 @@ class _CsrfExemptVisitor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """
-        Check class definitions with a csrf_exempt decorator.
+        Reject class-level ``csrf_exempt`` and check per-handler exemptions.
 
-        For classes (typically ``@method_decorator(csrf_exempt, name='dispatch')``),
-        we search **only the named method and standard HTTP handler methods** for
-        a helper call — arbitrary sibling helpers (e.g. ``_parse_payload``,
-        ``_validate``) are excluded so that unrelated code cannot satisfy the
-        pairing requirement.
+        A dispatch-level exemption covers every HTTP verb, including handlers
+        added later, so no single sibling handler can prove the request path
+        re-enforces CSRF.  The gate therefore rejects a bare ``@csrf_exempt``
+        on a class and any ``method_decorator(csrf_exempt, ...)`` that names
+        ``dispatch`` or names no method at all.
+
+        A per-handler ``method_decorator(csrf_exempt, name='post')`` is the
+        supported shape: only the named handler is exempt, so only that
+        handler must call an approved helper.  Other handlers are not checked
+        because the exemption does not apply to them.
         """
-        if not any(_is_csrf_exempt_decorator(d) for d in node.decorator_list):
+        class_level = False
+        named_scopes: list[str] = []
+        for decorator in node.decorator_list:
+            if not _is_csrf_exempt_decorator(decorator):
+                continue
+            if isinstance(decorator, ast.Name):
+                class_level = True
+                continue
+            name_val = _extract_method_decorator_name(decorator)
+            if name_val is None or name_val == "dispatch":
+                class_level = True
+            else:
+                named_scopes.append(name_val)
+
+        if not class_level and not named_scopes:
             self.generic_visit(node)
             return
 
-        # Determine which methods to inspect based on the decorator's ``name=``.
-        method_names_to_check: set[str] = set()
-        for decorator in node.decorator_list:
-            if (
-                isinstance(decorator, ast.Call)
-                and isinstance(decorator.func, ast.Name)
-                and decorator.func.id == METHOD_DECORATOR_NAME
-            ):
-                name_val = _extract_method_decorator_name(decorator)
-                if name_val is not None:
-                    method_names_to_check.add(name_val)
-
-        # Add standard HTTP handler methods that are allowed by
-        # ``http_method_names`` (if defined on the class).  These form the
-        # actual request path when ``method_decorator`` targets ``dispatch``.
-        allowed_http_methods = _extract_http_method_names(node.body)
-        if allowed_http_methods is not None:
-            for handler in _HTTP_HANDLER_NAMES:
-                if handler in allowed_http_methods:
-                    method_names_to_check.add(handler)
-        else:
-            # No explicit restriction — all standard handlers are allowed
-            method_names_to_check.update(_HTTP_HANDLER_NAMES)
-
-        helper_found = False
-        for item in node.body:
-            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if item.name in method_names_to_check and _has_reachable_helper_in_body(item.body):
-                    helper_found = True
-                    break
-
-        if not helper_found:
-            helpers_display = "/".join(sorted(APPROVED_VERIFICATION_HELPERS))
+        if class_level:
             self.violations.append(
                 (
                     node.lineno,
-                    f"class {node.name} applies csrf_exempt without calling an "
-                    f"approved verification helper ({helpers_display})",
+                    f"class {node.name} applies csrf_exempt at dispatch level; "
+                    f"apply it to the individual handler instead",
                 )
             )
+        else:
+            methods = {
+                item.name: item
+                for item in node.body
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            helpers_display = "/".join(sorted(APPROVED_VERIFICATION_HELPERS))
+            for scope in named_scopes:
+                method = methods.get(scope)
+                if method is None or not _has_reachable_helper_in_body(method.body):
+                    self.violations.append(
+                        (
+                            node.lineno,
+                            f"class {node.name} applies csrf_exempt to {scope} without "
+                            f"calling an approved verification helper ({helpers_display})",
+                        )
+                    )
 
         self.generic_visit(node)
 

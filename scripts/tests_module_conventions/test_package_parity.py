@@ -445,6 +445,37 @@ CASE_BUILDERS = {
             "        ADAPTER_FUNCTIONS['prune_backups'](dry_run=False)\n",
         )
     ),
+    "computed_adapter_operation": lambda: _corpus(
+        _command_module(
+            "prune",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def handle(self, *args, **options):\n"
+            "        operation = options['operation']\n"
+            "        ADAPTER_FUNCTIONS[operation](dry_run=False)\n",
+        )
+    ),
+    "computed_adapter_operation_with_dry_run": lambda: _corpus(
+        _command_module(
+            "prune",
+            "from django.core.management.base import BaseCommand\n"
+            "\n"
+            "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+            "\n"
+            "\n"
+            "class Command(BaseCommand):\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--dry-run', action='store_true')\n"
+            "\n"
+            "    def handle(self, *args, **options):\n"
+            "        operation = options['operation']\n"
+            "        ADAPTER_FUNCTIONS[operation](dry_run=True)\n",
+        )
+    ),
     "lock_without_overwrite": lambda: _corpus(
         _command_module(
             "sweep",
@@ -829,6 +860,12 @@ EXACT_FINDINGS = (
         "rule_17_management_commands",
         ("rule 17: demo: destructive quickscale_demo_prune takes no --dry-run",),
     ),
+    (
+        "computed_adapter_operation",
+        "rule_17_management_commands",
+        ("rule 17: demo: destructive quickscale_demo_prune takes no --dry-run",),
+    ),
+    ("computed_adapter_operation_with_dry_run", "rule_17_management_commands", ()),
     ("lock_without_overwrite", "rule_17_management_commands", ()),
     (
         "print_call",

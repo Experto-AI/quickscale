@@ -49,7 +49,6 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
-| SA326 | Wire the unwired release and security gates | 3 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d, SA320 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
@@ -61,7 +60,7 @@ Track 1: SA153 (j) ─► [SA191d (production)] SA153 (f)
          ─► SA320 (b → c) ─► SA321 ─► SA154
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-Track 3: SA326 ─► [SA191d (production)] SA277
+Track 3: [SA191d (production)] SA277
      release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
      portal path:  SA153 (j); SA191d (production) ─► SA153 (f)
 ```
@@ -83,7 +82,7 @@ project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA326 | yes | no: SA191d (production) for SA277 | yes: SA325 |
+| 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -302,17 +301,7 @@ update; the cutover does not wait for them.
 
 - [x] **SA325 — Make module settings, defaults, messages and READMEs follow one contract.**
 
-- [ ] **SA326 — Wire the unwired release and security gates.**
-
-  Closes the tech audit's tooling gaps for gate wiring and coherence gap 21: register
-  `security-negative-probes`; run `check-module-seals` and `sync_migration_hashes.py --check` in CI;
-  wire `check_generated_workflow_lint.py`; remove the coverage `QUIET` bypasses so CI and `make`
-  share commands; reject a class-level `csrf_exempt` dispatch and the `from … import current_org`
-  form in their gates; scan git history for secrets with justified, expiring suppressions; make
-  rule 17's destructive duty key on computed operations.
-
-  **Acceptance:** each newly wired gate runs in CI and `make check`, and each tightened gate fails
-  its fixture control (Tier 2-full).
+- [x] **SA326 — Wire the unwired release and security gates.**
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 

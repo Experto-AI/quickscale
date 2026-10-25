@@ -187,6 +187,22 @@ jobs:
       - name: Run migration freeze gate
         run: |
           make check-migration-freeze
+
+      - name: Run security negative-probes gate
+        run: |
+          make check-security-negative-probes
+
+      - name: Run generated workflow actionlint gate
+        run: |
+          make check-generated-workflow-lint
+
+      - name: Verify the module migration hash manifest is current
+        run: |
+          make check-migration-hashes
+
+      - name: Run module seal freshness check
+        run: |
+          make release-check-module-seals
       # END GENERATED: publish-gate-steps
 
       - name: Run linting (ruff)

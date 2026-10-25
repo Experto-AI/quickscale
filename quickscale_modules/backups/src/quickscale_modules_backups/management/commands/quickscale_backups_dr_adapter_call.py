@@ -41,6 +41,14 @@ class Command(BaseCommand):
                 "When omitted, JSON is read from stdin."
             ),
         )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            dest="dry_run",
+            help=(
+                "Report the adapter call and its arguments without invoking the adapter."
+            ),
+        )
 
     def _read_kwargs(self, args_json: str | None) -> dict:
         """Read keyword arguments from ``--args-json`` or stdin."""
@@ -77,6 +85,13 @@ class Command(BaseCommand):
             )
 
         kwargs = self._read_kwargs(options.get("args_json"))
+
+        if options["dry_run"]:
+            preview = {"dry_run": True, "function": function_name, "kwargs": kwargs}
+            self.stdout.write(
+                json.dumps(preview, indent=2, sort_keys=True, default=str)
+            )
+            return
 
         try:
             result = func(**kwargs)

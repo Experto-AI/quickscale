@@ -462,11 +462,11 @@ public surface is `services.py` (rule 4).
   beside it, and an invocation passes either the selector or the slug, never both.
 - ❌ `--organization`, `--org`, a slug spelling of the organization selector, or a `--slug`
   lookup without `--organization-id`; the module-conventions gate refuses these spellings.
-- ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
-  would change and writes nothing; database-only work runs in `transaction.atomic()` in the
+- ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what would change and writes nothing; database-only work runs in `transaction.atomic()` in the
   service or command-support module the command calls, never in the command module itself.
-- ✅ Modules ship no scheduler. A command meant to run periodically is listed under the
-  README's Operations heading with a suggested interval; the operator's cron or platform scheduler
+- ✅ An operation selected from a computed name — `ADAPTER_FUNCTIONS[operation]` or
+  `func = ADAPTER_FUNCTIONS.get(name)` followed by `func(...)` — is destructive by construction and requires `--dry-run`; the gate cannot name the operation, so it fails closed.
+- ✅ Modules ship no scheduler. A command meant to run periodically is listed under the README's Operations heading with a suggested interval; the operator's cron or platform scheduler
   runs it (backups' `schedule` and `automation_enabled` options already only document this).
 - ✅ A retired command is deleted, not kept behind a guard (rule 6).
 - ❌ `print()`, `sys.exit()`, or returning normally after a failure; an inline scheduled-off
@@ -840,8 +840,8 @@ and validation, per-module option code, constants, and module-name branches
 in core or the CLI, duplicated setting names or defaults in a manifest,
 tenant-model base,
 `Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,
-`__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`, and
-`--dry-run`, `pyproject.toml` sections, a module directory without `module.yml`, `is_staff`,
+`__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`,
+`--dry-run` (including a computed destructive dispatch), `pyproject.toml` sections, a module directory without `module.yml`, `is_staff`,
 hand-written login checks, and unguarded or `AllowAny`+hand-checked views, email sent outside notifications, per-event analytics helpers,
 event names, and `session_key` reads, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
 cache-key prefixes, constraint and index names and `unique_together`, webhook view bases, empty

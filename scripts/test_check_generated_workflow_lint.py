@@ -9,11 +9,13 @@ the real tool on a fixture workflow and skipped only when it is absent.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -89,15 +91,60 @@ def _path_with(bin_dir: Path) -> str:
     return f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
-def test_missing_tool_fails_closed(tmp_path: Path) -> None:
-    """A missing actionlint executable fails closed with the release link."""
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    completed = _run(str(empty))
-    assert completed.returncode == 2
-    assert lint_gate.EXECUTABLE in completed.stderr
-    assert lint_gate.ACTIONLINT_VERSION in completed.stderr
-    assert lint_gate.ACTIONLINT_RELEASES_URL in completed.stderr
+def test_missing_tool_is_acquired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An absent PATH install falls back to the checksum-pinned release."""
+    monkeypatch.setattr(lint_gate.shutil, "which", lambda name: None)
+    monkeypatch.setattr(lint_gate, "acquire_actionlint", lambda: "/tmp/actionlint")
+    assert lint_gate._require_executable() == "/tmp/actionlint"
+
+
+def test_acquisition_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed download fails closed with the release link, never a silent skip."""
+
+    def _fail() -> str:
+        raise lint_gate.GateError(
+            f"actionlint acquisition failed; install it from {lint_gate.ACTIONLINT_RELEASE_URL}"
+        )
+
+    monkeypatch.setattr(lint_gate.shutil, "which", lambda name: None)
+    monkeypatch.setattr(lint_gate, "acquire_actionlint", _fail)
+    with pytest.raises(lint_gate.GateError, match="actionlint acquisition failed"):
+        lint_gate._require_executable()
+
+
+def test_unsupported_acquisition_host_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hosts outside the contributor contract fail closed."""
+    monkeypatch.setattr(lint_gate.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(lint_gate.platform, "machine", lambda: "AMD64")
+    with pytest.raises(lint_gate.GateError, match="unsupported actionlint host"):
+        lint_gate._asset()
+
+
+def test_acquisition_checksum_mismatch_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A downloaded archive whose digest differs from the pin fails closed."""
+    monkeypatch.setattr(
+        lint_gate,
+        "_asset",
+        lambda: ("actionlint_1.7.12_linux_amd64.tar.gz", "0" * 64),
+    )
+    monkeypatch.setattr(
+        lint_gate, "_download", lambda url, destination: destination.write_bytes(b"x")
+    )
+    with pytest.raises(lint_gate.GateError, match="checksum mismatch"):
+        lint_gate.acquire_actionlint()
+
+
+def test_acquisition_archive_traversal_is_rejected(tmp_path: Path) -> None:
+    """The archive may not write outside its extraction directory."""
+    archive = tarfile.open(fileobj=io.BytesIO(), mode="w")
+    member = tarfile.TarInfo("../../outside")
+    member.size = 1
+    archive.addfile(member, io.BytesIO(b"x"))
+    try:
+        with pytest.raises(lint_gate.GateError, match="escapes extraction directory"):
+            lint_gate._safe_archive_members(archive, tmp_path)
+    finally:
+        archive.close()
 
 
 def test_version_mismatch_fails_closed(tmp_path: Path) -> None:

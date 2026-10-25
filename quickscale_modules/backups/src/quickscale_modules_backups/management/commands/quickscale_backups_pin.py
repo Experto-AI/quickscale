@@ -16,8 +16,8 @@ def _call_pin_adapter(operation: str, **kwargs: Any) -> Any:
         raise CommandError(str(exc)) from exc
 
 
-def _resolve_pin_operation(options: dict[str, Any]) -> tuple[Any, str]:
-    """Resolve the clear/set request and return its report and action label."""
+def _resolve_pin_request(options: dict[str, Any]) -> tuple[str, dict[str, Any], str]:
+    """Validate the clear/set request and return its adapter call and labels."""
     snapshot_id = options["snapshot_id"]
     should_clear = bool(options["clear"])
     hours = options["hours"]
@@ -26,20 +26,49 @@ def _resolve_pin_operation(options: dict[str, Any]) -> tuple[Any, str]:
     if should_clear:
         if hours is not None or reason.strip():
             raise CommandError("--clear cannot be combined with --hours or --reason.")
-        report = _call_pin_adapter("clear_rollback_pin", snapshot_id=snapshot_id)
-        return report, f"Cleared rollback pin for snapshot {report['snapshot_id']}"
+        return (
+            "clear_rollback_pin",
+            {"snapshot_id": snapshot_id},
+            f"Cleared rollback pin for snapshot {snapshot_id}",
+        )
 
     if hours is None:
         raise CommandError("--hours is required when setting a rollback pin.")
     if not reason.strip():
         raise CommandError("--reason is required when setting a rollback pin.")
-    report = _call_pin_adapter(
+    return (
         "set_rollback_pin",
-        snapshot_id=snapshot_id,
-        hours=hours,
-        reason=reason,
+        {"snapshot_id": snapshot_id, "hours": hours, "reason": reason},
+        f"Pinned snapshot {snapshot_id}",
     )
-    return report, f"Pinned snapshot {report['snapshot_id']}"
+
+
+def _write_dry_run_report(
+    command: BaseCommand,
+    operation: str,
+    kwargs: dict[str, Any],
+    as_json: bool,
+) -> None:
+    """Report the pin change that would be written, without writing it."""
+    preview = {"dry_run": True, "operation": operation, **kwargs}
+    if as_json:
+        command.stdout.write(json.dumps(preview, indent=2, sort_keys=True))
+        return
+
+    if operation == "clear_rollback_pin":
+        command.stdout.write(
+            command.style.WARNING(
+                f"Dry run: would clear the rollback pin on snapshot {kwargs['snapshot_id']}; "
+                "no change written."
+            )
+        )
+        return
+    command.stdout.write(
+        command.style.WARNING(
+            f"Dry run: would pin snapshot {kwargs['snapshot_id']} for "
+            f"{kwargs['hours']} hours (reason: {kwargs['reason']}); no change written."
+        )
+    )
 
 
 def _write_pin_report(
@@ -89,9 +118,24 @@ class Command(BaseCommand):
             dest="as_json",
             help="Emit structured rollback-pin output for automation.",
         )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            dest="dry_run",
+            help="Report the pin change without writing it.",
+        )
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
-        report, action_label = _resolve_pin_operation(options)
+        operation, kwargs, action_label = _resolve_pin_request(options)
+        if options["dry_run"]:
+            _write_dry_run_report(
+                self,
+                operation,
+                kwargs,
+                bool(options["as_json"]),
+            )
+            return
+        report = _call_pin_adapter(operation, **kwargs)
         _write_pin_report(
             self,
             report,

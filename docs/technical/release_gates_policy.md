@@ -115,6 +115,13 @@ reporting a real defect. Close the gap by adding the gate — never by declaring
 exclusion to silence the check. Open gap status is tracked in
 [roadmap.md](./roadmap.md).
 
+**Publish-only gate.** `check-module-seals` declares only the `publish` context.
+Seals are provisional while a release is being cut: module content keeps changing
+until the release is resealed, so a per-pull-request station would be red by
+design rather than by a defect. The tag-push workflow runs the check
+automatically on the exact bytes being published, and `make check-module-seals`
+(or `make release-gate`) remains the manual release entry.
+
 ---
 
 ## Integration-Branch CI Coverage {#integration-branch-ci-coverage}
@@ -162,6 +169,14 @@ its authored `gate_registry.json` entry and the one binding the generated wiring
 rule means deleting it or folding it into a stronger one, never silencing it while it stays
 declared; a delivery that cannot retire one records that with its reason in its roadmap
 ticket.
+
+**Recorded non-retirement.** The 0.89 security-gate delivery added
+`check-security-negative-probes`, `check-generated-workflow-lint`,
+`check-migration-hashes`, and the publish-bound `check-module-seals` without
+retiring a gate. Each closes a distinct technical-audit gap — scanner
+fail-closed proof, generated-workflow syntax, migration-manifest currency, and
+seal freshness — and none duplicates an existing station. The completed roadmap
+ticket no longer carries its body, so the reason is recorded here.
 
 ---
 

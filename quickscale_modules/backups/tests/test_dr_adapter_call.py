@@ -204,6 +204,34 @@ def test_dr_adapter_call_stdin_non_dict_raises_command_error() -> None:
             )
 
 
+def test_dr_adapter_call_dry_run_reports_the_call_without_invoking_it() -> None:
+    """``--dry-run`` prints the resolved call and leaves the adapter untouched."""
+    stdout = StringIO()
+    mock_adapter = MagicMock()
+
+    with patch.dict(
+        "quickscale_modules_backups.management.commands.quickscale_backups_dr_adapter_call.ADAPTER_FUNCTIONS",
+        {"prune_backups": mock_adapter},
+        clear=True,
+    ):
+        call_command(
+            "quickscale_backups_dr_adapter_call",
+            "prune_backups",
+            "--args-json",
+            '{"dry_run": true}',
+            "--dry-run",
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+
+    mock_adapter.assert_not_called()
+    assert json.loads(stdout.getvalue()) == {
+        "dry_run": True,
+        "function": "prune_backups",
+        "kwargs": {"dry_run": True},
+    }
+
+
 def test_dr_adapter_call_stdin_with_unknown_function() -> None:
     """Stdin transport with an unknown function name still errors."""
     with patch.dict(

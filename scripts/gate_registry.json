@@ -632,7 +632,7 @@
         },
         {
             "id": "check-secret-scanning",
-            "description": "Blocking checksum-pinned gitleaks scan of the repository working tree",
+            "description": "Blocking checksum-pinned gitleaks scan of the repository working tree and full commit history",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",
@@ -647,13 +647,14 @@
             "hosted": {
                 "order": 15,
                 "display_name": "Secret Scanning Gate (SA202)",
-                "check_step_name": "Run secret scanning gate"
+                "check_step_name": "Run secret scanning gate",
+                "full_history": true
             },
             "publish": {
                 "order": 12,
                 "step_name": "Run secret scanning gate"
             },
-            "help": "Fail on any committed secret gitleaks reports after applying the reasoned\nallowlists in scripts/gitleaks.toml.",
+            "help": "Fail on any committed secret gitleaks reports in the working tree or in\nreachable history after applying the expiring, justified entries in\nscripts/secret_scan_suppressions.json and the structural path exclusions in\nscripts/gitleaks.toml.",
             "local": {
                 "order": 14,
                 "description": "Running secret scanning gate...",
@@ -662,7 +663,7 @@
             },
             "makefile_help": {
                 "order": 13,
-                "text": "make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
+                "text": "make check-secret-scanning        - Blocking gitleaks tree and history scan with expiring suppressions"
             },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_secret_scanning.py"
@@ -811,6 +812,152 @@
             },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_migration_freeze.py"
+            ],
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
+            "id": "check-security-negative-probes",
+            "description": "Prove the security scanners stay fail-closed: a pinned Trivy vulnerability probe, a Bandit B602 probe, and a known-bad Dockerfile misconfiguration probe must each fail their gate",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-security-negative-probes",
+                "ci_job": "security-negative-probes-gate",
+                "local_ci_stage": 7
+            },
+            "hosted": {
+                "order": 19,
+                "display_name": "Security Negative-Probes Gate (SA326)",
+                "check_step_name": "Run security negative-probes gate"
+            },
+            "publish": {
+                "order": 18,
+                "step_name": "Run security negative-probes gate"
+            },
+            "help": "Acquire the pinned Trivy and Bandit tools and prove the dependency,\nstatic-analysis, and misconfiguration gates still fail closed on known-bad\ninputs. Security-negative-probes is the manual alias.",
+            "local": {
+                "order": 19,
+                "description": "Running security negative-probes gate...",
+                "success": "✓ Security negative-probes gate passed",
+                "failure_label": "Security Negative-Probes Gate"
+            },
+            "makefile_help": {
+                "order": 18,
+                "text": "make check-security-negative-probes - Prove the security gates fail closed on known-bad inputs (alias: make security-negative-probes)"
+            },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_security_gates.py security-negative-probes"
+            ],
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
+            "id": "check-generated-workflow-lint",
+            "description": "Render a fresh generated project and reject any workflow that actionlint refuses",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-generated-workflow-lint",
+                "ci_job": "generated-workflow-lint-gate",
+                "local_ci_stage": 7
+            },
+            "hosted": {
+                "order": 20,
+                "display_name": "Generated Workflow Lint Gate (SA326)",
+                "check_step_name": "Run generated workflow actionlint gate"
+            },
+            "publish": {
+                "order": 19,
+                "step_name": "Run generated workflow actionlint gate"
+            },
+            "help": "Render one fresh showcase_react project offline and run the pinned\nactionlint release over every emitted workflow, so a generated workflow that\nGitHub would refuse cannot ship.",
+            "local": {
+                "order": 20,
+                "description": "Running generated workflow actionlint gate...",
+                "success": "✓ Generated workflows pass actionlint",
+                "failure_label": "Generated Workflow Lint Gate"
+            },
+            "makefile_help": {
+                "order": 19,
+                "text": "make check-generated-workflow-lint - Render a generated project and lint its workflows with actionlint"
+            },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_generated_workflow_lint.py"
+            ],
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
+            "id": "check-migration-hashes",
+            "description": "The recorded module-migration hash manifest matches every shipped migration file",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-migration-hashes",
+                "ci_job": "migration-hashes-gate",
+                "local_ci_stage": 7
+            },
+            "hosted": {
+                "order": 21,
+                "display_name": "Migration Hash Manifest Gate (SA326)",
+                "check_step_name": "Verify the module migration hash manifest is current"
+            },
+            "publish": {
+                "order": 20,
+                "step_name": "Verify the module migration hash manifest is current"
+            },
+            "help": "Run sync_migration_hashes.py --check: the committed manifest must match\nevery shipped module migration file byte for byte. The freeze gate owns the\nreleased baseline; this gate owns manifest currency.",
+            "local": {
+                "order": 21,
+                "description": "Running migration hash manifest gate...",
+                "success": "✓ Module migration hash manifest is current",
+                "failure_label": "Migration Hash Manifest Gate"
+            },
+            "makefile_help": {
+                "order": 20,
+                "text": "make check-migration-hashes     - Verify the module migration hash manifest is current"
+            },
+            "make_recipe": [
+                "@$(PYTHON) scripts/sync_migration_hashes.py --check"
+            ],
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
+            "id": "check-module-seals",
+            "description": "Release seal freshness: every module VERSION tag matches its published split branch and current subtree split",
+            "required_contexts": [
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "release-check-module-seals",
+                "ci_job": null,
+                "local_ci_stage": null
+            },
+            "publish": {
+                "order": 21,
+                "step_name": "Run module seal freshness check"
+            },
+            "help": "Fail when a module changed after its immutable VERSION split tag was\nsealed, or when its published split branch moved from the seal. Runs in the\npublish workflow before publication; make check-module-seals remains the\nmanual release-gate entry because seals are provisional until a release is cut.",
+            "makefile_help": {
+                "order": 21,
+                "text": "make release-check-module-seals - Fail when a module changed after its split tag was sealed"
+            },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_module_seals.py"
             ],
             "depends_on": [],
             "trigger_inputs": []
