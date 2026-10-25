@@ -17,6 +17,7 @@ from quickscale_modules_backups.models import (
 )
 from quickscale_modules_backups.services import (
     BackupConfigurationError,
+    BackupError,
     create_backup,
     record_backup_snapshot_verification,
     report_backup_snapshot,
@@ -309,3 +310,131 @@ def test_sync_backup_snapshot_media_rejects_railway_target_local_backend(
             dry_run=dry_run,
             target_runtime_settings=target_settings,
         )
+
+
+def test_sync_backup_snapshot_media_source_prefers_the_captured_set(
+    django_user_model: type[Any],
+    backup_policy: BackupPolicy,
+    local_backup_settings: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backup_policy.local_directory = str(local_backup_settings)
+    backup_policy.save(update_fields=["local_directory", "updated_at"])
+    source_media_root = tmp_path / "source-media"
+    source_media_root.mkdir()
+    relative_path = "blog/hero.png"
+    source_file = source_media_root / relative_path
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b"image-bytes")
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(source_media_root))
+    monkeypatch.setenv("QUICKSCALE_STORAGE_BACKEND", "local")
+    superuser = django_user_model.objects.create_superuser(
+        username="backup-media-source",
+        email="media-source@example.com",
+        password="password123",
+    )
+    artifact = create_backup(initiated_by=superuser, trigger="manual")
+    snapshot = _get_authoritative_snapshot(artifact)
+
+    # The captured set is the recovery point: change the live source before
+    # syncing and prove the old captured bytes are what gets restored.
+    source_file.write_bytes(b"changed-after-capture")
+    target_media_root = tmp_path / "target-media"
+
+    result = sync_backup_snapshot_media(
+        snapshot.snapshot_id,
+        dry_run=False,
+        target_runtime_settings={
+            "QUICKSCALE_STORAGE_BACKEND": "local",
+            "MEDIA_ROOT": str(target_media_root),
+        },
+    )
+
+    assert result["source"] == "snapshot"
+    assert result["status"] == "completed"
+    assert (target_media_root / relative_path).read_bytes() == b"image-bytes"
+
+
+def test_sync_backup_snapshot_media_refuses_a_damaged_captured_set(
+    django_user_model: type[Any],
+    backup_policy: BackupPolicy,
+    local_backup_settings: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backup_policy.local_directory = str(local_backup_settings)
+    backup_policy.save(update_fields=["local_directory", "updated_at"])
+    source_media_root = tmp_path / "source-media"
+    source_media_root.mkdir()
+    source_file = source_media_root / "blog" / "hero.png"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b"image-bytes")
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(source_media_root))
+    monkeypatch.setenv("QUICKSCALE_STORAGE_BACKEND", "local")
+    superuser = django_user_model.objects.create_superuser(
+        username="backup-media-damaged",
+        email="media-damaged@example.com",
+        password="password123",
+    )
+    artifact = create_backup(initiated_by=superuser, trigger="manual")
+    snapshot = _get_authoritative_snapshot(artifact)
+    captured_file = Path(snapshot.local_root_path) / "media" / "blog" / "hero.png"
+    captured_file.unlink()
+
+    with pytest.raises(BackupError, match="captured media file is missing"):
+        sync_backup_snapshot_media(
+            snapshot.snapshot_id,
+            dry_run=True,
+            target_runtime_settings={
+                "QUICKSCALE_STORAGE_BACKEND": "local",
+                "MEDIA_ROOT": str(tmp_path / "target-media"),
+            },
+        )
+
+
+def test_sync_backup_snapshot_media_falls_back_to_live_media_for_a_legacy_snapshot(
+    django_user_model: type[Any],
+    backup_policy: BackupPolicy,
+    local_backup_settings: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backup_policy.local_directory = str(local_backup_settings)
+    backup_policy.save(update_fields=["local_directory", "updated_at"])
+    source_media_root = tmp_path / "source-media"
+    source_media_root.mkdir()
+    source_file = source_media_root / "blog" / "hero.png"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b"image-bytes")
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(source_media_root))
+    monkeypatch.setenv("QUICKSCALE_STORAGE_BACKEND", "local")
+    superuser = django_user_model.objects.create_superuser(
+        username="backup-media-legacy",
+        email="media-legacy@example.com",
+        password="password123",
+    )
+    artifact = create_backup(initiated_by=superuser, trigger="manual")
+    snapshot = _get_authoritative_snapshot(artifact)
+
+    media_manifest_path = Path(snapshot.local_root_path) / "media-sync-manifest.json"
+    legacy_manifest = json.loads(media_manifest_path.read_text(encoding="utf-8"))
+    legacy_manifest.pop("capture", None)
+    legacy_manifest["manifest_version"] = 1
+    media_manifest_path.write_text(
+        json.dumps(legacy_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    target_media_root = tmp_path / "target-media"
+    result = sync_backup_snapshot_media(
+        snapshot.snapshot_id,
+        dry_run=False,
+        target_runtime_settings={
+            "QUICKSCALE_STORAGE_BACKEND": "local",
+            "MEDIA_ROOT": str(target_media_root),
+        },
+    )
+
+    assert result["source"] == "live"
+    assert (target_media_root / "blog" / "hero.png").read_bytes() == b"image-bytes"

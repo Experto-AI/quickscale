@@ -509,7 +509,7 @@ class TestBackupLifecycle:
         assert artifact.checksum_sha256
         assert artifact.size_bytes > 0
         assert artifact.metadata_json["database_engine"] == "django.db.backends.sqlite3"
-        assert artifact.metadata_json["manifest_version"] == 1
+        assert artifact.metadata_json["manifest_version"] == 2
         assert artifact.metadata_json["project_migration_hashes"] == {}
         assert artifact.metadata_json["database_server_version"]
         assert artifact.database_server_major is None
@@ -549,9 +549,12 @@ class TestBackupLifecycle:
         env_manifest = json.loads(
             (snapshot_root / "env-var-manifest.json").read_text(encoding="utf-8")
         )
-        assert media_manifest["status"] == "missing_media_root"
+        assert media_manifest["status"] == "ready"
+        assert media_manifest["capture"]["status"] == "empty"
+        assert media_manifest["capture"]["reason"] == "missing_media_root"
+        assert snapshot.child_descriptors_json["media"]["status"] == "ready"
         assert release_metadata["app_version"] == "test-app"
-        assert release_metadata["manifest_version"] == 1
+        assert release_metadata["manifest_version"] == 2
         assert release_metadata["migration_hashes"]
         assert release_metadata["project_migration_hashes"] == {}
         assert release_metadata["project_slug"] == local_backup_settings.parent.name
@@ -609,6 +612,37 @@ class TestBackupLifecycle:
             storage_services,
             "list_s3_compatible_media_inventory",
             fake_inventory,
+        )
+
+        def fake_media_capture(
+            *,
+            inventory: list[dict[str, Any]],
+            snapshot_root: Path,
+            source_runtime: dict[str, Any],
+        ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+            del snapshot_root, source_runtime
+            return (
+                {
+                    "status": "captured",
+                    "relative_root": "media",
+                    "file_count": len(inventory),
+                    "total_bytes": 128,
+                },
+                inventory,
+            )
+
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine._media._resolve_media_runtime",
+            lambda *_args, **_kwargs: {
+                "backend": "s3",
+                "use_s3_compatible": True,
+                "storage": object(),
+                "bucket_name": "media-bucket",
+            },
+        )
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine._media._capture_media_objects",
+            fake_media_capture,
         )
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
@@ -2033,7 +2067,7 @@ class TestBackupLifecycle:
         assert report["authoritative_dump"]["artifact_id"] == artifact.pk
         assert (
             report["sidecar_summary"]["media-sync-manifest.json"]["manifest_status"]
-            == "missing_media_root"
+            == "ready"
         )
         assert report["rollback_pin"]["active"] is False
 
@@ -2772,7 +2806,7 @@ class TestBackupLifecycle:
         )
 
         assert result.executed is True
-        assert result.warnings == ()
+        assert [warning.code for warning in result.warnings] == ["media_not_captured"]
         restored_artifact = BackupArtifact.objects.get(
             filename=postgresql_backup_artifact.filename
         )
