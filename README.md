@@ -140,7 +140,28 @@ templates; add your own CSS in the project.
 
 ## Extending
 
-Create vertical-specific listings by subclassing `AbstractListing`:
+### What QuickScale owns
+
+The module package under `modules/listings/` — `AbstractListing`, the concrete `Listing`,
+views, URLs, admin, API, templates, and migrations — its manifest options, and the managed
+wiring `quickscale apply` writes (`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+A project-owned concrete model subclassing `AbstractListing`, its migrations, views, URLs,
+filters, and admin registration; all listing data; `quickscale.yml` values; and project
+templates and frontend code.
+
+### Update-safe customizations
+
+Change option values, override the module's templates under `templates/quickscale_listings/`,
+and call `create_published_listing_from_payload()` from project-owned code. The concrete model
+and its routes stay project-owned and are never rewritten by an update.
+
+### Structured extension points
+
+Create vertical-specific listings by subclassing `AbstractListing` in a project app and running
+its own migrations:
 
 ```python
 from django.db import models
@@ -161,10 +182,19 @@ class PropertyListing(AbstractListing):
         verbose_name_plural = "Property Listings"
 ```
 
-Then run `python manage.py makemigrations myapp && python manage.py migrate`, and point project
-views, URLs, filters, and admin registration at the concrete model. The
+Ship the FORCE RLS migration through orgs' `apply_force_rls`, classify every non-relational
+`*_id` field in `provider_id_classification`, and point project views, URLs, filters, and admin
+registration at the concrete model. The
 [module extension guide](../../docs/technical/module-extension.md) documents project-owned
 tenant models, their provider-ID classification, and the RLS boundary they inherit.
+
+### Upgrade expectations
+
+Tier 2 subclassing survives minor updates while the documented contract holds; a change to the
+abstract base is called out in the release note. Never edit `modules/listings/`: `quickscale
+update` refuses a local edit unless `--allow-local-changes`, and managed wiring is regenerated.
+
+### Development and support
 
 - **Development**: `make MODULE=listings test -- --modules` from the repository root; Ruff and
   MyPy run through the repository's shared configuration.
