@@ -299,8 +299,36 @@ Limitations:
 
 ## Extending
 
-- The module registers core's backup-persistence port from `ready()`, so the DR engine stores
-  and reads snapshots through this module; `quickscale_backups_dr_adapter_call` is the CLI
-  bridge for those adapter calls inside Docker.
-- The manifest options above are the supported policy surface; backups intentionally exposes no
-  plugin registry or per-artifact extension model.
+### What QuickScale owns
+
+The module package under `modules/backups/` — models, migrations, admin, management commands,
+and validation/restore entrypoints — its manifest options, its registration of core's
+backup-persistence port, and the managed wiring `quickscale apply` writes
+(`<package>/settings/modules.py`, `<package>/urls_modules.py`).
+
+### What the project owns
+
+`quickscale.yml` values for the options above, the backup destination and retention policy
+operators choose, the privileged `DATABASE_URL`/`QUICKSCALE_BACKUP_DATABASE_URL` deployment
+secret, the external scheduler, and every project-owned app's migrations and media.
+
+### Update-safe customizations
+
+Change option values, invoke the documented commands from cron or a platform scheduler, and let
+project-app migrations and media participate through their ordinary files; a capture records
+them automatically. Project-owned media paths and `MEDIA_ROOT` stay project configuration.
+
+### Structured extension points
+
+`quickscale_backups_dr_adapter_call` is the CLI bridge for core's DR engine, and the module
+registers that engine's persistence port from `ready()`. A project app joins backup identity by
+shipping ordinary migrations and placing its media under the project's media root; there is no
+per-artifact plugin registry or custom backup format to implement.
+
+### Upgrade expectations
+
+The artifact format is versioned: a version 2 artifact carries the captured media set, and a
+version 1 artifact still restores as a database-only recovery point with an explicit warning.
+Tier 1 settings, commands, and the persistence port survive normal module updates. Never edit
+`modules/backups/`: `quickscale update` refuses a local edit unless `--allow-local-changes`,
+and managed wiring is regenerated.
