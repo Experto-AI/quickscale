@@ -18,16 +18,6 @@ if TYPE_CHECKING:
         NotificationSettingsSnapshot,
     )
 
-_DEFAULT_ALLOWED_TAGS = (
-    "quickscale",
-    "transactional",
-    "notifications",
-    "auth",
-    "forms",
-    "ops",
-    "testing",
-)
-_DEFAULT_DEFAULT_TAGS = ("quickscale", "transactional")
 _ALLOWED_METADATA_KEYS = {"template", "project", "workflow"}
 
 

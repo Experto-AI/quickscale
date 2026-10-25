@@ -117,10 +117,36 @@ This module ships no management commands.
 
 ## Extending
 
-- Modules and projects send email through notifications' services instead of Django's email
-  helpers, so delivery tracking and provider configuration stay in one place.
-- A sender owns its templates: declare a `notification_templates` capability on the sending
-  module's `AppConfig` mapping its key (`quickscale_<module>.<purpose>`) to a
-  `NotificationTemplateDefinition` whose subject/text/HTML bodies live under
-  `templates/quickscale_<module>/email/`.  Notifications collects every installed sender's
-  declaration at render time and refuses an unknown key.
+### What QuickScale owns
+
+The module package under `modules/notifications/` — models, migrations, admin, services, the
+Resend adapter, webhook ingestion, and its generic email template — its manifest options, and
+the managed wiring `quickscale apply` writes (`<package>/settings/modules.py`,
+`<package>/urls_modules.py`).
+
+### What the project owns
+
+`quickscale.yml` values for the options above, deployment secrets and the Resend account, the
+project's own sender modules and their email templates under
+`templates/quickscale_<module>/email/`, and all application data.
+
+### Update-safe customizations
+
+Change option values, send through the module's services instead of Django's email helpers, and
+declare a `notification_templates` capability on a project-owned `AppConfig`; the project
+supplies the template bodies and notifications collects the declaration at render time. Project
+templates are never rewritten by an update.
+
+### Structured extension points
+
+`send_notification()`, `dispatch_notification_message()`, `render_notification()`, the settings
+snapshot accessors, the webhook signature/ingestion helpers, and the provider sanitizers are
+the documented service surface. A sending module owns its template key
+(`quickscale_<module>.<purpose>`) and a `NotificationTemplateDefinition`; notifications refuses
+an unknown key. The signed, replay-safe Resend webhook endpoint is the transport contract.
+
+### Upgrade expectations
+
+Tier 1 settings, services, capabilities, and the webhook contract survive normal module updates.
+Never edit `modules/notifications/`: `quickscale update` refuses a local edit unless
+`--allow-local-changes`, and managed wiring is regenerated.
