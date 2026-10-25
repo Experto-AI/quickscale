@@ -352,6 +352,7 @@ def _build_pg_restore_command(
         "--clean",
         "--if-exists",
         "--no-owner",
+        "--single-transaction",
     ]
     if parameters.host:
         command.extend(["--host", parameters.host])

@@ -22,6 +22,12 @@ audit evidence and now carry `status: fixed`:
 `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`, and
 `beta-migrate-existing-recipient-no-dirty-guard`.
 
+**Fix record (2026-10-25).** SA322 (a) closes four findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`:
+`backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
+`backups-restore-not-atomic`, and `backups-creation-lock-expires-live`. The remaining S4 backup
+findings ride with SA322 (b).
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -226,25 +232,25 @@ items:
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_checkout.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-restore-drops-own-artifact-row, status: open, severity: S3, category: IX,
+  - {id: backups-restore-drops-own-artifact-row, status: fixed, severity: S3, category: IX,
      title: "A successful restore removes the artifact row for the backup it restored and leaves the snapshot PENDING",
      effort: Medium, confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_capture.py,
                quickscale_modules/backups/src/quickscale_modules_backups/persistence.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-prune-no-keep-last, status: open, severity: S3, category: IX,
+  - {id: backups-prune-no-keep-last, status: fixed, severity: S3, category: IX,
      title: "Retention can delete the last remaining recovery point", effort: Trivial, confidence: High,
      reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_prune.py,
                quickscale_modules/backups/src/quickscale_modules_backups/persistence.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-restore-not-atomic, status: open, severity: S3, category: IV,
+  - {id: backups-restore-not-atomic, status: fixed, severity: S3, category: IV,
      title: "pg_restore --clean has no single-transaction or pre-restore safety dump", effort: Medium,
      confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/primitives.py,
                quickscale_core/src/quickscale_core/dr_engine/recovery.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: backups-creation-lock-expires-live, status: open, severity: S3, category: II,
+  - {id: backups-creation-lock-expires-live, status: fixed, severity: S3, category: II,
      title: "The backup-create lock is a 300 s mtime lease and expires under a live backup", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_lock.py],
@@ -1083,7 +1089,7 @@ reviewers.
   by default and schema changes at boot. The README's production claim is corrected; the structural
   form is arch `generated-deploy-topology-unmodeled`.
 - **Backups define a database dump, not a coherent recovery point** (arch F6): media is read live,
-  project migrations are excluded, and restore has no lease/atomicity. The tickets are the backup
+  project migrations are excluded, and restore has no lease. The tickets are the backup
   findings; the structural form is arch `backup-restore-incoherent`.
 - **No provider-object reconciliation seam for billing**: the signed webhook payload is the only
   source of truth, so ordering and missed-event recovery are ad hoc. The ticket is
@@ -1264,3 +1270,8 @@ release.
 - 2026-10-24 — `backups-run-under-runtime-role`: **resolved** (SA313: dump and restore resolve
   `QUICKSCALE_BACKUP_DATABASE_URL` or `DATABASE_URL` for the one command, refuse a `NOBYPASSRLS`
   role against FORCE-RLS tables, and a scratch PostgreSQL test dumps and restores every row).
+- 2026-10-25 — `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
+  `backups-restore-not-atomic`, `backups-creation-lock-expires-live`: **resolved** (SA322 (a):
+  restore recreates and relinks its artifact/snapshot rows and fails visibly on a metadata failure,
+  prune retains the newest complete snapshot and newest live artifact, `pg_restore` runs in one transaction, and the
+  create lock is held for the whole run).

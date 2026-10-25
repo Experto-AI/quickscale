@@ -16,12 +16,13 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 
 if TYPE_CHECKING:
     from quickscale_core.runtime import PersistedBackupPolicy
 
 from quickscale_core.runtime import (
+    BackupError,
     BackupRestoreBlocked,
     RestoreWarning,
 )
@@ -288,54 +289,148 @@ class _BackupArtifactPersistenceProvider:
         self,
         artifact: Any,
         restored_at: datetime,
+        *,
+        snapshot: Any = None,
     ) -> tuple[RestoreWarning, ...]:
-        """Mark one artifact as restored after a successful pg_restore.
+        """Re-record one restored artifact and relink its snapshot.
 
-        Preserves the same best-effort semantics as the original
-        ``_persist_restore_artifact_metadata``.
+        ``pg_restore`` replaces the database with a dump taken before the
+        artifact row existed, so the row is recreated through the restored
+        database's identity sequence and the snapshot row is relinked.
+        Metadata failures raise a visible ``BackupError``; they are never
+        downgraded to a warning on a successful restore.
         """
         from quickscale_modules_backups.models import BackupArtifact
 
         try:
-            updated_rows = BackupArtifact.objects.filter(pk=artifact.pk).update(
-                status=BackupArtifact.Status.RESTORED,
-                restored_at=restored_at,
-                updated_at=restored_at,
-            )
+            with transaction.atomic():
+                restored_artifact = self._recreate_restored_artifact(
+                    artifact, restored_at
+                )
+                self._relink_restored_snapshot(restored_artifact, snapshot)
         except DatabaseError as exc:
-            return (
-                RestoreWarning(
-                    code="artifact_metadata_not_persisted_after_restore",
-                    message=(
-                        "Restore executed, but backup artifact metadata could not be "
-                        "persisted after the restored database changed."
-                    ),
-                    details={
-                        "artifact_id": str(artifact.pk),
-                        "error_type": exc.__class__.__name__,
-                        "filename": artifact.filename,
-                    },
-                ),
-            )
-
-        if updated_rows == 0:
-            return (
-                RestoreWarning(
-                    code="artifact_row_missing_after_restore",
-                    message=(
-                        "Restore executed, but the original backup artifact row no "
-                        "longer exists in the restored database."
-                    ),
-                    details={
-                        "artifact_id": str(artifact.pk),
-                        "filename": artifact.filename,
-                    },
-                ),
-            )
+            raise BackupError(
+                "Restore executed, but the backup artifact and snapshot metadata "
+                "could not be persisted in the restored database: "
+                f"{exc}"
+            ) from exc
 
         artifact.status = BackupArtifact.Status.RESTORED
         artifact.restored_at = restored_at
         return ()
+
+    def _recreate_restored_artifact(
+        self,
+        artifact: Any,
+        restored_at: datetime,
+    ) -> Any:
+        """Re-record the restored artifact and return its row.
+
+        A missing row is inserted through the restored database's own identity
+        sequence, so the next ordinary backup insert cannot reuse the
+        artifact's former key after a dump.
+        """
+        from django.contrib.auth import get_user_model
+        from quickscale_modules_backups.models import BackupArtifact
+
+        initiated_by_id = getattr(artifact, "initiated_by_id", None)
+        if (
+            initiated_by_id is not None
+            and not get_user_model()
+            ._default_manager.filter(pk=initiated_by_id)
+            .exists()
+        ):
+            initiated_by_id = None
+
+        values = {
+            "filename": artifact.filename,
+            "storage_target": artifact.storage_target,
+            "local_path": artifact.local_path or "",
+            "remote_key": artifact.remote_key or "",
+            "remote_bucket_name": artifact.remote_bucket_name or "",
+            "remote_endpoint_url": artifact.remote_endpoint_url or "",
+            "remote_region_name": artifact.remote_region_name or "",
+            "checksum_sha256": artifact.checksum_sha256,
+            "size_bytes": artifact.size_bytes or 0,
+            "backup_format": artifact.backup_format,
+            "restore_scope": artifact.restore_scope,
+            "database_engine": artifact.database_engine,
+            "database_name": artifact.database_name or "",
+            "database_server_major": artifact.database_server_major,
+            "dump_client_major": artifact.dump_client_major,
+            "metadata_json": artifact.metadata_json or {},
+            "status": BackupArtifact.Status.RESTORED,
+            "trigger": artifact.trigger or "manual",
+            "initiated_by_id": initiated_by_id,
+            "validation_notes": artifact.validation_notes or "",
+            "validated_at": artifact.validated_at,
+            "restore_started_at": artifact.restore_started_at,
+            "restore_error": "",
+            "restored_at": restored_at,
+            "deleted_at": artifact.deleted_at,
+            "updated_at": restored_at,
+        }
+        existing = BackupArtifact.objects.filter(pk=artifact.pk).first()
+        if existing is not None:
+            for field_name, value in values.items():
+                setattr(existing, field_name, value)
+            existing.save(update_fields=list(values))
+            return existing
+
+        row = BackupArtifact.objects.create(**values)
+        created_at = getattr(artifact, "created_at", None)
+        if created_at is not None:
+            BackupArtifact.objects.filter(pk=row.pk).update(created_at=created_at)
+        return row
+
+    def _relink_restored_snapshot(
+        self,
+        restored_artifact: Any,
+        snapshot: Any,
+    ) -> None:
+        """Relink the snapshot row restored from the dump to its artifact."""
+        from quickscale_modules_backups.models import BackupSnapshot
+
+        snapshot_id = ""
+        if snapshot is not None:
+            snapshot_id = str(getattr(snapshot, "snapshot_id", "") or "").strip()
+        if not snapshot_id:
+            metadata = (
+                restored_artifact.metadata_json
+                if isinstance(restored_artifact.metadata_json, dict)
+                else {}
+            )
+            snapshot_id = str(metadata.get("snapshot_id") or "").strip()
+        if not snapshot_id:
+            return
+
+        row = BackupSnapshot.objects.filter(snapshot_id=snapshot_id).first()
+        if row is None:
+            raise BackupError(
+                "Restore executed, but the restored database does not contain "
+                f"the snapshot row '{snapshot_id}' for artifact {restored_artifact.pk}."
+            )
+
+        row.authoritative_dump = restored_artifact
+        update_fields = ["authoritative_dump", "updated_at"]
+        if snapshot is not None:
+            row.status = snapshot.status
+            row.child_descriptors_json = snapshot.child_descriptors_json
+            row.failure_note = snapshot.failure_note
+            row.remote_root_key = snapshot.remote_root_key
+            row.source_environment = snapshot.source_environment
+            row.local_root_path = snapshot.local_root_path
+            update_fields.extend(
+                [
+                    "status",
+                    "child_descriptors_json",
+                    "failure_note",
+                    "remote_root_key",
+                    "source_environment",
+                    "local_root_path",
+                ]
+            )
+        row.save(update_fields=update_fields)
 
     def iter_expired_unlinked_artifacts(
         self,
@@ -348,6 +443,17 @@ class _BackupArtifactPersistenceProvider:
             deleted_at__isnull=True,
             created_at__lt=cutoff,
             authoritative_snapshot__isnull=True,
+        )
+
+    def get_newest_live_artifact(self) -> Any | None:
+        """Return the newest artifact that still counts as a recovery point."""
+        from quickscale_modules_backups.models import BackupArtifact
+
+        return (
+            BackupArtifact.objects.filter(deleted_at__isnull=True)
+            .exclude(status=BackupArtifact.Status.DELETED)
+            .order_by("-created_at", "-pk")
+            .first()
         )
 
     # ------------------------------------------------------------------
@@ -408,6 +514,25 @@ class _BackupArtifactPersistenceProvider:
         yield from BackupSnapshot.objects.filter(
             created_at__lt=cutoff,
         ).exclude(status=BackupSnapshot.Status.DELETED)
+
+    def get_newest_live_snapshot(self) -> Any | None:
+        """Return the newest complete snapshot that counts as a recovery point."""
+        from quickscale_modules_backups.models import BackupArtifact, BackupSnapshot
+
+        return (
+            BackupSnapshot.objects.filter(
+                authoritative_dump__isnull=False,
+                authoritative_dump__deleted_at__isnull=True,
+                authoritative_dump__status__in=[
+                    BackupArtifact.Status.READY,
+                    BackupArtifact.Status.VALIDATED,
+                    BackupArtifact.Status.RESTORED,
+                ],
+                status=BackupSnapshot.Status.READY,
+            )
+            .order_by("-created_at", "-pk")
+            .first()
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,8 @@ __all__ = [
     "get_backup_artifact",
     "get_authoritative_snapshot_for_artifact",
     "get_backup_snapshot",
+    "get_newest_live_artifact",
+    "get_newest_live_snapshot",
     "has_any_policy",
     "iter_expired_snapshots",
     "iter_expired_unlinked_artifacts",
@@ -99,6 +101,7 @@ class PersistedBackupArtifact(ArtifactLike, Protocol):
 class PersistedBackupSnapshot(Protocol):
     """Protocol for a persisted snapshot known to the DR persistence layer."""
 
+    pk: int
     snapshot_id: str
     status: str
     source_environment: str
@@ -106,6 +109,7 @@ class PersistedBackupSnapshot(Protocol):
     remote_root_key: str
     child_descriptors_json: dict[str, Any] | str
     authoritative_dump: PersistedBackupArtifact | None
+    authoritative_dump_id: int | None
     failure_note: str
     created_at: datetime
     updated_at: datetime
@@ -175,12 +179,18 @@ class BackupArtifactPersistence(Protocol):
         self,
         artifact: PersistedBackupArtifact,
         restored_at: datetime,
+        *,
+        snapshot: PersistedBackupSnapshot | None = None,
     ) -> tuple[RestoreWarning, ...]: ...
 
     def iter_expired_unlinked_artifacts(
         self,
         cutoff: datetime,
     ) -> Iterator[PersistedBackupArtifact]: ...
+
+    def get_newest_live_artifact(self) -> PersistedBackupArtifact | None:
+        """Return the newest artifact that still counts as a recovery point."""
+        ...
 
     # --- Snapshot operations ---
 
@@ -208,6 +218,10 @@ class BackupArtifactPersistence(Protocol):
         self,
         cutoff: datetime,
     ) -> Iterator[PersistedBackupSnapshot]: ...
+
+    def get_newest_live_snapshot(self) -> PersistedBackupSnapshot | None:
+        """Return the newest complete snapshot that counts as a recovery point."""
+        ...
 
 
 class BackupPolicyPersistence(Protocol):
@@ -333,11 +347,14 @@ def save_artifact(
 def update_artifact_after_restore(
     artifact: PersistedBackupArtifact,
     restored_at: datetime,
+    *,
+    snapshot: PersistedBackupSnapshot | None = None,
 ) -> tuple[RestoreWarning, ...]:
     """Persist restore metadata after a successful restore execution."""
     return _get_artifact_persistence().update_artifact_after_restore(
         artifact,
         restored_at=restored_at,
+        snapshot=snapshot,
     )
 
 
@@ -346,6 +363,11 @@ def iter_expired_unlinked_artifacts(
 ) -> Iterator[PersistedBackupArtifact]:
     """Yield expired artifacts that have no linked authoritative snapshot."""
     return _get_artifact_persistence().iter_expired_unlinked_artifacts(cutoff)
+
+
+def get_newest_live_artifact() -> PersistedBackupArtifact | None:
+    """Return the newest artifact that still counts as a recovery point."""
+    return _get_artifact_persistence().get_newest_live_artifact()
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +419,11 @@ def iter_expired_snapshots(
 ) -> Iterator[PersistedBackupSnapshot]:
     """Yield expired snapshots that have not yet been deleted."""
     return _get_artifact_persistence().iter_expired_snapshots(cutoff)
+
+
+def get_newest_live_snapshot() -> PersistedBackupSnapshot | None:
+    """Return the newest complete snapshot that counts as a recovery point."""
+    return _get_artifact_persistence().get_newest_live_snapshot()
 
 
 # ---------------------------------------------------------------------------

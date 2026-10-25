@@ -79,6 +79,7 @@ def _artifact(**overrides: object) -> SimpleNamespace:
 
 def _snapshot(**overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
+        "pk": 1,
         "snapshot_id": "snap-001",
         "status": "pending",
         "source_environment": "local",
@@ -960,6 +961,14 @@ class TestPruneAndDelete:
                 return_value=iter([orphan]),
             ),
             patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_snapshot",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_artifact",
+                return_value=None,
+            ),
+            patch(
                 "quickscale_core.dr_engine._remote._delete_snapshot_storage",
                 side_effect=lambda *_args, **_kwargs: events.append("snapshot"),
             ),
@@ -1010,6 +1019,14 @@ class TestPruneAndDelete:
                 return_value=iter([orphan]),
             ),
             patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_snapshot",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_artifact",
+                return_value=None,
+            ),
+            patch(
                 "quickscale_core.dr_engine._remote._delete_snapshot_storage"
             ) as delete_storage,
             patch(
@@ -1055,6 +1072,14 @@ class TestPruneAndDelete:
                 "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
                 return_value=iter([]),
             ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_snapshot",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_artifact",
+                return_value=None,
+            ),
             patch("django.utils.timezone.now", return_value=_NOW),
         ):
             assert _prune.prune_expired_backups(now=_NOW, dry_run=True) == 0
@@ -1076,6 +1101,14 @@ class TestPruneAndDelete:
                 "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
                 return_value=iter([]),
             ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_snapshot",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_artifact",
+                return_value=None,
+            ),
             patch("django.utils.timezone.now", return_value=_NOW),
         ):
             assert (
@@ -1084,3 +1117,140 @@ class TestPruneAndDelete:
             )
 
         snapshots.assert_called_once_with(_NOW - timedelta(days=9))
+
+    def test_prune_keeps_the_newest_live_snapshot_and_its_dump(self) -> None:
+        newest = _snapshot(
+            pk=9,
+            snapshot_id="newest",
+            has_active_rollback_pin=lambda now=None: False,
+        )
+        newest_dump = _artifact(pk=90, deleted_at=None)
+        newest.authoritative_dump = newest_dump
+        newest.authoritative_dump_id = 90
+        expired = _snapshot(
+            pk=3,
+            snapshot_id="expired",
+            has_active_rollback_pin=lambda now=None: False,
+        )
+        expired.authoritative_dump = _artifact(pk=30, deleted_at=None)
+        with (
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_snapshots",
+                return_value=[expired, newest],
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_snapshot",
+                return_value=newest,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_artifact",
+                return_value=newest_dump,
+            ),
+            patch(
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_core.dr_engine._remote._delete_snapshot_storage"
+            ) as delete_storage,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_artifact"
+            ) as save_artifact,
+            patch("django.utils.timezone.now", return_value=_NOW),
+        ):
+            dry_run_count = _prune.prune_expired_backups(
+                policy=_policy(), now=_NOW, dry_run=True
+            )
+            count = _prune.prune_expired_backups(policy=_policy(), now=_NOW)
+
+        assert dry_run_count == 1
+        assert count == 1
+        assert expired.status == "deleted"
+        assert newest.status == "pending"
+        assert newest_dump.status == "pending"
+        assert expired.authoritative_dump.status == "deleted"
+        delete_storage.assert_called_once()
+        save_snapshot.assert_called_once()
+        save_artifact.assert_called_once()
+
+    def test_prune_keeps_an_older_complete_snapshot_when_a_newer_capture_failed(
+        self,
+    ) -> None:
+        complete = _snapshot(
+            pk=3,
+            snapshot_id="older-complete",
+            status="ready",
+            has_active_rollback_pin=lambda now=None: False,
+        )
+        complete_dump = _artifact(pk=30, deleted_at=None)
+        complete.authoritative_dump = complete_dump
+        complete.authoritative_dump_id = 30
+        failed = _snapshot(
+            pk=9,
+            snapshot_id="newer-failed",
+            status="failed",
+            has_active_rollback_pin=lambda now=None: False,
+        )
+        failed_dump = _artifact(pk=90, deleted_at=None)
+        failed.authoritative_dump = failed_dump
+        failed.authoritative_dump_id = 90
+        oldest = _snapshot(
+            pk=1,
+            snapshot_id="oldest-expired",
+            has_active_rollback_pin=lambda now=None: False,
+        )
+        oldest.authoritative_dump = _artifact(pk=10, deleted_at=None)
+        with (
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_snapshots",
+                return_value=[oldest, complete, failed],
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_snapshot",
+                return_value=complete,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.get_newest_live_artifact",
+                return_value=failed_dump,
+            ),
+            patch(
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+                return_value=failed,
+            ),
+            patch(
+                "quickscale_core.dr_engine._remote._delete_snapshot_storage"
+            ) as delete_storage,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_artifact"
+            ) as save_artifact,
+            patch("django.utils.timezone.now", return_value=_NOW),
+        ):
+            dry_run_count = _prune.prune_expired_backups(
+                policy=_policy(), now=_NOW, dry_run=True
+            )
+            count = _prune.prune_expired_backups(policy=_policy(), now=_NOW)
+
+        assert dry_run_count == 1
+        assert count == 1
+        assert oldest.status == "deleted"
+        assert complete.status == "ready"
+        assert failed.status == "failed"
+        assert complete_dump.status == "pending"
+        assert failed_dump.status == "pending"
+        delete_storage.assert_called_once()
+        save_snapshot.assert_called_once()
+        save_artifact.assert_called_once()

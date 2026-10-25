@@ -60,6 +60,46 @@ def delete_artifact_files(
         )
 
 
+def _get_retained_recovery_point_ids() -> tuple[set[int], set[int]]:
+    """Return the recovery points that prune must keep.
+
+    Retention may shrink a catalog, but it must never erase its last complete
+    recovery point or its newest live artifact: the newest ready snapshot and
+    the newest live artifact survive every prune, along with their files and
+    each other's rows.  A newer failed capture therefore cannot displace an
+    older complete snapshot.
+    """
+    retained_snapshot_ids: set[int] = set()
+    retained_artifact_ids: set[int] = set()
+
+    newest_snapshot = _persistence.get_newest_live_snapshot()
+    if newest_snapshot is not None:
+        retained_snapshot_ids.add(newest_snapshot.pk)
+        if newest_snapshot.authoritative_dump_id is not None:
+            retained_artifact_ids.add(newest_snapshot.authoritative_dump_id)
+
+    newest_artifact = _persistence.get_newest_live_artifact()
+    if newest_artifact is not None:
+        retained_artifact_ids.add(newest_artifact.pk)
+        linked_snapshot = _state._get_authoritative_snapshot_for_artifact(
+            newest_artifact
+        )
+        if linked_snapshot is not None:
+            retained_snapshot_ids.add(linked_snapshot.pk)
+
+    return retained_snapshot_ids, retained_artifact_ids
+
+
+def _is_retained_snapshot(snapshot: Any, retained_snapshot_ids: set[int]) -> bool:
+    """Return whether one snapshot is the retained recovery point."""
+    return snapshot.pk in retained_snapshot_ids
+
+
+def _is_retained_artifact(artifact: Any, retained_artifact_ids: set[int]) -> bool:
+    """Return whether one artifact is the retained recovery point."""
+    return artifact.pk in retained_artifact_ids
+
+
 def prune_expired_backups(
     *,
     policy: BackupPolicySnapshot | None = None,
@@ -70,22 +110,27 @@ def prune_expired_backups(
     """Delete expired backup files and mark their metadata records as deleted.
 
     With ``dry_run=True``, report how many records would be deleted and write
-    nothing.
+    nothing.  The newest complete snapshot and the newest live artifact are
+    never deleted, so retention cannot erase the last recovery point.
     """
     resolved_policy = policy or _policy._load_active_policy_snapshot(
         ensure_default=not dry_run
     )
     prune_started_at = now or datetime.now(timezone.utc)
     cutoff = prune_started_at - timedelta(days=resolved_policy.retention_days)
+    retained_snapshot_ids, retained_artifact_ids = _get_retained_recovery_point_ids()
 
     if dry_run:
         expired_snapshot_count = sum(
             1
             for snapshot in _persistence.iter_expired_snapshots(cutoff)
             if not snapshot.has_active_rollback_pin(now=prune_started_at)
+            and not _is_retained_snapshot(snapshot, retained_snapshot_ids)
         )
         expired_orphan_count = sum(
-            1 for _ in _persistence.iter_expired_unlinked_artifacts(cutoff)
+            1
+            for artifact in _persistence.iter_expired_unlinked_artifacts(cutoff)
+            if not _is_retained_artifact(artifact, retained_artifact_ids)
         )
         return expired_snapshot_count + expired_orphan_count
 
@@ -95,6 +140,8 @@ def prune_expired_backups(
     expired_snapshots = _persistence.iter_expired_snapshots(cutoff)
     for snapshot in expired_snapshots:
         if snapshot.has_active_rollback_pin(now=prune_started_at):
+            continue
+        if _is_retained_snapshot(snapshot, retained_snapshot_ids):
             continue
 
         _remote._delete_snapshot_storage(
@@ -113,7 +160,11 @@ def prune_expired_backups(
         )
 
         artifact = snapshot.authoritative_dump
-        if artifact is not None and artifact.deleted_at is None:
+        if (
+            artifact is not None
+            and artifact.deleted_at is None
+            and not _is_retained_artifact(artifact, retained_artifact_ids)
+        ):
             artifact.status = "deleted"
             artifact.deleted_at = deleted_at
             _persistence.save_artifact(
@@ -125,6 +176,8 @@ def prune_expired_backups(
     expired = _persistence.iter_expired_unlinked_artifacts(cutoff)
 
     for artifact in expired:
+        if _is_retained_artifact(artifact, retained_artifact_ids):
+            continue
         delete_artifact_files(
             artifact,
             policy=resolved_policy,

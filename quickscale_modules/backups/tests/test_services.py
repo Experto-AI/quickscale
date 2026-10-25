@@ -245,6 +245,37 @@ def _attach_complete_snapshot_contract(
     )
 
 
+def _create_current_recovery_point(
+    initiated_by: AbstractBaseUser,
+    tmp_path: Path,
+    *,
+    snapshot_id: str = "snap-current-recovery",
+) -> tuple[BackupArtifact, BackupSnapshot]:
+    """Create a newer valid snapshot and artifact that retention must keep."""
+    local_path = tmp_path / "current-backup.dump"
+    local_path.write_bytes(b"current recovery point")
+    artifact = BackupArtifact.objects.create(
+        filename=local_path.name,
+        local_path=str(local_path),
+        checksum_sha256=hashlib.sha256(local_path.read_bytes()).hexdigest(),
+        size_bytes=local_path.stat().st_size,
+        backup_format="pg_dump_custom",
+        database_engine="django.db.backends.postgresql",
+        database_name="quickscale_test",
+        metadata_json={},
+        initiated_by=initiated_by,
+    )
+    snapshot = BackupSnapshot.objects.create(
+        snapshot_id=snapshot_id,
+        authoritative_dump=artifact,
+        status=BackupSnapshot.Status.READY,
+        source_environment="local",
+        local_root_path=str(tmp_path / snapshot_id),
+        child_descriptors_json={},
+    )
+    return artifact, snapshot
+
+
 @pytest.mark.django_db
 class TestPolicyValidation:
     """Tests for policy snapshot validation."""
@@ -1606,6 +1637,7 @@ class TestBackupLifecycle:
         BackupArtifact.objects.filter(pk=artifact.pk).update(
             created_at=datetime.now(timezone.utc) - timedelta(days=30)
         )
+        _create_current_recovery_point(superuser, tmp_path)
 
         deleted_count = prune_expired_backups(
             policy=build_policy_snapshot_from_settings(),
@@ -1616,6 +1648,168 @@ class TestBackupLifecycle:
         artifact.refresh_from_db()
         assert artifact.status == BackupArtifact.Status.DELETED
         assert not local_path.exists()
+
+    def test_prune_expired_backups_keeps_the_only_recovery_point(
+        self,
+        superuser: AbstractBaseUser,
+        tmp_path: Path,
+    ) -> None:
+        """Retention never deletes the newest live artifact or snapshot."""
+        local_path = tmp_path / "only-backup.json"
+        local_path.write_text("[]", encoding="utf-8")
+        checksum = hashlib.sha256(local_path.read_bytes()).hexdigest()
+        artifact = BackupArtifact.objects.create(
+            filename=local_path.name,
+            local_path=str(local_path),
+            checksum_sha256=checksum,
+            size_bytes=local_path.stat().st_size,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+            metadata_json={},
+            initiated_by=superuser,
+        )
+        BackupArtifact.objects.filter(pk=artifact.pk).update(
+            created_at=datetime.now(timezone.utc) - timedelta(days=30)
+        )
+
+        deleted_count = prune_expired_backups(
+            policy=build_policy_snapshot_from_settings(),
+            now=datetime.now(timezone.utc),
+        )
+
+        artifact.refresh_from_db()
+        assert deleted_count == 0
+        assert artifact.status == BackupArtifact.Status.READY
+        assert local_path.exists()
+
+    def test_prune_keeps_the_newest_complete_snapshot_when_a_newer_capture_failed(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+    ) -> None:
+        """A newer failed capture cannot displace the last complete snapshot."""
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+        base = datetime.now(timezone.utc)
+        artifacts = [
+            create_backup(
+                initiated_by=superuser,
+                trigger="manual",
+                now=base - timedelta(days=days, hours=days),
+            )
+            for days in (40, 35, 30)
+        ]
+        oldest, complete, failed = artifacts
+        oldest_snapshot = _get_authoritative_snapshot(oldest)
+        complete_snapshot = _get_authoritative_snapshot(complete)
+        failed_snapshot = _get_authoritative_snapshot(failed)
+        for artifact, snapshot, days in (
+            (oldest, oldest_snapshot, 40),
+            (complete, complete_snapshot, 35),
+            (failed, failed_snapshot, 30),
+        ):
+            BackupArtifact.objects.filter(pk=artifact.pk).update(
+                created_at=base - timedelta(days=days)
+            )
+            BackupSnapshot.objects.filter(pk=snapshot.pk).update(
+                created_at=base - timedelta(days=days)
+            )
+        BackupSnapshot.objects.filter(pk=failed_snapshot.pk).update(
+            status=BackupSnapshot.Status.FAILED
+        )
+
+        dry_run_count = prune_expired_backups(
+            policy=build_policy_snapshot_from_settings(),
+            now=base,
+            dry_run=True,
+        )
+        deleted_count = prune_expired_backups(
+            policy=build_policy_snapshot_from_settings(),
+            now=base,
+        )
+
+        oldest.refresh_from_db()
+        complete.refresh_from_db()
+        failed.refresh_from_db()
+        complete_snapshot.refresh_from_db()
+        failed_snapshot.refresh_from_db()
+        assert dry_run_count == 1
+        assert deleted_count == 1
+        assert oldest.status == BackupArtifact.Status.DELETED
+        assert complete.status == BackupArtifact.Status.READY
+        assert failed.status != BackupArtifact.Status.DELETED
+        assert complete_snapshot.status == BackupSnapshot.Status.READY
+        assert failed_snapshot.status == BackupSnapshot.Status.FAILED
+        assert not Path(oldest_snapshot.local_root_path).exists()
+        assert Path(complete_snapshot.local_root_path).exists()
+        assert Path(failed_snapshot.local_root_path).exists()
+        assert Path(complete.local_path).exists()
+        assert Path(failed.local_path).exists()
+
+    def test_prune_keeps_the_last_complete_snapshot_when_a_newer_dump_fails_validation(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+    ) -> None:
+        """A dump that fails integrity validation cannot displace a valid one."""
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+        base = datetime.now(timezone.utc)
+        complete_artifact = create_backup(
+            initiated_by=superuser,
+            trigger="manual",
+            now=base - timedelta(days=40),
+        )
+        invalid_artifact = create_backup(
+            initiated_by=superuser,
+            trigger="manual",
+            now=base - timedelta(days=35),
+        )
+        complete_snapshot = _get_authoritative_snapshot(complete_artifact)
+        invalid_snapshot = _get_authoritative_snapshot(invalid_artifact)
+        for artifact, snapshot, days in (
+            (complete_artifact, complete_snapshot, 40),
+            (invalid_artifact, invalid_snapshot, 35),
+        ):
+            BackupArtifact.objects.filter(pk=artifact.pk).update(
+                created_at=base - timedelta(days=days)
+            )
+            BackupSnapshot.objects.filter(pk=snapshot.pk).update(
+                created_at=base - timedelta(days=days)
+            )
+        invalid_path = Path(invalid_artifact.local_path)
+        invalid_path.write_bytes(invalid_path.read_bytes() + b"corrupt")
+
+        issues = validate_backup_artifact(invalid_artifact)
+
+        assert "checksum mismatch detected" in issues
+        invalid_artifact.refresh_from_db()
+        assert invalid_artifact.status == BackupArtifact.Status.FAILED
+
+        dry_run_count = prune_expired_backups(
+            policy=build_policy_snapshot_from_settings(),
+            now=base,
+            dry_run=True,
+        )
+        deleted_count = prune_expired_backups(
+            policy=build_policy_snapshot_from_settings(),
+            now=base,
+        )
+
+        complete_artifact.refresh_from_db()
+        invalid_artifact.refresh_from_db()
+        complete_snapshot.refresh_from_db()
+        invalid_snapshot.refresh_from_db()
+        assert dry_run_count == 0
+        assert deleted_count == 0
+        assert complete_artifact.status == BackupArtifact.Status.READY
+        assert complete_snapshot.status == BackupSnapshot.Status.READY
+        assert invalid_snapshot.status == BackupSnapshot.Status.READY
+        assert Path(complete_snapshot.local_root_path).exists()
+        assert Path(invalid_snapshot.local_root_path).exists()
 
     def test_prune_expired_backups_uses_artifact_location_and_current_credentials(
         self,
@@ -1660,6 +1854,7 @@ class TestBackupLifecycle:
         BackupSnapshot.objects.filter(pk=snapshot.pk).update(
             created_at=datetime.now(timezone.utc) - timedelta(days=30)
         )
+        _create_current_recovery_point(superuser, local_backup_settings)
 
         monkeypatch.setenv("CURRENT_BACKUPS_ACCESS_KEY", "current-key")
         monkeypatch.setenv("CURRENT_BACKUPS_SECRET_KEY", "current-secret")
@@ -1757,6 +1952,7 @@ class TestBackupLifecycle:
             rollback_pin_expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
             rollback_pin_reason="production rollback window",
         )
+        _create_current_recovery_point(superuser, local_backup_settings)
 
         deleted_count = prune_expired_backups(
             policy=build_policy_snapshot_from_settings(),
@@ -2509,117 +2705,120 @@ class TestBackupLifecycle:
 
         assert expected_fragment in str(exc_info.value)
 
-    def test_restore_execution_warns_when_metadata_persistence_raises_database_error(
+    def test_restore_execution_recreates_artifact_row_and_relinks_snapshot(
         self,
         postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """A restore re-records the artifact row and relinks its snapshot."""
         _set_postgresql_default_connection(monkeypatch)
         _mock_postgresql_18_contract(monkeypatch)
         monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
-        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
-
-        def fake_runner(
-            command: list[str], *, env: dict[str, str] | None = None
-        ) -> None:
-            runner_calls.append((command, env))
-
-        class ExplodingUpdateQuerySet:
-            def update(self, **kwargs: Any) -> int:
-                del kwargs
-                raise DatabaseError("restored database no longer matches row state")
-
-        with patch.object(
-            BackupArtifact._default_manager,
-            "filter",
-            return_value=ExplodingUpdateQuerySet(),
-        ):
-            result = restore_backup_artifact(
-                postgresql_backup_artifact,
-                confirmation=postgresql_backup_artifact.filename,
-                dry_run=False,
-                shell_runner=cast(ShellCommandRunner, fake_runner),
-            )
-
-        postgresql_backup_artifact.refresh_from_db()
-        assert result.executed is True
-        assert result.dry_run is False
-        assert (
-            result.message
-            == f"Restore executed for {postgresql_backup_artifact.filename}."
+        snapshot = _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-restore-metadata",
         )
-        assert runner_calls
-        assert len(result.warnings) == 1
-        warning = result.warnings[0]
-        assert warning.code == "artifact_metadata_not_persisted_after_restore"
-        assert (
-            warning.message
-            == "Restore executed, but backup artifact metadata could not be persisted after the restored database changed."
-        )
-        assert warning.details == {
-            "artifact_id": str(postgresql_backup_artifact.pk),
-            "error_type": "DatabaseError",
-            "filename": postgresql_backup_artifact.filename,
-        }
-        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
-        assert postgresql_backup_artifact.restored_at is None
-
-    def test_restore_execution_warns_when_artifact_row_is_missing_after_restore(
-        self,
-        postgresql_backup_artifact: BackupArtifact,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        _set_postgresql_default_connection(monkeypatch)
-        _mock_postgresql_18_contract(monkeypatch)
-        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
-        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
         artifact_id = postgresql_backup_artifact.pk
-        assert artifact_id is not None
+        snapshot_id = snapshot.snapshot_id
+        snapshot_descriptors = snapshot.child_descriptors_json
+
+        def restoring_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            del command, env
+            # pg_restore replaces the database with a dump taken before the
+            # artifact row existed.
+            BackupArtifact.objects.filter(pk=artifact_id).delete()
+
+        result = restore_backup_artifact(
+            postgresql_backup_artifact,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=False,
+            shell_runner=cast(ShellCommandRunner, restoring_runner),
+        )
+
+        assert result.executed is True
+        assert result.warnings == ()
+        restored_artifact = BackupArtifact.objects.get(
+            filename=postgresql_backup_artifact.filename
+        )
+        assert restored_artifact.pk != artifact_id
+        assert restored_artifact.status == BackupArtifact.Status.RESTORED
+        assert restored_artifact.restored_at is not None
+        restored_snapshot = BackupSnapshot.objects.get(snapshot_id=snapshot_id)
+        assert restored_snapshot.authoritative_dump_id == restored_artifact.pk
+        assert restored_snapshot.status == BackupSnapshot.Status.READY
+        assert restored_snapshot.child_descriptors_json == snapshot_descriptors
+
+    def test_restore_execution_fails_visibly_when_metadata_persistence_fails(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A metadata failure after pg_restore raises instead of warning."""
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        runner_calls: list[list[str]] = []
 
         def fake_runner(
             command: list[str], *, env: dict[str, str] | None = None
         ) -> None:
-            runner_calls.append((command, env))
+            del env
+            runner_calls.append(command)
 
-        class MissingRowUpdateQuerySet:
-            def update(self, **kwargs: Any) -> int:
-                del kwargs
-                return 0
-
-        with patch.object(
-            BackupArtifact._default_manager,
-            "filter",
-            return_value=MissingRowUpdateQuerySet(),
+        with patch(
+            "quickscale_modules_backups.persistence._BackupArtifactPersistenceProvider._recreate_restored_artifact",
+            side_effect=DatabaseError("restored database no longer matches row state"),
         ):
-            result = restore_backup_artifact(
+            with pytest.raises(
+                BackupError,
+                match="Restore executed, but the backup artifact and snapshot metadata",
+            ):
+                restore_backup_artifact(
+                    postgresql_backup_artifact,
+                    confirmation=postgresql_backup_artifact.filename,
+                    dry_run=False,
+                    shell_runner=cast(ShellCommandRunner, fake_runner),
+                )
+
+        assert runner_calls
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
+        assert postgresql_backup_artifact.restored_at is None
+
+    def test_restore_execution_fails_visibly_when_snapshot_row_is_missing(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A restore whose snapshot row is absent from the dump fails visibly."""
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        postgresql_backup_artifact.metadata_json = {
+            **postgresql_backup_artifact.metadata_json,
+            "snapshot_id": "snap-missing-after-restore",
+        }
+        postgresql_backup_artifact.save(update_fields=["metadata_json", "updated_at"])
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            del command, env
+
+        with pytest.raises(
+            BackupError,
+            match="does not contain the snapshot row 'snap-missing-after-restore'",
+        ):
+            restore_backup_artifact(
                 postgresql_backup_artifact,
                 confirmation=postgresql_backup_artifact.filename,
                 dry_run=False,
                 shell_runner=cast(ShellCommandRunner, fake_runner),
             )
-
-        postgresql_backup_artifact.refresh_from_db()
-
-        assert result.executed is True
-        assert result.dry_run is False
-        assert (
-            result.message
-            == f"Restore executed for {postgresql_backup_artifact.filename}."
-        )
-        assert runner_calls
-        assert len(result.warnings) == 1
-        warning = result.warnings[0]
-        assert warning.code == "artifact_row_missing_after_restore"
-        assert (
-            warning.message
-            == "Restore executed, but the original backup artifact row no longer exists in the restored database."
-        )
-        assert warning.details == {
-            "artifact_id": str(artifact_id),
-            "filename": postgresql_backup_artifact.filename,
-        }
-        assert postgresql_backup_artifact.status == BackupArtifact.Status.READY
-        assert postgresql_backup_artifact.restored_at is None
 
     def test_restore_dry_run_materializes_private_remote_artifact_when_local_file_is_missing(
         self,
@@ -2997,6 +3196,7 @@ class TestBackupLifecycle:
                     "--clean",
                     "--if-exists",
                     "--no-owner",
+                    "--single-transaction",
                     "--host",
                     "localhost",
                     "--port",
@@ -3328,6 +3528,7 @@ class TestBackupServiceHelpers:
             "--clean",
             "--if-exists",
             "--no-owner",
+            "--single-transaction",
             "--host",
             "db.internal",
             "--port",

@@ -162,6 +162,7 @@ class TestPgDumpCommandBuilding:
         command, env = _build_pg_restore_command(local_path, connection_settings)
         assert "pg_restore" in command
         assert "--clean" in command
+        assert "--single-transaction" in command
         assert "mydb" in command
         assert env == {"PGPASSWORD": "secret"}
 

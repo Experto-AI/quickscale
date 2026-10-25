@@ -190,6 +190,8 @@ class TestFacadePatchTargets:
             patch.object(
                 persistence, "iter_expired_unlinked_artifacts", return_value=[]
             ) as artifacts,
+            patch.object(persistence, "get_newest_live_snapshot", return_value=None),
+            patch.object(persistence, "get_newest_live_artifact", return_value=None),
         ):
             deleted = _prune.prune_expired_backups(dry_run=True, now=_NOW)
 

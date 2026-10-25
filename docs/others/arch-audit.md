@@ -387,19 +387,19 @@ items:
 - **Context dependence:** `wrong-for-now` (dimensions: project-owned schema, media volume, disaster
   recovery obligation). Lives in reality (B).
 - **Problem:** A backup freezes only PostgreSQL; media is inventoried but read live at restore,
-  project-app migrations are excluded from identity, and restore has no lease or rollback, so
-  recovery is not a coherent point in time.
+  project-app migrations are excluded from identity, and restore has no lease and no pre-restore
+  recovery point, so recovery is not a coherent point in time.
 - **Evidence:**
   - Capture: `_capture.py:142` captures sidecars *after* the dump; `_sidecar.py:158-170` records a
     media inventory (paths, sizes, checksums) but copies no media bytes. Restore reads live source
     media at execute time (`_media.py:226`) and the DB restore receives no target settings
     (`_dr_adapter.py:157`), so the DB uses the local `connections["default"]` (`_restore.py:139`)
     while media/env use route variables.
-  - Restore safety: `primitives.py:350-356` runs `pg_restore --clean --if-exists` with no
-    `--single-transaction`; there is no restore lock, maintenance mode, or pre-restore dump. The
-    backup lock is a 300 s mtime heuristic (`_lock.py:154-157`); the `flock` is released at
-    acquisition, so a long backup can be declared stale by a second process. The admin `RESTORING`
-    CAS is only on the admin dispatch path; CLI/management-command restores bypass it.
+  - Restore safety: `pg_restore --clean --if-exists` runs `--single-transaction` since SA322 (a);
+    there is still no restore lock, maintenance mode, or pre-restore dump. The backup create lock is
+    held by its acquisition descriptor for the run since SA322 (a), so a live backup is no longer
+    declared stale (`_lock.py`); restore itself has no lease. The admin `RESTORING` CAS is only on
+    the admin dispatch path; CLI/management-command restores bypass it.
   - Identity/version: `_metadata.py:68` hashes only apps whose name starts with
     `quickscale_modules_`; project apps are excluded. `manifest_version: 1` is written in five
     places but never read. `app_version`, `django_version`, and `module_versions` are recorded but
@@ -411,9 +411,11 @@ items:
 - **Counter-evidence:** the database is the system of record; the docs explicitly separate database
   restore, media sync, and env sync (`railway-operations.md:92-95`); module migration identity is
   enforced and fails closed; restore is gated by exact filename confirmation and an environment
-  flag; remote streaming is bounded. Searched for a restore lease, a single-transaction restore, a
-  project-app migration hash, a reader of `manifest_version`, and media capture — found none. The
-  media sync command is a separate surface, not a consistency mechanism.
+  flag; remote streaming is bounded. A single-transaction restore and a descriptor-held create
+  lock are present since SA322 (a); neither supplies a restore lease, media capture, or project-app
+  migration identity. Searched for a restore lease, a project-app migration hash, a reader of
+  `manifest_version`, and media capture — found none. The media sync command is a separate surface,
+  not a consistency mechanism.
 - **Why it compounds:** growth variable = **data stores × projects**. Every new module table,
   project-owned app, and media-bearing feature adds a surface the snapshot does not freeze or
   validate. Project-owned migrations are already on the roadmap (SA153), so the restore check will

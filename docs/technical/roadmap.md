@@ -86,7 +86,7 @@ project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
-| 3 | SA322 (a) | yes | no: SA191d (production) for SA277 | yes: SA319 (b) |
+| 3 | SA322 (b) | yes | no: SA191d (production) for SA277 | yes: SA322 (a) |
 
 **Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
 Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
@@ -311,7 +311,7 @@ update; the cutover does not wait for them.
   changes are version bumps.
 
   **Slices:**
-  - [ ] (a) Restore safety: the artifact row survives a restore and a metadata failure is
+  - [x] (a) Restore safety: the artifact row survives a restore and a metadata failure is
     visible; prune always keeps the newest valid snapshot; restore runs in one transaction or
     behind a pre-restore safety dump; the create lock stays held for the run, proven by a
     long-backup test (Tier 2-full).

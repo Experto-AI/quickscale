@@ -6,7 +6,7 @@ import json
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -104,6 +104,7 @@ class TestAcquireBackupLock:
         assert data["pid"] == os.getpid()
         assert "created_at" in data
         assert len(data["owner_token"]) == 32
+        _release_backup_lock(lock_path)
 
     def test_with_explicit_now(self, tmp_path: Path) -> None:
         """Passing an explicit 'now' uses that timestamp in the payload."""
@@ -111,6 +112,7 @@ class TestAcquireBackupLock:
         lock_path = _acquire_backup_lock(tmp_path, now=fixed_now)
         data = json.loads(lock_path.read_text())
         assert data["created_at"] == "2026-06-15T12:00:00+00:00"
+        _release_backup_lock(lock_path)
 
     def test_clears_stale_lock_and_retries(self, tmp_path: Path) -> None:
         """When a stale lock exists, it is cleared and a new one is created."""
@@ -126,6 +128,7 @@ class TestAcquireBackupLock:
         # The stale lock should have been replaced with fresh JSON metadata
         data = json.loads(lock_path.read_text())
         assert data["pid"] == os.getpid()
+        _release_backup_lock(result)
 
     def test_raises_when_stale_lock_cannot_be_cleared(self, tmp_path: Path) -> None:
         """A non-stale lock raises BackupLockError."""
@@ -138,9 +141,10 @@ class TestAcquireBackupLock:
     def test_mkdir_creates_parents(self, tmp_path: Path) -> None:
         """mkdir parents=True creates the directory tree if missing."""
         nested = tmp_path / "a" / "b" / "c"
-        _acquire_backup_lock(nested)
+        lock_path = _acquire_backup_lock(nested)
         assert nested.is_dir()
-        assert (nested / ".quickscale-backup-create.lock").exists()
+        assert lock_path.exists()
+        _release_backup_lock(lock_path)
 
     def test_oserror_on_open_raises_backup_error(self, tmp_path: Path) -> None:
         """An unexpected OSError from os.open raises BackupError."""
@@ -277,7 +281,7 @@ class TestReleaseBackupLock:
         assert lock_path.read_text() == "replacement"
         assert all(
             identity != acquired_identity
-            for identity, _token in lock_module._backup_lock_ownership.values()
+            for identity, _token, _descriptor in lock_module._backup_lock_ownership.values()
         )
         lock_path.unlink()
 
@@ -352,86 +356,63 @@ class TestReleaseBackupLock:
         assert not lock_path.exists()
 
 
-class TestBackupLockReplacementRace:
-    def test_stale_clear_race_has_one_holder_and_one_contention(
-        self, tmp_path: Path
-    ) -> None:
-        """A stale candidate is serialized before its replacement is created."""
+class TestLiveLockProtection:
+    def test_live_holder_is_not_reclaimed_as_stale(self, tmp_path: Path) -> None:
+        """A held lock is never removed, even when its mtime is past the lease."""
         lock_path = tmp_path / ".quickscale-backup-create.lock"
-        lock_path.write_text("seeded stale")
+        lock_path.write_text("seeded live", encoding="utf-8")
         old_stamp = time.time() - 600
         os.utime(lock_path, (old_stamp, old_stamp))
-        seeded_identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
-        seeded_descriptor = os.open(lock_path, os.O_RDONLY)
-        flock_barrier = threading.Barrier(2)
-        acquired = threading.Event()
-        contended = threading.Event()
-        release_holder = threading.Event()
-        real_flock = lock_module.fcntl.flock
-        flock_calls = 0
-        flock_calls_guard = threading.Lock()
-        replacement_guard = tmp_path / "replacement-inode-guard"
-        original_open = lock_module.os.open
-
-        def create_without_inode_reuse(file, flags, mode=0o777, *, dir_fd=None):
-            if Path(file) == lock_path and flags & os.O_EXCL and not lock_path.exists():
-                replacement_guard.write_text("inode guard")
-            if dir_fd is None:
-                return original_open(file, flags, mode)
-            return original_open(file, flags, mode, dir_fd=dir_fd)
-
-        def coordinated_flock(descriptor: int, operation: int) -> None:
-            nonlocal flock_calls
-            with flock_calls_guard:
-                should_rendezvous = flock_calls < 2
-                flock_calls += 1
-            if should_rendezvous:
-                flock_barrier.wait(timeout=5)
-            real_flock(descriptor, operation)
-
-        results: list[str] = []
-
-        def worker(label: str) -> None:
-            try:
-                result = _acquire_backup_lock(tmp_path)
-                results.append(f"{label}: holder")
-                acquired.set()
-                if not release_holder.wait(timeout=5):
-                    raise AssertionError("holder release was not signaled")
-                _release_backup_lock(result)
-            except BackupLockError:
-                results.append(f"{label}: contention")
-                contended.set()
+        descriptor = os.open(lock_path, os.O_RDWR)
+        lock_module.fcntl.flock(descriptor, lock_module.fcntl.LOCK_EX)
 
         try:
-            with (
-                patch.object(lock_module.fcntl, "flock", coordinated_flock),
-                patch.object(lock_module.os, "open", create_without_inode_reuse),
-            ):
-                threads = [
-                    threading.Thread(target=worker, args=(f"worker-{number}",))
-                    for number in (1, 2)
-                ]
-                for thread in threads:
-                    thread.start()
-                assert acquired.wait(timeout=5)
-                assert contended.wait(timeout=5)
-                assert lock_path.exists()
-                current_identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
-                assert current_identity != seeded_identity
-                release_holder.set()
-                for thread in threads:
-                    thread.join(timeout=5)
+            with pytest.raises(BackupLockError, match="already in progress"):
+                _acquire_backup_lock(
+                    tmp_path,
+                    now=datetime.now(timezone.utc) + timedelta(seconds=900),
+                )
+            assert lock_path.exists()
+            assert lock_path.read_text(encoding="utf-8") == "seeded live"
         finally:
-            release_holder.set()
-            os.close(seeded_descriptor)
-            replacement_guard.unlink(missing_ok=True)
-        assert (
-            sorted(results).count("worker-1: holder")
-            + sorted(results).count("worker-2: holder")
-            == 1
+            os.close(descriptor)
+
+    def test_stale_lock_is_reclaimed_after_its_holder_exits(
+        self, tmp_path: Path
+    ) -> None:
+        """A crashed holder's old lock is reclaimed once flock is free."""
+        lock_path = tmp_path / ".quickscale-backup-create.lock"
+        lock_path.write_text("crashed holder", encoding="utf-8")
+        old_stamp = time.time() - 600
+        os.utime(lock_path, (old_stamp, old_stamp))
+
+        acquired = _acquire_backup_lock(
+            tmp_path, now=datetime.now(timezone.utc) + timedelta(seconds=900)
         )
-        assert len([result for result in results if result.endswith("contention")]) == 1
+
+        assert acquired == lock_path
+        assert json.loads(lock_path.read_text())["pid"] == os.getpid()
+        _release_backup_lock(acquired)
+
+    def test_live_backup_longer_than_the_lease_keeps_its_lock(
+        self, tmp_path: Path
+    ) -> None:
+        """A backup running past the 300 s lease still owns the lock."""
+        started = datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc)
+
+        with _backup_creation_lock(tmp_path, now=started):
+            lock_path = tmp_path / ".quickscale-backup-create.lock"
+            # The filesystem stamps "now"; make the live lock look older than
+            # the contender's lease cutoff so only the held flock can prove
+            # that its owner is alive.
+            os.utime(lock_path, (started.timestamp(), started.timestamp()))
+            later = started + timedelta(seconds=900)
+            with pytest.raises(BackupLockError, match="already in progress"):
+                _acquire_backup_lock(tmp_path, now=later)
+            assert lock_path.exists()
+
+        with _backup_creation_lock(tmp_path, now=later):
+            pass
 
 
 # ---------------------------------------------------------------------------

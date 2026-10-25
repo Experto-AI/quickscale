@@ -131,7 +131,8 @@ This module ships no URLs.
   Setting a pin requires `--hours N` and `--reason TEXT`; `--clear` clears an active pin
   instead; `--json` emits the structured pin report.
 - `quickscale_backups_prune` — delete expired backup files and mark their metadata as deleted,
-  according to the active retention policy. `--trigger` defaults to `manual`; `--trigger
+  according to the active retention policy. The newest complete snapshot and the newest live
+  artifact are always retained, even past `retention_days`. `--trigger` defaults to `manual`; `--trigger
   scheduled` refuses while the module is switched off, and `--trigger manual` / `--trigger
   admin` (the admin action) stay available. `--dry-run` reports the expired artifacts without
   deleting them.
@@ -225,6 +226,10 @@ Guardrails:
   dump that first resolves through quarantined trusted-match validation; it never materializes
   remote-only artifacts and requires exact filename confirmation plus the existing environment
   gate.
+- A PostgreSQL restore runs as one `pg_restore --single-transaction`; stop application writes
+  for the maintenance window before executing it. A successful restore re-records the restored
+  backup's artifact and snapshot rows in the restored database, and a metadata failure fails the
+  command visibly instead of reporting a clean restore.
 - Restore compatibility uses the recorded migration content identity, not a version label:
   every capture records the SHA-256 hashes of each installed module's applied migration files,
   and a restore refuses a backup whose recorded migration file is missing or has changed

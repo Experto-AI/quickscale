@@ -184,6 +184,7 @@ class TestRestoreResolutionAndGuards:
         self, tmp_path: Path
     ) -> None:
         source = _source(tmp_path / "trusted.dump", _artifact())
+        restore_snapshot = _snapshot()
         result = RestoreResult(executed=True, dry_run=False, message="done")
         warning = RestoreWarning(code="metadata", message="warning")
         ordered = MagicMock()
@@ -202,6 +203,10 @@ class TestRestoreResolutionAndGuards:
                 return_value={},
             ),
             patch(
+                "quickscale_core.dr_engine.persistence.get_authoritative_snapshot_for_artifact",
+                return_value=restore_snapshot,
+            ) as resolve_snapshot,
+            patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ) as core,
@@ -211,6 +216,7 @@ class TestRestoreResolutionAndGuards:
             ) as persist,
             patch("django.utils.timezone.now", return_value=_NOW),
         ):
+            ordered.attach_mock(resolve_snapshot, "snapshot")
             ordered.attach_mock(core, "core")
             ordered.attach_mock(persist, "persist")
             executed = _restore._execute_restore_for_resolved_source(
@@ -221,10 +227,16 @@ class TestRestoreResolutionAndGuards:
                 shell_runner=None,
             )
         assert executed.warnings == (warning,)
-        persist.assert_called_once_with(source.artifact, restored_at=_NOW)
+        persist.assert_called_once_with(
+            source.artifact, restored_at=_NOW, snapshot=restore_snapshot
+        )
         assert core.call_args.kwargs["current_engine"] == "pg"
         assert core.call_args.kwargs["connection_settings"] == {"ENGINE": "pg"}
-        assert [item[0] for item in ordered.mock_calls] == ["core", "persist"]
+        assert [item[0] for item in ordered.mock_calls] == [
+            "snapshot",
+            "core",
+            "persist",
+        ]
 
     def test_execute_restore_wrapper_does_not_persist_metadata_for_dry_run(
         self, tmp_path: Path
@@ -443,6 +455,7 @@ class TestAdminUploadStaging:
         self,
     ) -> None:
         artifact = _artifact()
+        snapshot = _snapshot()
         warning = RestoreWarning(code="w", message="warning")
         with (
             patch(
@@ -461,10 +474,10 @@ class TestAdminUploadStaging:
                 is artifact
             )
             assert _restore._persist_restore_artifact_metadata(
-                artifact, restored_at=_NOW
+                artifact, restored_at=_NOW, snapshot=snapshot
             ) == (warning,)
         resolve.assert_called_once_with(checksum_sha256="sum", size_bytes=4)
-        persist.assert_called_once_with(artifact, restored_at=_NOW)
+        persist.assert_called_once_with(artifact, restored_at=_NOW, snapshot=snapshot)
 
 
 class TestAdminUploadRestore:

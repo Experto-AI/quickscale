@@ -39,6 +39,8 @@ from quickscale_core.dr_engine.persistence import (
     get_authoritative_snapshot_for_artifact,
     get_backup_artifact,
     get_backup_snapshot,
+    get_newest_live_artifact,
+    get_newest_live_snapshot,
     has_any_policy,
     iter_expired_snapshots,
     iter_expired_unlinked_artifacts,
@@ -285,6 +287,14 @@ class TestSa89bUnregisteredFailHard(TestSharedFixture):
             for _ in iter_expired_unlinked_artifacts(datetime.now(timezone.utc)):
                 pass
 
+    def test_get_newest_live_artifact_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            get_newest_live_artifact()
+
+    def test_get_newest_live_snapshot_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            get_newest_live_snapshot()
+
     def test_get_authoritative_snapshot_for_artifact_unregistered(self) -> None:
         with pytest.raises(BackupConfigurationError, match="not configured"):
             get_authoritative_snapshot_for_artifact(MagicMock())
@@ -359,12 +369,31 @@ class TestSa89bDelegation(TestSharedFixture):
     ) -> None:
         artifact_prov, _ = registered_providers
         mock_art = MagicMock()
+        mock_snapshot = MagicMock()
         restored_at = datetime.now(timezone.utc)
-        result = update_artifact_after_restore(mock_art, restored_at=restored_at)
+        result = update_artifact_after_restore(
+            mock_art, restored_at=restored_at, snapshot=mock_snapshot
+        )
         assert result is artifact_prov.update_artifact_after_restore.return_value
         artifact_prov.update_artifact_after_restore.assert_called_once_with(
-            mock_art, restored_at=restored_at
+            mock_art, restored_at=restored_at, snapshot=mock_snapshot
         )
+
+    def test_get_newest_live_artifact_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        result = get_newest_live_artifact()
+        assert result is artifact_prov.get_newest_live_artifact.return_value
+        artifact_prov.get_newest_live_artifact.assert_called_once_with()
+
+    def test_get_newest_live_snapshot_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        result = get_newest_live_snapshot()
+        assert result is artifact_prov.get_newest_live_snapshot.return_value
+        artifact_prov.get_newest_live_snapshot.assert_called_once_with()
 
     def test_iter_expired_unlinked_artifacts_delegates(
         self, registered_providers: tuple[MagicMock, MagicMock]

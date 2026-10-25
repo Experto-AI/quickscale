@@ -7,6 +7,7 @@ restore flow.
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
@@ -28,7 +29,7 @@ from quickscale_core.dr_engine.primitives import BackupError
 _LOCK_FILENAME = ".quickscale-backup-create.lock"
 _LOCK_TIMEOUT_SECONDS = 300
 _BackupLockOwnerKey = tuple[int, int, Path]
-_BackupLockOwnership = tuple[tuple[int, int], str]
+_BackupLockOwnership = tuple[tuple[int, int], str, int]
 _backup_lock_ownership: dict[_BackupLockOwnerKey, _BackupLockOwnership] = {}
 _backup_lock_ownership_guard = threading.Lock()
 
@@ -83,7 +84,7 @@ def _acquire_backup_lock(
         try:
             descriptor = os.open(
                 lock_path,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                os.O_CREAT | os.O_EXCL | os.O_RDWR,
                 0o600,
             )
         except FileExistsError:
@@ -113,6 +114,7 @@ def _acquire_backup_lock(
             _write_descriptor(descriptor, payload.encode("utf-8"))
             os.fsync(descriptor)
         except OSError as exc:
+            os.close(descriptor)
             cleanup_error = (
                 "ownership identity unavailable; lock retained"
                 if acquired_identity is None
@@ -122,14 +124,14 @@ def _acquire_backup_lock(
             if cleanup_error is not None:
                 details += f"; cleanup failed: {cleanup_error}"
             raise BackupError(details) from exc
-        finally:
-            os.close(descriptor)
 
         owner_key = _backup_lock_owner_key(lock_path)
-        if acquired_identity is None:  # pragma: no cover - successful fstat assigns it
-            raise BackupError(f"Unable to identify backup lock file at {lock_path}")
         with _backup_lock_ownership_guard:
-            _backup_lock_ownership[owner_key] = (acquired_identity, owner_token)
+            _backup_lock_ownership[owner_key] = (
+                acquired_identity,
+                owner_token,
+                descriptor,
+            )
         return lock_path
 
     raise BackupLockError(
@@ -149,7 +151,16 @@ def _clear_stale_backup_lock(lock_path: Path, *, now: datetime) -> bool:
         ) from exc
 
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EAGAIN}:
+                # A live owner holds the lock; mtime is a crash fallback only.
+                return False
+            raise BackupError(
+                f"Unable to inspect stale backup lock file at {lock_path}: {exc}"
+            ) from exc
+
         candidate_identity = _file_identity_from_descriptor(descriptor)
         lock_mtime = os.fstat(descriptor).st_mtime
         if (now.timestamp() - lock_mtime) <= _LOCK_TIMEOUT_SECONDS:
@@ -187,16 +198,7 @@ def _release_backup_lock(lock_path: Path) -> None:
 
     if ownership is None:
         return
-    acquired_identity, owner_token = ownership
-
-    try:
-        descriptor = os.open(lock_path, os.O_RDONLY)
-    except FileNotFoundError:
-        return
-    except OSError as exc:
-        raise BackupError(
-            f"Unable to remove backup lock file at {lock_path}: {exc}"
-        ) from exc
+    acquired_identity, owner_token, descriptor = ownership
 
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)

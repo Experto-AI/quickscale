@@ -148,6 +148,12 @@ def _execute_restore_for_resolved_source(
             operation="restore",
         )
 
+    restore_snapshot: Any = None
+    if not dry_run and restore_source.artifact is not None:
+        restore_snapshot = _persistence.get_authoritative_snapshot_for_artifact(
+            cast("PersistedBackupArtifact", restore_source.artifact)
+        )
+
     result = _recovery._execute_restore_for_resolved_source(
         restore_source,
         confirmation=confirmation,
@@ -167,6 +173,7 @@ def _execute_restore_for_resolved_source(
         restore_warnings = _persist_restore_artifact_metadata(
             restore_source.artifact,
             restored_at=_django_timezone.now(),
+            snapshot=restore_snapshot,
         )
         if restore_warnings:
             result = replace(result, warnings=(*result.warnings, *restore_warnings))
@@ -345,12 +352,21 @@ def _persist_restore_artifact_metadata(
     artifact: Any,
     *,
     restored_at: datetime,
+    snapshot: Any = None,
 ) -> tuple[RestoreWarning, ...]:
-    """Best-effort persist restore metadata after pg_restore succeeds.
+    """Persist the restored artifact and snapshot metadata.
+
+    The provider recreates the artifact row the restored database no longer
+    contains and relinks its snapshot.  A metadata failure raises; it is never
+    reported as a warning on an otherwise successful restore.
 
     SA89b Phase 1: delegates to the persistence provider.
     """
-    return _persistence.update_artifact_after_restore(artifact, restored_at=restored_at)
+    return _persistence.update_artifact_after_restore(
+        artifact,
+        restored_at=restored_at,
+        snapshot=snapshot,
+    )
 
 
 def restore_admin_uploaded_backup(
