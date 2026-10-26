@@ -28,6 +28,9 @@ from quickscale_modules_billing._payload import (
     _invoice_subscription_id as _invoice_subscription_id,
 )
 from quickscale_modules_billing._payload import (
+    _map_stripe_subscription_status as _map_stripe_subscription_status,
+)
+from quickscale_modules_billing._payload import (
     _normalize_mapping as _normalize_mapping,
 )
 from quickscale_modules_billing._resolution import (
@@ -38,6 +41,9 @@ from quickscale_modules_billing._settings import (
 )
 from quickscale_modules_billing._settings import (
     SubscriptionProviderIdentity as SubscriptionProviderIdentity,
+)
+from quickscale_modules_billing._subscription_events import (
+    _retrieve_authoritative_subscription_payload as _retrieve_authoritative_subscription_payload,
 )
 from quickscale_modules_billing._subscription_events import (
     _subscription_provider_identity as _subscription_provider_identity,
@@ -116,11 +122,12 @@ def _process_invoice_paid_event(
 ) -> CreditTransaction:
     """Resolve an invoice subscription, keeping provider I/O outside atomics."""
 
+    subscription_id = _invoice_subscription_id(invoice_payload)
+    customer_id = str(invoice_payload.get("customer") or "").strip()
+
     # Phase 1: resolve user + subscription in a short org scope.
     with org_scope(resolved_organization):
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
-        subscription_id = _invoice_subscription_id(invoice_payload)
-        customer_id = str(invoice_payload.get("customer") or "").strip()
         subscription = _resolution._resolve_subscription_for_runtime_event(
             stripe_subscription_id=subscription_id,
             customer_id=customer_id,
@@ -128,8 +135,26 @@ def _process_invoice_paid_event(
             user=resolved_user,
             for_update=True,
         )
+        needs_provider_status = bool(
+            subscription is not None
+            and subscription_id
+            and subscription.status
+            in {Subscription.Status.INCOMPLETE, Subscription.Status.PAST_DUE}
+        )
 
-    # Phase 2: retrieve a missing subscription via Stripe outside every DB
+    # Phase 2: a paid invoice may activate a subscription, so read the
+    # provider's current status first. Stripe does not promise delivery order,
+    # and an older paid event must not overwrite a newer provider status. The
+    # read stays outside every DB transaction; the caller holds the
+    # organization's provider mutex when the organization was resolved.
+    provider_subscription: Mapping[str, Any] | None = None
+    if needs_provider_status:
+        provider_subscription = _retrieve_authoritative_subscription_payload(
+            stripe_subscription_id=subscription_id,
+            stripe_client=stripe_client,
+        )
+
+    # Phase 3: retrieve a missing subscription via Stripe outside every DB
     # transaction. When the invoice could not identify an organization, the
     # retrieved payload supplies it before one continuous provider mutex covers
     # both the local upsert and invoice finalization.
@@ -148,8 +173,16 @@ def _process_invoice_paid_event(
             )
         if not provider_lock_held:
             with _locks.subscription_provider_mutation_lock(mutation_organization):
+                # The unlocked read above only discovered the organization.
+                # Refresh the provider state under the mutex so a newer delivery
+                # that landed before this lock cannot be overwritten by the
+                # snapshot fetched before it.
+                provider_subscription = _retrieve_authoritative_subscription_payload(
+                    stripe_subscription_id=subscription_id,
+                    stripe_client=stripe_client,
+                )
                 subscription = _upsert_subscription_from_payload(
-                    subscription_payload,
+                    provider_subscription,
                     fallback_user=resolved_user,
                     fallback_organization=mutation_organization,
                     expected_plan=plan,
@@ -171,6 +204,7 @@ def _process_invoice_paid_event(
                     expected_customer_id=str(
                         subscription.stripe_customer_id or ""
                     ).strip(),
+                    provider_subscription=provider_subscription,
                 )
         subscription = _upsert_subscription_from_payload(
             subscription_payload,
@@ -179,13 +213,16 @@ def _process_invoice_paid_event(
             expected_plan=plan,
             provider_lock_held=True,
         )
+        # This read happened under the caller's provider mutex; keep it as the
+        # authoritative status for finalization instead of defaulting to active.
+        provider_subscription = subscription_payload
 
     if subscription is None:
         raise BillingWebhookError(
             "Could not resolve or backfill a subscription for the invoice."
         )
 
-    # Phase 3: remaining processing + credit_user in a new org scope.
+    # Phase 4: remaining processing + credit_user in a new org scope.
     mutation_organization = resolved_organization or subscription.organization
     expected_identity = _subscription_provider_identity(subscription)
     expected_customer_id = str(subscription.stripe_customer_id or "").strip()
@@ -204,6 +241,7 @@ def _process_invoice_paid_event(
                 mutation_organization=mutation_organization,
                 expected_identity=expected_identity,
                 expected_customer_id=expected_customer_id,
+                provider_subscription=provider_subscription,
             )
     return _finalize_invoice_paid_event(
         event_payload=event_payload,
@@ -218,6 +256,7 @@ def _process_invoice_paid_event(
         mutation_organization=mutation_organization,
         expected_identity=expected_identity,
         expected_customer_id=expected_customer_id,
+        provider_subscription=provider_subscription,
     )
 
 
@@ -328,8 +367,14 @@ def _update_invoice_subscription_identity(
     user: Any,
     customer_id: str,
     subscription_id: str,
+    provider_subscription: Mapping[str, Any] | None = None,
 ) -> Subscription:
     """Activate an incomplete subscription or refresh its identity fields."""
+    target_status: str = Subscription.Status.ACTIVE
+    if provider_subscription is not None:
+        target_status = _map_stripe_subscription_status(
+            str(provider_subscription.get("status") or "")
+        )
     if subscription.status in {
         Subscription.Status.INCOMPLETE,
         Subscription.Status.PAST_DUE,
@@ -343,6 +388,7 @@ def _update_invoice_subscription_identity(
             user=user,
             customer_id=customer_id,
             stripe_subscription_id=subscription_id,
+            local_status=target_status,
         )
     _update_existing_invoice_identity(
         subscription,
@@ -367,6 +413,7 @@ def _finalize_invoice_paid_event(
     mutation_organization: Any,
     expected_identity: SubscriptionProviderIdentity,
     expected_customer_id: str,
+    provider_subscription: Mapping[str, Any] | None = None,
 ) -> CreditTransaction:
     """Reload and apply invoice state under the provider and database locks."""
     with org_scope(mutation_organization):
@@ -392,6 +439,7 @@ def _finalize_invoice_paid_event(
             user=resolved_user,
             customer_id=customer_id,
             subscription_id=subscription_id,
+            provider_subscription=provider_subscription,
         )
         organization = subscription.organization
         user = resolved_user if resolved_user is not None else subscription.user
@@ -418,6 +466,8 @@ def _finalize_invoice_paid_event(
 
 def _handle_invoice_payment_failed_event(
     event_payload: Mapping[str, Any],
+    *,
+    stripe_client: Any | None = None,
 ) -> Subscription:
     invoice_payload = _extract_event_object(event_payload)
     invoice_id = str(invoice_payload.get("id") or "").strip()
@@ -431,10 +481,18 @@ def _handle_invoice_payment_failed_event(
         raise BillingWebhookError(
             "Could not resolve a local organization for the Stripe invoice."
         )
+    subscription_id = _invoice_subscription_id(invoice_payload)
     with _locks.subscription_provider_mutation_lock(resolved_organization):
+        provider_subscription: Mapping[str, Any] | None = None
+        if subscription_id:
+            provider_subscription = _retrieve_authoritative_subscription_payload(
+                stripe_subscription_id=subscription_id,
+                stripe_client=stripe_client,
+            )
         return _apply_invoice_payment_failed_event(
             invoice_payload=invoice_payload,
             resolved_organization=resolved_organization,
+            provider_subscription=provider_subscription,
         )
 
 
@@ -486,9 +544,10 @@ def _apply_failed_subscription_fields(
     *,
     customer_id: str,
     subscription_id: str,
+    local_status: str,
 ) -> Subscription:
-    """Mark the subscription past due and refresh its identity fields."""
-    subscription.status = Subscription.Status.PAST_DUE
+    """Apply the provider's current status and refresh identity fields."""
+    subscription.status = local_status
     update_fields: list[str] = ["status"]
     if customer_id and subscription.stripe_customer_id != customer_id:
         subscription.stripe_customer_id = customer_id
@@ -513,6 +572,7 @@ def _apply_invoice_payment_failed_event(
     *,
     invoice_payload: Mapping[str, Any],
     resolved_organization: Any,
+    provider_subscription: Mapping[str, Any] | None = None,
 ) -> Subscription:
     """Apply payment failure while the organization's provider mutex is held."""
     # Phase 3: each handler owns its org scope for SET LOCAL support.
@@ -543,12 +603,18 @@ def _apply_invoice_payment_failed_event(
             customer_id=customer_id,
             subscription_id=subscription_id,
         )
+        local_status: str = Subscription.Status.PAST_DUE
+        if provider_subscription is not None:
+            local_status = _map_stripe_subscription_status(
+                str(provider_subscription.get("status") or "")
+            )
         return _apply_failed_subscription_fields(
             subscription,
             resolved_user,
             resolved_organization,
             customer_id=customer_id,
             subscription_id=subscription_id,
+            local_status=local_status,
         )
 
 
@@ -560,13 +626,14 @@ def _activate_subscription_for_paid_invoice(
     user: Any | None,
     customer_id: str,
     stripe_subscription_id: str,
+    local_status: str = Subscription.Status.ACTIVE,
 ) -> Subscription:
     update_fields: list[str] = []
     if subscription.plan.pk != plan.pk:
         subscription.plan = plan
         update_fields.append("plan")
-    if subscription.status != Subscription.Status.ACTIVE:
-        subscription.status = Subscription.Status.ACTIVE
+    if subscription.status != local_status:
+        subscription.status = local_status
         update_fields.append("status")
     normalized_customer_id = customer_id.strip()
     if (
