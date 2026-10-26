@@ -403,15 +403,39 @@ class TestReactThemeGeneration:
         org_members = (
             output_path / "frontend" / "src" / "pages" / "orgs" / "OrgMembersPage.tsx"
         ).read_text()
+        seam_hooks = (
+            output_path / "frontend" / "src" / "quickscaleSeam.hooks.ts"
+        ).read_text()
 
-        assert "buildOrgApiPath" in use_orgs
+        # SA320: the org payload types and resource paths live in the managed
+        # hook file, and the page hook calls their builders.
+        assert "ORGS_RESOURCE_PATHS" in use_orgs
+        assert "BILLING_RESOURCE_PATHS" in use_orgs
         assert "buildBillingApiPath" in use_orgs
         # Rule 41: the billing base comes from the seam, never a literal.
         assert "moduleApiPaths.billing" in use_orgs
         assert "/billing/api" not in use_orgs
-        assert "next_url: string" in use_orgs
-        assert "billing_pricing_url: string | null" in use_orgs
-        assert "member_count?: number" in use_orgs
+        assert "export interface OrgSummary" in seam_hooks
+        assert "next_url: string" in seam_hooks
+        assert "billing_pricing_url: string | null" in seam_hooks
+        assert "member_count?: number" in seam_hooks
+        assert "export const ORGS_RESOURCE_PATHS" in seam_hooks
+        assert "export const BILLING_RESOURCE_PATHS" in seam_hooks
+        assert "detail: (orgSlug: string | number)" in seam_hooks
+        assert "ORGS_RESOURCE_PATHS.detail(orgSlug)" in use_orgs
+        # The org API's response envelopes are generated too: no inline
+        # response type literal remains in the user-owned hook.
+        assert "apiRequest<{" not in use_orgs
+        assert "OrgInvitationResponse" in use_orgs
+        assert "OrgMemberResponse" in use_orgs
+        assert "OrgMemberRemovedResponse" in use_orgs
+        assert "OrgInvitationRevokedResponse" in use_orgs
+        assert "export interface OrgMemberRemovedResponse" in seam_hooks
+        use_form_schema = (
+            output_path / "frontend" / "src" / "hooks" / "useFormSchema.ts"
+        ).read_text()
+        assert "schema: (slug: string | number)" in seam_hooks
+        assert "FORMS_RESOURCE_PATHS.schema(slug)" in use_form_schema
         assert (
             "export function useOrgBilling(orgSlug: string, enabled = true)" in use_orgs
         )

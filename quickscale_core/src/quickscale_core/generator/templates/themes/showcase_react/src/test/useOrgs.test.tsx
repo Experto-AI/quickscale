@@ -15,6 +15,7 @@ import {
   useUpdateOrgSettings,
 } from '@/hooks/useOrgs'
 import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
+import { BILLING_RESOURCE_PATHS, ORGS_RESOURCE_PATHS } from '@/quickscaleSeam.hooks'
 
 const fetchMock = vi.fn()
 
@@ -68,7 +69,10 @@ describe('org query hooks', () => {
 
     const { result } = renderHook(() => useOrg('acme'), { wrapper: createWrapper() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(fetchMock).toHaveBeenCalledWith('/orgs/api/acme/', expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/orgs/api/${ORGS_RESOURCE_PATHS.detail('acme')}`,
+      expect.anything(),
+    )
 
     fetchMock.mockClear()
     const disabled = renderHook(() => useOrg(''), { wrapper: createWrapper() })
@@ -81,7 +85,7 @@ describe('org query hooks', () => {
 
     const { result } = renderHook(() => useOrgMembers('acme'), { wrapper: createWrapper() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(fetchMock).toHaveBeenCalledWith('/orgs/api/acme/members', expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(`/orgs/api/${ORGS_RESOURCE_PATHS.members('acme')}`, expect.anything())
 
     fetchMock.mockClear()
     const disabled = renderHook(() => useOrgMembers(''), { wrapper: createWrapper() })
@@ -95,8 +99,8 @@ describe('org query hooks', () => {
     const { result } = renderHook(() => useOrgBilling('acme'), { wrapper: createWrapper() })
 
     await waitFor(() => expect(result.current.subscription.isSuccess).toBe(true))
-    expect(fetchMock).toHaveBeenCalledWith('/billing/api/subscription/', expect.anything())
-    expect(fetchMock).toHaveBeenCalledWith('/billing/api/balance/', expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(`/billing/api/${BILLING_RESOURCE_PATHS.subscription}`, expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(`/billing/api/${BILLING_RESOURCE_PATHS.balance}`, expect.anything())
   })
 
   it('skips billing requests when billing is disabled or no slug is present', async () => {
@@ -133,7 +137,7 @@ describe('org mutation hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock).toHaveBeenCalledWith(
-      '/orgs/api/acme/members/invite',
+      `/orgs/api/${ORGS_RESOURCE_PATHS.membersInvite('acme')}`,
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ email: 'new@example.com', role: 'member' }),
@@ -151,7 +155,7 @@ describe('org mutation hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock).toHaveBeenCalledWith(
-      '/orgs/api/acme/members/7/role',
+      `/orgs/api/${ORGS_RESOURCE_PATHS.memberRole('acme', 7)}`,
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ role: 'admin' }) }),
     )
   })
@@ -164,7 +168,7 @@ describe('org mutation hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock).toHaveBeenCalledWith(
-      '/orgs/api/acme/members/7/remove',
+      `/orgs/api/${ORGS_RESOURCE_PATHS.memberRemove('acme', 7)}`,
       expect.objectContaining({ method: 'POST' }),
     )
   })
@@ -179,7 +183,7 @@ describe('org mutation hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock).toHaveBeenCalledWith(
-      '/orgs/api/acme/members/invitations/abc/revoke',
+      `/orgs/api/${ORGS_RESOURCE_PATHS.invitationRevoke('acme', 'abc')}`,
       expect.objectContaining({ method: 'POST' }),
     )
   })
@@ -194,7 +198,7 @@ describe('org mutation hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock).toHaveBeenCalledWith(
-      '/orgs/api/acme/settings',
+      `/orgs/api/${ORGS_RESOURCE_PATHS.settings('acme')}`,
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ name: 'Acme Inc', slug: 'acme-inc' }),

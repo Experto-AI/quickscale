@@ -4,6 +4,7 @@ import type {
   QuickScaleModulePaths,
   QuickScaleModules,
 } from '@/quickscaleSeam'
+import type { PublicSocialSurface } from '@/quickscaleSeam.hooks'
 
 export type QuickScaleOwnerMode = 'solo' | 'saas'
 
@@ -12,7 +13,9 @@ interface QuickScaleOwnerConfig {
   currentOrgSlug: string | null
 }
 
-export type PublicSocialSurface = 'link_tree' | 'embeds'
+// The social surface union lives in the managed hook file; re-export it for
+// the root dispatcher and shell that import this module.
+export type { PublicSocialSurface }
 
 interface QuickScalePublicPageNavigation {
   home: string

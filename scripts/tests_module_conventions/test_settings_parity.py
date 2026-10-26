@@ -139,6 +139,13 @@ def _retired_validation_rules() -> Module:
     return replace(module, manifest=manifest)
 
 
+def _frontend_payload_named_validation_rules() -> Module:
+    module = _golden_module()
+    manifest = copy.deepcopy(module.manifest)
+    manifest["frontend_resources"] = {"payload_types": {"DemoForm": {"validation_rules": "string"}}}
+    return replace(module, manifest=manifest)
+
+
 def _setting_pattern(key: str, pattern: str) -> Module:
     module = _golden_module()
     manifest = copy.deepcopy(module.manifest)
@@ -483,6 +490,10 @@ CASES: dict[str, tuple[object, str]] = {
     ),
     "rule12_retired_validation_rules": (
         lambda: _corpus(_retired_validation_rules()),
+        "rule_12_manifest_options",
+    ),
+    "rule12_frontend_payload_named_validation_rules": (
+        lambda: _corpus(_frontend_payload_named_validation_rules()),
         "rule_12_manifest_options",
     ),
     "rule12_bad_snake_case": (
@@ -937,6 +948,11 @@ EXACT_FINDINGS = (
         "rule12_retired_validation_rules",
         "rule_12_manifest_options",
         ("rule 12: demo: manifest declares retired validation_rules",),
+    ),
+    (
+        "rule12_frontend_payload_named_validation_rules",
+        "rule_12_manifest_options",
+        (),
     ),
     (
         "rule12_bad_snake_case",

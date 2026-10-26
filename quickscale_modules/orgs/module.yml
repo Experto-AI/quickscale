@@ -52,6 +52,82 @@ dependencies:
   - sqlparse
   - quickscale-core
 
+# Frontend resource contract consumed by the managed theme hook
+# (frontend/src/quickscaleSeam.hooks.ts). Paths are module-relative API
+# subpaths appended to the module's moduleApiPaths base; a {parameter}
+# placeholder renders a typed builder. The payload types are the response
+# shapes those paths return, so a user-owned page imports both instead of
+# restating them.
+frontend_resources:
+  paths:
+    detail: "{orgSlug}/"
+    members: "{orgSlug}/members/"
+    membersInvite: "{orgSlug}/members/invite/"
+    memberRole: "{orgSlug}/members/{membershipId}/role/"
+    memberRemove: "{orgSlug}/members/{membershipId}/remove/"
+    invitationRevoke: "{orgSlug}/members/invitations/{invitationId}/revoke/"
+    settings: "{orgSlug}/settings/"
+  payload_types:
+    OrgRole: "'viewer' | 'member' | 'admin' | 'owner'"
+    OrgSummary:
+      id: string
+      name: string
+      slug: string
+      is_personal: boolean
+      role?: "OrgRole | null"
+      role_label?: string
+      member_count?: number
+    OrgActor:
+      role: "OrgRole | null"
+      is_owner_like: boolean
+    OrgDetailResponse:
+      organization: OrgSummary
+      actor: OrgActor
+    OrgListResponse:
+      organizations: "OrgSummary[]"
+    OrgCreateResponse:
+      organization: OrgSummary
+      next_url: string
+      billing_pricing_url: "string | null"
+    OrgUser:
+      id: string
+      username: string
+      email: string
+      display_name: string
+    OrgMember:
+      id: number
+      role: OrgRole
+      role_label: string
+      joined_at: string
+      user: OrgUser
+    OrgInvitation:
+      id: string
+      email: string
+      role: OrgRole
+      role_label: string
+      expires_at: string
+    OrgRoleChoice:
+      value: OrgRole
+      label: string
+    OrgMembersResponse:
+      organization: OrgSummary
+      actor: OrgActor
+      members: "OrgMember[]"
+      pending_invitations: "OrgInvitation[]"
+      role_choices: "OrgRoleChoice[]"
+    OrgSettingsResponse:
+      organization: OrgSummary
+    OrgInvitationResponse:
+      invitation: OrgInvitation
+    OrgMemberResponse:
+      member: OrgMember
+    OrgMemberRemovedResponse:
+      status: "'removed'"
+      member_id: number
+    OrgInvitationRevokedResponse:
+      status: "'revoked'"
+      invitation_id: string
+
 contract_vintage:
   id: sa221-orgs-check-id
   minimum: "0.89.0"

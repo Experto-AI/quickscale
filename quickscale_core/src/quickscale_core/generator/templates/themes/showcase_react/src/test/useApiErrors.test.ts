@@ -60,7 +60,7 @@ describe('QuickScale API error parsing', () => {
       }),
     )
 
-    const error = await apiRequest('/orgs/api/acme/members/1/remove/', {
+    const error = await apiRequest('/healthcheck/', {
       method: 'POST',
       body: '{}',
     }).catch((caught: unknown) => caught)
@@ -88,7 +88,7 @@ describe('QuickScale API error parsing', () => {
       jsonResponse(400, { errors: { title: ['This field is required.'] } }),
     )
 
-    const error = await apiRequest('/forms/api/example/').catch(
+    const error = await apiRequest('/healthcheck/').catch(
       (caught: unknown) => caught,
     )
 
@@ -101,7 +101,7 @@ describe('QuickScale API error parsing', () => {
       jsonResponse(400, { error: 'Invalid JSON payload' }),
     )
 
-    const error = await apiRequest('/forms/api/example/').catch(
+    const error = await apiRequest('/healthcheck/').catch(
       (caught: unknown) => caught,
     )
 
