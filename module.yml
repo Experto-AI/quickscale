@@ -110,6 +110,33 @@ ci_env:
   secret_key_env_var: sk_test_ci
   webhook_secret_env_var: whsec_test_ci
 
+# Frontend resource contract consumed by the managed theme hook
+# (frontend/src/quickscaleSeam.hooks.ts). Paths are module-relative API
+# subpaths appended to the module's moduleApiPaths base; the payload types are
+# the response shapes those paths return, so a user-owned page imports both
+# instead of restating them.
+frontend_resources:
+  paths:
+    subscription: subscription/
+    balance: balance/
+  payload_types:
+    OrgPlan:
+      name: string
+      slug: string
+      credits_per_period: number
+      price_cents: number
+      currency: string
+      billing_interval: string
+    OrgBalanceResponse:
+      balance: number
+      updated_at: "string | null"
+    OrgSubscriptionResponse:
+      plan: OrgPlan
+      status: string
+      checkout_expires_at: "string | null"
+      current_period_start: "string | null"
+      current_period_end: "string | null"
+
 # Module-owned operations text: the managed quickscale-operations.md page
 # renders this section, and the generated project's OPERATIONS.md links that
 # page once instead of restating a module value.  The text's {name} tokens
