@@ -1327,7 +1327,8 @@ release.
   acceptance, and the read filter).
 - 2026-10-26 — `media-s3-fixed-path-overwrite`: **resolved** (SA311: the generated settings use the
   module-owned `quickscale_modules_storage.backends.UniqueKeyS3Storage`, which adds a random token
-  to every allocated key; `file_overwrite: False` stays as a second guard. A fake-connection test
+  to the allocated key within the field's `max_length`; a field too short for the token keeps the
+  stock allocation. `file_overwrite: False` stays as a second guard. A fake-connection test
   stores two same-filename uploads, and a barrier-forced concurrent pair, under distinct keys with
   both payloads preserved; the storage README documents the custom-config equivalent).
 - 2026-10-26 — `orgs-admin-can-demote-owner`: **resolved** (SA311: `role_outranks_actor` refuses a
