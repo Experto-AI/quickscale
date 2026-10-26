@@ -80,6 +80,86 @@ dependencies:
   - sqlparse
   - quickscale-core
 
+# Frontend resource contract consumed by the managed theme hook
+# (frontend/src/quickscaleSeam.hooks.ts). The public integration endpoints are
+# delivered through the managed seam's publicPage config, and these payload
+# types are the response shapes the public pages render, so a user-owned page
+# imports them instead of restating them.
+frontend_resources:
+  payload_types:
+    PublicSocialSurface: "'link_tree' | 'embeds'"
+    SocialPayloadStatus: "'enabled' | 'empty' | 'disabled' | 'error'"
+    SocialLinkRecord:
+      id: number
+      title: string
+      description: string
+      provider_name: string
+      provider_display_name: string
+      url: string
+      source_url: string
+      display_order: number
+    SocialEmbedResolutionStatus: "'pending' | 'resolved' | 'error'"
+    SocialEmbedRecord:
+      id: number
+      title: string
+      description: string
+      provider_name: string
+      provider_display_name: string
+      url: string
+      source_url: string
+      display_order: number
+      resolution_status: SocialEmbedResolutionStatus
+      resolution_error: "string | null"
+      embed_url: "string | null"
+      thumbnail_url: "string | null"
+      embed_width: "number | null"
+      embed_height: "number | null"
+      thumbnail_width: "number | null"
+      thumbnail_height: "number | null"
+      last_resolution_attempt_at: "string | null"
+      last_resolved_at: "string | null"
+    SocialBasePayload:
+      module: "'social'"
+      surface: PublicSocialSurface
+      status: SocialPayloadStatus
+      enabled: boolean
+      public_path: string
+      integration_base_path: string
+      integration_embeds_path: string
+      provider_allowlist: "string[]"
+      embed_provider_allowlist: "string[]"
+      error: "string | null"
+    SocialLinkTreePayload:
+      module: "'social'"
+      surface: "'link_tree'"
+      status: SocialPayloadStatus
+      enabled: boolean
+      public_path: string
+      integration_base_path: string
+      integration_embeds_path: string
+      provider_allowlist: "string[]"
+      embed_provider_allowlist: "string[]"
+      error: "string | null"
+      layout_variant: string
+      links_per_page: number
+      total_links: number
+      links: "SocialLinkRecord[]"
+    SocialEmbedsPayload:
+      module: "'social'"
+      surface: "'embeds'"
+      status: SocialPayloadStatus
+      enabled: boolean
+      public_path: string
+      integration_base_path: string
+      integration_embeds_path: string
+      provider_allowlist: "string[]"
+      embed_provider_allowlist: "string[]"
+      error: "string | null"
+      cache_ttl_seconds: number
+      embeds_per_page: number
+      total_embeds: number
+      embeds: "SocialEmbedRecord[]"
+
 contract_vintage:
   id: sa282-social-public-pages
   minimum: "0.87.0"
