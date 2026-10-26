@@ -50,8 +50,8 @@ audit evidence and now carry `status: fixed`: `crm-deal-owner-cross-tenant`,
 `media-s3-fixed-path-overwrite`, `orgs-admin-can-demote-owner`, and
 `forms-null-optional-field-500`. A deal owner must be a member of the request organization and a
 foreign owner's name is not serialized; a member mutation cannot target a role above the actor's;
-cloud uploads disable key overwrite; and a JSON `null` in an optional public form field is stored
-empty on both persistence branches.
+cloud uploads allocate a unique key per save (with provider overwrite disabled as a second guard);
+and a JSON `null` in an optional public form field is stored empty on both persistence branches.
 
 ## Orientation summary
 
@@ -1139,9 +1139,10 @@ reviewers.
   real subscription Checkout when `STRIPE_TEST_SECRET_KEY` is set and enumerates every
   metadata-key constant against Stripe's 40-character limit; the late subscription and invoice
   replays live in `tests/test_subscriptions.py`, and the live case skips without credentials.
-- **S3 overwrite coverage is fake-backend only**: `test_manifest_adapter.py` runs the real
-  `S3Storage` name allocator against a recording connection and proves two same-filename uploads
-  get distinct keys; no live-bucket upload is exercised.
+- **S3 overwrite coverage is fake-backend only**: `test_manifest_adapter.py` runs the module
+  backend's name allocator against a recording connection and proves two sequential and two
+  barrier-forced concurrent same-filename uploads get distinct keys; no live-bucket upload is
+  exercised.
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
   rejection before `Image.load()`.
 - **CRM owner coverage is serializer- and view-level**: a foreign owner is a 400 on create and its
@@ -1324,9 +1325,11 @@ release.
   an owner with no membership in the request organization, and `DealListSerializer` returns an
   empty `owner_name` for a foreign user; regression tests cover create rejection, same-org
   acceptance, and the read filter).
-- 2026-10-26 — `media-s3-fixed-path-overwrite`: **resolved** (SA311: the cloud `STORAGES` options
-  set `file_overwrite: False`; a fake-connection `S3Storage` test stores two same-filename uploads
-  under distinct keys, and the storage README documents the custom-config equivalent).
+- 2026-10-26 — `media-s3-fixed-path-overwrite`: **resolved** (SA311: the generated settings use the
+  module-owned `quickscale_modules_storage.backends.UniqueKeyS3Storage`, which adds a random token
+  to every allocated key; `file_overwrite: False` stays as a second guard. A fake-connection test
+  stores two same-filename uploads, and a barrier-forced concurrent pair, under distinct keys with
+  both payloads preserved; the storage README documents the custom-config equivalent).
 - 2026-10-26 — `orgs-admin-can-demote-owner`: **resolved** (SA311: `role_outranks_actor` refuses a
   member mutation whose target role outranks the actor, wired through `RoleChangeForm.clean_role`
   and both removal paths with platform operators exempt; HTML and JSON tests target an OWNER).

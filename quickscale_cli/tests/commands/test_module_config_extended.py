@@ -975,7 +975,7 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_STORAGE_BACKEND"] == "s3"
         assert (
             settings["STORAGES"]["default"]["BACKEND"]
-            == "storages.backends.s3.S3Storage"
+            == "quickscale_modules_storage.backends.UniqueKeyS3Storage"
         )
         assert (
             settings["STORAGES"]["staticfiles"]["BACKEND"]
