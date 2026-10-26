@@ -4,15 +4,15 @@
 
 ## Goal and finish line
 
-Cut over the regenerated `bap-web` at visual parity (SA191d), then deliver the first
-property portal in a project-owned extension (SA153), following
-[module conventions](module_conventions.md#module-conventions). Generalize capabilities only
-after that project proves their value. Alongside, close the 2026-10-23 audits' findings, starting
-with the defects that block publication.
+Cut over production to the regenerated `bap-web` as-is (SA191d), close the 2026-10-23 audits'
+findings (starting with the defects that block publication), and publish 0.89.0. The property
+portal (SA153, SA154) is deferred: it starts only after all hardening tickets close, production
+runs the regenerated `bap-web`, and 0.89.0 is on PyPI (see
+[Deferred — property portal](#deferred-property-portal)).
 
 **Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
 database. SA310 (S1) and SA311 (S2s) land, the tag is re-cut and re-validated, and the operator's
-Phases 5–6 sealing and PyPI publication follow SA191d ([publish_procedure.md](publish_procedure.md)).
+Phases 5–6 sealing and PyPI publication follow the re-cut tag and SA191d ([publish_procedure.md](publish_procedure.md)).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence and fix
@@ -49,50 +49,47 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
-| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191d, SA320 | Optional |
-| SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA153 (j) ─► [SA191d (production)] SA153 (f)
-         ─► SA320 (b → c) ─► SA321 ─► SA154
+Track 1: SA320 (b → c) ─► SA321
 Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
          ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
 Track 3: [SA191d (production)] SA277
-     release path: SA310, SA311 ─► re-cut 0.89.0 ─► SA191d ─► publication
-     portal path:  SA153 (j); SA191d (production) ─► SA153 (f)
+     release path: SA310, SA311 ─► re-cut 0.89.0 ─┐
+                   SA191d (production, as-is) ────┴─► publication
+     portal (deferred): all hardening closed + publication ─► SA153 ─► SA154
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA153 (f) needs SA191d (production); SA320 (b/c) do not gate SA153. SA277 waits for SA191d (production).
+SA277 waits for SA191d (production).
 SA191d's operator gates are idle time on Track 2, filled with SA310/SA311 and then the Optional
 module tickets. SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its
 checks. Operator publication of 0.89.0 follows SA191d and the re-cut tag. Each slice ships with
 its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change (SA310's optional
-version column, SA314's debit reference) ships as a new migration. SA153's own tables live in the
-project-owned extension as `0002+` migrations.
+version column, SA314's debit reference) ships as a new migration. When resumed, SA153's own tables
+live in the project-owned extension as `0002+` migrations.
 
 ### Track states
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA153 (j) | yes | no: SA191d (production) for SA153 (f) | yes: — |
+| 1 | SA320 (b) | yes | yes | yes: SA320, SA321 |
 | 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
-**Clearing blockers.** Track 1: SA191d (production) clears SA153 (f).
-Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
+**Clearing blockers.** Track 1: none. Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
 SA191d (production) clears SA277.
 
 ### Ownership and merge coordination
 
 - Track 1: generated-project templates (README, Compose, Docker, CI, Makefile, settings), the
-  theme and its managed hooks, release workflows, the project-owned property extension, React
-  pages, crawler views and journey checks.
+  theme and its managed hooks, and release workflows. The property extension, React pages,
+  crawler views and journey checks return with the deferred portal.
 - Track 2: `bap-web` cutover (SA191d), with joint publication and deployment; dependency
   manifests, locks and advisory disposition; module runtime code and tests in billing, CRM, orgs,
   auth, storage, forms, listings and notifications.
@@ -104,7 +101,7 @@ SA191d (production) clears SA277.
   `decisions.md`, `README.md.j2` (SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
   SA321), billing `_settings.py` (SA310, SA314), module manifests (SA320 (c)),
   `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
-  (`App.test.tsx`, `AppRoutes.test.tsx`; SA153 adds pages).
+  (`App.test.tsx`, `AppRoutes.test.tsx`).
   Reconcile after each merge and run the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -118,7 +115,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Track 1 — generated project and property portal
+### Track 1 — generated project
 
 - [ ] **SA320 — Deliver module resource contracts to user-owned pages through managed hooks.**
 
@@ -146,33 +143,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   without the flag; the rendered Railway config runs migrations pre-deploy; README and decisions
   name one production path (Tier 2-full).
 
-- [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
-
-  Target `buenosairesproperties.com` with one React public property surface over a project-owned
-  JSON read API under the [extension contract](module-extension.md), building on the React pages
-  and `/api/properties/` the port carried over. No public API in `listings`, no generic property
-  behavior in generated projects. Module-coupled data on new pages comes through the generated managed
-  hooks (arch `generated-file-ownership-unmodeled`), and project-owned tenant views
-  run in the generated isolation lane.
-
-  **Acceptance:** the served documents (per-request head and crawler summary), the sitemap and
-  robots views, and the search → detail → inquiry journey with organization isolation pass on the
-  deployed site, and the extension/tenant declarations pass in `manage.py check`.
-
-  **Slices:**
-  - [ ] (j) Close search → detail → inquiry gaps; test organization isolation
-    under the restricted role and the extension declarations, with module data accessed through
-    the managed hooks (Tier 2-full).
-  - [ ] (f) After (j) and SA191d (production), deploy and re-prove that journey on the live site
-    with operator approval and a tested deploy-revert path (Tier 2-full).
-
-- [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
-
-  Tier 1 inventory review only: promote reusable property/React pages, translations, maps,
-  saved searches, profiles, syndication, media, paid placement, cross-links or full-text search
-  only for a concrete consumer, with bounded acceptance, dependencies and a track. Otherwise
-  drop the item. Tenant schema changes use incremental migrations on the frozen history.
-
 ### Track 2 — cutover and module runtime defects
 
 **SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
@@ -187,7 +157,8 @@ live in `~/bap-cutover/` (mode 600), never printed or committed. After Railway's
 incident every old variable is exposed: none is carried, and the old PostgreSQL 17 credentials
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
 defect is fixed in `bap-web`. The module fixes below reach `bap-web` through its next ordinary
-update; the cutover does not wait for them.
+update; the cutover ships `bap-web` as-is and waits for none of them, not even the
+re-cut tag.
 
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
@@ -306,7 +277,7 @@ update; the cutover does not wait for them.
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
   Addresses the upgrade-path part of arch `generated-file-ownership-unmodeled`; managed
-  resource hooks are SA320's and SA153's scope. One path in two stages:
+  resource hooks are SA320's scope (and the deferred SA153's). One path in two stages:
   `beta_migration` does what it can mechanically; the prompt-driven port (`MIGRATION_PROMPT.md`,
   `CUTOVER.md`) handles what it reports it could not.
 
@@ -328,6 +299,41 @@ The [architecture audit](../others/arch-audit.md) and [technical audit](../other
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
 Standing scope rules, presence contracts, and resource safeguards live in [decisions](decisions.md)
 and [validation policy](validation_policy.md#candidate-review-and-integration).
+
+<a id="deferred-property-portal"></a>
+
+### Deferred — property portal (Track 1)
+
+Not scheduled. Resumes only when SA310, SA311, SA314, SA315, SA320, SA321, SA323 and SA324 are
+closed, SA191d (production) has passed, and 0.89.0 is published; it is then re-added to the
+scheduling table on top of the deployed `bap-web`.
+
+**SA153 — Deliver the first property portal using project-owned extensions.**
+
+Target `buenosairesproperties.com` with one React public property surface over a project-owned
+JSON read API under the [extension contract](module-extension.md), building on the React pages
+and `/api/properties/` the port carried over. No public API in `listings`, no generic property
+behavior in generated projects. Module-coupled data on new pages comes through the generated managed
+hooks (arch `generated-file-ownership-unmodeled`), and project-owned tenant views
+run in the generated isolation lane.
+
+**Acceptance:** the served documents (per-request head and crawler summary), the sitemap and
+robots views, and the search → detail → inquiry journey with organization isolation pass on the
+deployed site, and the extension/tenant declarations pass in `manage.py check`.
+
+**Slices:**
+- (j) Close search → detail → inquiry gaps; test organization isolation
+  under the restricted role and the extension declarations, with module data accessed through
+  the managed hooks (Tier 2-full).
+- (f) After (j), deploy and re-prove that journey on the live site
+  with operator approval and a tested deploy-revert path (Tier 2-full).
+
+**SA154 — Property-portal capabilities to promote when a project needs them (after SA153).**
+
+Tier 1 inventory review only: promote reusable property/React pages, translations, maps,
+saved searches, profiles, syndication, media, paid placement, cross-links or full-text search
+only for a concrete consumer, with bounded acceptance, dependencies and a track. Otherwise
+drop the item. Tenant schema changes use incremental migrations on the frozen history.
 
 **Unscheduled — React-theme browser coverage (Track 1, Tier 2-full per ordered slice).**
 When activated: (A) wire `pnpm test:e2e` into generated CI and prove the existing smoke;
