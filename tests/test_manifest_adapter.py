@@ -464,7 +464,17 @@ class TestCloudUploadKeyUniqueness:
         assert storage.payloads == {first: b"first", second: b"second"}
         assert options["file_overwrite"] is False
 
-    def test_concurrent_same_filename_uploads_keep_both_payloads(self) -> None:
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "listings/images/shared.jpg",
+            "listings/images/x." + ("a" * 75) + ".jpg",
+        ],
+        ids=["plain", "multi-dot"],
+    )
+    def test_concurrent_same_filename_uploads_keep_both_payloads(
+        self, filename: str
+    ) -> None:
         """Two writers that both see a free key still get distinct keys."""
         pytest.importorskip("storages.backends.s3")
         from django.core.files.base import ContentFile
@@ -482,8 +492,9 @@ class TestCloudUploadKeyUniqueness:
         def upload(payload: bytes) -> None:
             try:
                 name = storage.save(
-                    "listings/images/shared.jpg",
+                    filename,
                     ContentFile(payload),
+                    max_length=100,
                 )
             except BaseException as error:  # pragma: no cover - failure path
                 with results_lock:
@@ -504,6 +515,7 @@ class TestCloudUploadKeyUniqueness:
         assert errors == []
         assert len(results) == 2
         assert len(set(results)) == 2
+        assert all(len(name) <= 100 for name in results)
         assert set(storage.payloads) == set(results)
         assert sorted(storage.payloads.values()) == [b"org-a", b"org-b"]
 
