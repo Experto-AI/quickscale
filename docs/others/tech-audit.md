@@ -45,6 +45,14 @@ audit evidence and now carry `status: fixed`:
 the provider's current subscription under the organization's provider mutex before applying its
 status.
 
+**Fix record (2026-10-26).** SA311 closes four findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`: `crm-deal-owner-cross-tenant`,
+`media-s3-fixed-path-overwrite`, `orgs-admin-can-demote-owner`, and
+`forms-null-optional-field-500`. A deal owner must be a member of the request organization and a
+foreign owner's name is not serialized; a member mutation cannot target a role above the actor's;
+cloud uploads disable key overwrite; and a JSON `null` in an optional public form field is stored
+empty on both persistence branches.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -181,20 +189,20 @@ items:
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_settings.py,
                quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout_steps.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: crm-deal-owner-cross-tenant, status: open, severity: S2, category: III,
+  - {id: crm-deal-owner-cross-tenant, status: fixed, severity: S2, category: III,
      title: "Deal owner accepts a foreign-tenant user id and the list serializes that user's name",
      effort: Small, confidence: High, reality: generated-project,
      anchors: [quickscale_modules/crm/src/quickscale_modules_crm/serializers.py,
                quickscale_modules/crm/src/quickscale_modules_crm/views.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: media-s3-fixed-path-overwrite, status: open, severity: S2, category: III,
+  - {id: media-s3-fixed-path-overwrite, status: fixed, severity: S2, category: III,
      title: "Fixed upload paths plus S3 overwrite replace another user's or tenant's media", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/storage/src/quickscale_modules_storage/adapter.py,
                quickscale_modules/listings/src/quickscale_modules_listings/models.py,
                quickscale_modules/blog/src/quickscale_modules_blog/models.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: orgs-admin-can-demote-owner, status: open, severity: S2, category: III,
+  - {id: orgs-admin-can-demote-owner, status: fixed, severity: S2, category: III,
      title: "An org ADMIN can demote or remove an OWNER through the member API", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/_view_org_management.py,
@@ -214,7 +222,7 @@ items:
      anchors: [quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2,
                quickscale_core/src/quickscale_core/generator/templates/pyproject.toml.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: forms-null-optional-field-500, status: open, severity: S2, category: I,
+  - {id: forms-null-optional-field-500, status: fixed, severity: S2, category: I,
      title: "A JSON null in an optional public form field raises IntegrityError and 500", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/serializers.py,
@@ -465,8 +473,7 @@ Rows record audit-time severity; current status is in the machine-readable index
 | `notifications-message-status-aggregate-race` | S4 | II | Concurrent sibling webhooks leave the aggregate stale | Trivial | Medium | carried |
 | `forms-retention-skips-null-ip-rows` | S4 | IX | Retention skips rows stored without an IP | Trivial | High | carried |
 
-Quick wins (Trivial effort, S2/S3): `forms-null-optional-field-500`,
-`billing-invoice-payment-failed-unscoped`, `backups-prune-no-keep-last`.
+Quick wins (Trivial effort, open S2/S3): `billing-invoice-payment-failed-unscoped`.
 
 ## Findings
 
@@ -985,23 +992,18 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 
 ## Fix order and batching
 
-**Land first (S1/S2, independent):**
-
-1. `billing-subscription-checkout-metadata-key-too-long` — one-line rename, no dependency.
-2. `crm-deal-owner-cross-tenant` — serializer validation + read filter; independent.
-3. `media-s3-fixed-path-overwrite` — storage option + test; independent.
-4. `orgs-admin-can-demote-owner` — actor-rank check in form + API; independent.
-5. `forms-null-optional-field-500` — normalize/reject; independent.
-6. `billing-webhook-status-applied-out-of-order` — provider re-fetch or version column; needs a
-   migration if the version approach is chosen.
+**S1/S2 batch is closed.** The two billing findings are fixed by SA310, and
+`crm-deal-owner-cross-tenant`, `media-s3-fixed-path-overwrite`,
+`orgs-admin-can-demote-owner` and `forms-null-optional-field-500` are fixed by SA311 (see the
+machine-readable index above); no S1/S2 finding remains open.
 
 **Then (S3), in three batches:**
 
 - **Billing batch:** `billing-invoice-payment-failed-unscoped`,
   `billing-credit-services-missing-org-scope`, `billing-debit-not-idempotent`,
-  `billing-checkout-double-submit`, `billing-zero-credit-plan-webhook-loop`. Land the webhook-ordering
-  fix first (same files/tests); the credit/idempotency changes touch `_credits.py` and need a
-  migration for the reference constraint.
+  `billing-checkout-double-submit`, `billing-zero-credit-plan-webhook-loop`. The webhook-ordering
+  fix has landed (SA310); the credit/idempotency changes touch `_credits.py` and need a migration
+  for the reference constraint.
 - **Backups batch:** `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
@@ -1030,20 +1032,20 @@ reviewers.
   parity, RLS targets, and the current-subscription constraint verified. Metadata-key and ordering
   regressions run against a fake provider; the real test-mode subscription Checkout is
   credential-gated in `test_stripe_contract.py`.
-- **Orgs:** findings `orgs-admin-can-demote-owner`, `orgs-bulk-delete-leaves-zero-owners`, two S4s,
-  and four watchlist items; RLS predicate, purge atomicity, `TenantManager`, invitation throttle, and
-  content-route roles verified.
+- **Orgs:** `orgs-admin-can-demote-owner` is fixed; `orgs-bulk-delete-leaves-zero-owners`, two S4s,
+  and four watchlist items remain; RLS predicate, purge atomicity, `TenantManager`, invitation
+  throttle, and content-route roles verified.
 - **Backups/DR:** five human-scale S3/S4s; checksum/migration identity, admin upload trusted
   match, and the environment gate verified. The RLS/runtime-role path was reproduced (resolved as
   SA313).
 - **Auth:** `auth-profile-email-change-desync` and `auth-deletion-logs-pii`; allauth config,
   account-deletion guard, session rotation, and email-verification default (watchlist) verified.
-- **CRM:** `crm-deal-owner-cross-tenant`; org-scoped reads, contact/stage/tag validation, bulk stage
-  filters, and CSV-free exports verified.
-- **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite`,
-  `media-image-decode-before-dimension-cap`, `forms-null-optional-field-500`, and three S4s;
-  extension-from-format, SVG exclusion, public/private media split, CSV formula neutralization, and
-  retention (prior S4) verified.
+- **CRM:** `crm-deal-owner-cross-tenant` is fixed; org-scoped reads, contact/stage/tag/owner
+  validation, bulk stage filters, and CSV-free exports verified.
+- **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite` and
+  `forms-null-optional-field-500` are fixed; `media-image-decode-before-dimension-cap` and three S4s
+  remain; extension-from-format, SVG exclusion, public/private media split, CSV formula
+  neutralization, and retention (prior S4) verified.
 - **CLI:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`; argv-list subprocess,
   advisory locks, theme preflight, and apply checkpoint/rollback verified.
 - **Core generator/DR:** the restore/prune/lock items and the fixed S4 README/ignore items;
@@ -1114,12 +1116,13 @@ reviewers.
   status, so a late delivery cannot overwrite newer provider state. Remaining: a failed invoice
   with no subscription id still resolves the customer's current subscription
   (`billing-invoice-payment-failed-unscoped`, SA314).
-- **Media ownership/lifecycle is not modeled**: fixed upload paths, no org/user key segment, and no
-  generic cleanup on row/tenant deletion. The ticket is `media-s3-fixed-path-overwrite`; the
-  structural fix is a media-asset owner/key model.
-- **Org hierarchy authorization is per form/UI, not a shared policy**: admins and owners are checked
-  in several views/forms, and the UI hides actions the server does not enforce. The ticket is
-  `orgs-admin-can-demote-owner`.
+- **Media ownership/lifecycle is still not modeled** (SA311 closes the overwrite vector): cloud
+  uploads never replace an existing key, but fixed upload paths carry no organization or user
+  segment and row/tenant deletion has no generic cleanup. The structural fix is a media-asset
+  owner/key model.
+- **Org hierarchy authorization has one rank rule but no single policy seam** (SA311):
+  `role_outranks_actor` guards member role changes and removals; other owner/admin checks stay per
+  view and form.
 - **The generator's Jinja environment disables autoescape for every template, including HTML**: it
   is safe only while every rendered value is validated; a future project-name/module field rendered
   into HTML would be an injection sink. No live injection found.
@@ -1136,11 +1139,13 @@ reviewers.
   real subscription Checkout when `STRIPE_TEST_SECRET_KEY` is set and enumerates every
   metadata-key constant against Stripe's 40-character limit; the late subscription and invoice
   replays live in `tests/test_subscriptions.py`, and the live case skips without credentials.
-- **No S3 overwrite test**: the storage tests use `FileSystemStorage`, which auto-renames; add a
-  fake S3 backend test asserting distinct keys, and a cross-org upload test.
+- **S3 overwrite coverage is fake-backend only**: `test_manifest_adapter.py` runs the real
+  `S3Storage` name allocator against a recording connection and proves two same-filename uploads
+  get distinct keys; no live-bucket upload is exercised.
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
   rejection before `Image.load()`.
-- **No cross-org owner test**: add the CRM serializer test.
+- **CRM owner coverage is serializer- and view-level**: a foreign owner is a 400 on create and its
+  name is hidden from the list; a live membership-removal round trip is not exercised.
 - **Secret scanning is working-tree-only (fixed 2026-10-25)**: `check_secret_scanning.py` now runs
   `gitleaks dir` and `gitleaks git` over every commit reachable from `HEAD`, so a deleted credential
   stays visible. Value-level exemptions moved out of `gitleaks.toml` into
@@ -1314,3 +1319,17 @@ release.
   and invoice handlers retrieve the provider's current subscription under the organization's
   provider mutex and apply its status, so a late delivery cannot overwrite a newer provider
   status; tests replay a late update after deletion and a late failure after payment).
+
+- 2026-10-26 — `crm-deal-owner-cross-tenant`: **resolved** (SA311: `DealDetailSerializer` rejects
+  an owner with no membership in the request organization, and `DealListSerializer` returns an
+  empty `owner_name` for a foreign user; regression tests cover create rejection, same-org
+  acceptance, and the read filter).
+- 2026-10-26 — `media-s3-fixed-path-overwrite`: **resolved** (SA311: the cloud `STORAGES` options
+  set `file_overwrite: False`; a fake-connection `S3Storage` test stores two same-filename uploads
+  under distinct keys, and the storage README documents the custom-config equivalent).
+- 2026-10-26 — `orgs-admin-can-demote-owner`: **resolved** (SA311: `role_outranks_actor` refuses a
+  member mutation whose target role outranks the actor, wired through `RoleChangeForm.clean_role`
+  and both removal paths with platform operators exempt; HTML and JSON tests target an OWNER).
+- 2026-10-26 — `forms-null-optional-field-500`: **resolved** (SA311: `_create_field_values`
+  normalizes a JSON `null` to the empty string on both the accepted and honeypot persistence
+  branches; regression tests assert 201 and an empty stored value, never 500).

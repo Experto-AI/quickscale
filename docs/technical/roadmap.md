@@ -12,7 +12,7 @@ production runs 0.89.0, and 0.89.0 is on PyPI (see
 [Deferred — property portal](#deferred-property-portal)).
 
 **Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
-database. All hardening tickets (SA311, SA314, SA315, SA320, SA321, SA323, SA324) land,
+database. All hardening tickets (SA314, SA315, SA320, SA321, SA323, SA324) land,
 the tag is re-cut, `bap-web` adopts it, SA191d (re-proof) is the release's final validation on
 `develop`, SA191d (production) ships the same tag, and the operator's Phases 5–6 sealing and PyPI
 publication follow ([publish_procedure.md](publish_procedure.md)).
@@ -43,21 +43,20 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA311, SA314, SA315, SA320, SA321, SA323, SA324 | Required |
-| SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA314, SA315, SA320, SA321, SA323, SA324 | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | — | Required |
-| SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Required |
+| SA315 | Close orgs and auth lifecycle defects | 2 | — | Required |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Required |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Required |
-| SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Required |
-| SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Required |
+| SA323 | Harden module upload, form, export and notification paths | 2 | — | Required |
+| SA324 | Make tenant contract evidence and write services coherent | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA320 (b → c) ─► SA321
-Track 2: SA311 ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
+Track 2: SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
          ─► SA191d (re-proof → production → retire, operator-gated)
 Track 3: [SA191d (production)] SA277
      release path: all hardening ─► re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof on develop)
@@ -82,7 +81,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA320 (b) — in progress | yes | yes | yes: SA320, SA321 |
-| 2 | SA311 | yes | yes | yes: SA311, SA314, SA315, SA323, SA324 |
+| 2 | SA314 | yes | yes | yes: SA314, SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -191,16 +190,7 @@ conformance check on `properties.PropertyAgent` and siblings.
 
 - [x] **SA310 — Fix the subscription Checkout S1 and apply billing webhooks in provider order.**
 
-- [ ] **SA311 — Close the S2 tenant-boundary defects in CRM, orgs, storage and forms.**
-
-  Closes tech `crm-deal-owner-cross-tenant`, `orgs-admin-can-demote-owner`,
-  `media-s3-fixed-path-overwrite`, and `forms-null-optional-field-500`. Each fix tightens an
-  existing boundary along the audit's stated fix; none widens access.
-
-  **Acceptance:** a deal owner from another organization is rejected and its name never
-  serialized; an ADMIN cannot demote or remove an OWNER through the form or the API; two
-  organizations uploading the same filename to a fake S3 backend get distinct keys; a JSON `null`
-  in an optional public form field is stored empty or rejected with 400, never 500 (Tier 2-full).
+- [x] **SA311 — Close the S2 tenant-boundary defects in CRM, orgs, storage and forms.**
 
 - [ ] **SA314 — Make billing credits, Checkout and gates idempotent and tenant-correct.**
 
@@ -301,7 +291,7 @@ and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 ### Deferred — property portal (Track 1)
 
-Not scheduled. Resumes only when SA311, SA314, SA315, SA320, SA321, SA323 and SA324 are
+Not scheduled. Resumes only when SA314, SA315, SA320, SA321, SA323 and SA324 are
 closed, SA191d (production) has passed, and 0.89.0 is published; it is then re-added to the
 scheduling table on top of the deployed `bap-web`.
 

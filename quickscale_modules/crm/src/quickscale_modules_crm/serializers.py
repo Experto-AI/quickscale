@@ -3,6 +3,8 @@
 from django.db import models
 from rest_framework import serializers
 
+from quickscale_modules_orgs.models import OrganizationMembership
+
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 
 
@@ -525,10 +527,25 @@ class DealListSerializer(serializers.ModelSerializer):
         return obj.stage.name if obj.stage else ""
 
     def get_owner_name(self, obj: Deal) -> str:
-        """Return the name of the deal owner"""
-        if obj.owner:
-            return str(obj.owner)
-        return ""
+        """Return the owner name, omitting foreign-org owners on org-scoped reads.
+
+        A user is foreign when they hold no membership in the active
+        organization.  The deal row keeps the owner reference (its FK is
+        nullable and history is preserved), but the name is never serialized
+        to a caller outside that owner's organization.
+        """
+        org_id = _read_org_id(self)
+        if obj.owner is None:
+            return ""
+        if (
+            org_id is not None
+            and not OrganizationMembership.objects.filter(
+                organization_id=org_id,
+                user=obj.owner,
+            ).exists()
+        ):
+            return ""
+        return str(obj.owner)
 
     def get_tag_names(self, obj: Deal) -> list[str]:
         """Return list of tag names.
@@ -620,9 +637,10 @@ class DealDetailSerializer(serializers.ModelSerializer):
     def validate(self, attrs: dict) -> dict:
         """Reject foreign-org related IDs on all create and update routes.
 
-        When creating or updating, the related contact, stage, and tags
+        When creating or updating, the related contact, stage, owner, and tags
         must belong to the same organization (or have NULL organization for
         legacy/solo compatibility). Foreign-org references are rejected.
+        A submitted owner must be a current member of the active organization.
         The active organization is resolved from ``request.org`` (set by
         middleware). No personal-org fallback is performed.
         """
@@ -653,6 +671,20 @@ class DealDetailSerializer(serializers.ModelSerializer):
                         "stage_id": "The specified stage does not belong to this organization."
                     }
                 )
+
+        # Validate the owner is a member of the current org.  A user has no
+        # organization column, so the membership row is the tenant boundary.
+        owner = attrs.get("owner")
+        if (
+            owner is not None
+            and not OrganizationMembership.objects.filter(
+                organization_id=org_id,
+                user=owner,
+            ).exists()
+        ):
+            raise serializers.ValidationError(
+                {"owner": "The specified owner is not a member of this organization."}
+            )
 
         # Validate tag_ids belong to the current org.
         tags = attrs.get("tags")
