@@ -29,7 +29,7 @@ MODULE_SETTINGS: dict[str, object] = {'AWS_ACCESS_KEY_ID': os.environ.get("AWS_A
  'QUICKSCALE_STORAGE_PUBLIC_BASE_URL': '',
  'QUICKSCALE_STORAGE_SECRET_ACCESS_KEY': os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
  'QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR': 'AWS_SECRET_ACCESS_KEY',
- 'STORAGES': {'default': {'BACKEND': 'quickscale_modules_storage.backends.UniqueKeyS3Storage',
+ 'STORAGES': {'default': {'BACKEND': 'quickscale_modules_storage._backends.UniqueKeyS3Storage',
                           'OPTIONS': {'bucket_name': 'demo-bucket',
                                       'file_overwrite': False,
                                       'querystring_auth': False,

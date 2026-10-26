@@ -187,7 +187,7 @@ class TestStorageManifestAdapter:
         assert spec.settings["QUICKSCALE_STORAGE_BACKEND"] == backend
         assert spec.settings["STORAGES"] == {
             "default": {
-                "BACKEND": "quickscale_modules_storage.backends.UniqueKeyS3Storage",
+                "BACKEND": "quickscale_modules_storage._backends.UniqueKeyS3Storage",
                 "OPTIONS": {
                     "querystring_auth": False,
                     "file_overwrite": False,
@@ -265,7 +265,7 @@ class TestStorageManifestAdapter:
         assert spec.settings["MEDIA_URL"] == "/uploads/"
         assert spec.settings["STORAGES"] == {
             "default": {
-                "BACKEND": "quickscale_modules_storage.backends.UniqueKeyS3Storage",
+                "BACKEND": "quickscale_modules_storage._backends.UniqueKeyS3Storage",
                 "OPTIONS": {"querystring_auth": True, "file_overwrite": False},
             },
             "staticfiles": {
@@ -423,7 +423,7 @@ class TestCloudUploadKeyUniqueness:
     ) -> Any:
         """Real allocation and save path with the provider connection faked."""
         pytest.importorskip("storages.backends.s3")
-        from quickscale_modules_storage.backends import UniqueKeyS3Storage
+        from quickscale_modules_storage._backends import UniqueKeyS3Storage
 
         class RecordingStorage(UniqueKeyS3Storage):
             def __init__(self, **settings: Any) -> None:
@@ -452,7 +452,7 @@ class TestCloudUploadKeyUniqueness:
 
         spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
         assert spec.settings["STORAGES"]["default"]["BACKEND"] == (
-            "quickscale_modules_storage.backends.UniqueKeyS3Storage"
+            "quickscale_modules_storage._backends.UniqueKeyS3Storage"
         )
         options = spec.settings["STORAGES"]["default"]["OPTIONS"]
         storage = self._recording_storage(options)

@@ -43,7 +43,7 @@ def _cloud_storage_settings(resolved: ResolvedOptions) -> dict[str, Any]:
     settings: dict[str, Any] = {
         "STORAGES": {
             "default": {
-                "BACKEND": "quickscale_modules_storage.backends.UniqueKeyS3Storage",
+                "BACKEND": "quickscale_modules_storage._backends.UniqueKeyS3Storage",
                 "OPTIONS": storage_options,
             },
             "staticfiles": {

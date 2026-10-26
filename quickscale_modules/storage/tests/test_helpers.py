@@ -119,7 +119,7 @@ class TestSelectStorageBackend:
         assert resolved.backend == "s3"
         assert resolved.use_s3_compatible is True
         assert resolved.django_backend == (
-            "quickscale_modules_storage.backends.UniqueKeyS3Storage"
+            "quickscale_modules_storage._backends.UniqueKeyS3Storage"
         )
         assert resolved.options["bucket_name"] == "my-bucket"
         assert "custom_domain" not in resolved.options

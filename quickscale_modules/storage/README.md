@@ -56,7 +56,7 @@ private-media authorization, so the switch never had an effect. Public media del
 current contract; private-media authorization arrives as a separate, enforced surface.
 
 Cloud uploads allocate a fresh object key for every save. The module's S3-compatible
-`STORAGES["default"]` backend (`quickscale_modules_storage.backends.UniqueKeyS3Storage`) appends a
+`STORAGES["default"]` backend (`quickscale_modules_storage._backends.UniqueKeyS3Storage`) appends a
 random token to the allocated key, so two uploads of the same filename — including concurrent ones
 that both see the key as free — are stored under distinct keys instead of one replacing the other
 tenant's media. It keeps `file_overwrite: False` (equivalent to
