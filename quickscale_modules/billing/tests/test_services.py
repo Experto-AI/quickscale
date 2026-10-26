@@ -1996,6 +1996,142 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
 
 
 @pytest.mark.django_db
+def test_invoice_paid_backfill_keeps_the_provider_current_status(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A backfilled subscription keeps the provider's status, not active."""
+    plan = _create_plan(price_id="price_backfill_provider_status")
+    event = _invoice_paid_event(
+        event_id="evt_backfill_provider_status",
+        invoice_id="in_backfill_provider_status",
+        customer_id="cus_backfill_provider_status",
+        price_id=plan.stripe_price_id,
+        user_reference=_user_reference(user),
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client = FakeStripeClient(
+        event=event,
+        subscriptions={
+            "sub_123": subscription_object(
+                subscription_id="sub_123",
+                customer_id="cus_backfill_provider_status",
+                price_id=plan.stripe_price_id,
+                status="past_due",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
+    )
+    monkeypatch.setattr(
+        settings,
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_backfill_provider_status",
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_backfill_provider_status"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    subscription = Subscription.all_objects.get(organization=organization)
+    assert result.status == "processed"
+    assert subscription.status == Subscription.Status.PAST_DUE
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
+
+
+@pytest.mark.django_db
+def test_invoice_paid_org_discovery_refreshes_provider_truth_under_the_mutex(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A snapshot fetched for org discovery is refreshed before it is applied."""
+    from contextlib import contextmanager
+
+    from quickscale_modules_orgs.current_org import org_scope
+
+    plan = _create_plan(price_id="price_backfill_refresh")
+    event = _invoice_paid_event(
+        event_id="evt_backfill_refresh",
+        invoice_id="in_backfill_refresh",
+        customer_id="cus_backfill_refresh",
+        price_id=plan.stripe_price_id,
+        user_reference=_user_reference(user),
+    )
+    # No organization metadata or local customer mapping: the provider payload
+    # supplies the organization for the mutex key.
+    fake_client = FakeStripeClient(
+        event=event,
+        subscriptions={
+            "sub_123": subscription_object(
+                subscription_id="sub_123",
+                customer_id="cus_backfill_refresh",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={
+                    "quickscale_org_reference": _organization_reference(organization),
+                    "stripe_price_id": plan.stripe_price_id,
+                },
+            )
+        },
+    )
+    canceled_payload = subscription_object(
+        subscription_id="sub_123",
+        customer_id="cus_backfill_refresh",
+        price_id=plan.stripe_price_id,
+        status="canceled",
+        metadata={
+            "quickscale_org_reference": _organization_reference(organization),
+            "stripe_price_id": plan.stripe_price_id,
+        },
+    )
+    original_lock = _locks.subscription_provider_mutation_lock
+
+    @contextmanager
+    def apply_newer_delivery_before_lock(locked_organization: Any):
+        with org_scope(organization):
+            Subscription.all_objects.create(
+                user=user,
+                organization=organization,
+                plan=plan,
+                stripe_customer_id="cus_backfill_refresh",
+                stripe_subscription_id="sub_123",
+                status=Subscription.Status.CANCELED,
+            )
+        fake_client.subscriptions["sub_123"] = canceled_payload
+        with original_lock(locked_organization):
+            yield
+
+    monkeypatch.setattr(
+        _locks,
+        "subscription_provider_mutation_lock",
+        apply_newer_delivery_before_lock,
+    )
+    monkeypatch.setattr(
+        settings,
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_backfill_refresh",
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_backfill_refresh"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    subscription = Subscription.all_objects.get(organization=organization)
+    assert result.status == "processed"
+    assert subscription.status == Subscription.Status.CANCELED
+    assert fake_client.retrieved_subscription_ids == ["sub_123", "sub_123"]
+
+
+@pytest.mark.django_db
 def test_invoice_paid_unresolved_org_holds_one_lock_through_backfill_and_credit(
     user,
     organization,
@@ -2064,6 +2200,7 @@ def test_invoice_paid_unresolved_org_holds_one_lock_through_backfill_and_credit(
     assert events == [
         ("retrieve", "sub_123"),
         ("lock-enter", organization.pk),
+        ("retrieve", "sub_123"),
         ("lock-exit", organization.pk),
     ]
     assert (
@@ -2292,7 +2429,20 @@ def test_subscription_affecting_webhooks_hold_provider_mutation_lock(
             price_id=plan.stripe_price_id,
         )
         event["type"] = event_type
-        _webhooks_invoice._handle_invoice_payment_failed_event(event)
+        _webhooks_invoice._handle_invoice_payment_failed_event(
+            event,
+            stripe_client=FakeStripeClient(
+                subscriptions={
+                    "sub_123": subscription_object(
+                        subscription_id="sub_123",
+                        customer_id="cus_invoice_failed_lock",
+                        price_id=plan.stripe_price_id,
+                        status="past_due",
+                        metadata={"stripe_price_id": plan.stripe_price_id},
+                    )
+                }
+            ),
+        )
     else:
         monkeypatch.setattr(
             _resolution,
@@ -2337,7 +2487,16 @@ def test_invoice_paid_reloads_subscription_after_organization_lock(
             invoice_id="in_invoice_reload",
             customer_id="cus_invoice_reload",
             price_id=plan.stripe_price_id,
-        )
+        ),
+        subscriptions={
+            "sub_123": subscription_object(
+                subscription_id="sub_123",
+                customer_id="cus_invoice_reload",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
     )
     original_lock = _locks._lock_organization_for_billing_mutation
     state_changed = False

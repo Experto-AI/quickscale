@@ -58,9 +58,8 @@ _PLAN_CREDITS_METADATA_KEY = "quickscale_plan_credits"
 _PLAN_INTERVAL_METADATA_KEY = "quickscale_plan_interval"
 _PRICE_ID_METADATA_KEY = "stripe_price_id"
 _PURCHASE_CHECKOUT_REFERENCE_METADATA_KEY = "quickscale_purchase_checkout_reference"
-_SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY = (
-    "quickscale_subscription_checkout_reference"
-)
+# Stripe caps metadata keys at 40 characters; keep every key constant under it.
+_SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY = "quickscale_sub_checkout_reference"
 _CREDITABLE_INVOICE_BILLING_REASONS = frozenset(
     {"subscription_create", "subscription_cycle"}
 )

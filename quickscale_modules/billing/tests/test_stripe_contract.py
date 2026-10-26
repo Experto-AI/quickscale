@@ -2,16 +2,21 @@
 
 These tests exercise the real ``stripe`` SDK: payloads are built from SDK
 objects, webhook bodies are signed locally, and ``StripeClient`` verifies them
-through the installed SDK. No network access is required.
+through the installed SDK. No network access is required, except for the one
+test gated on ``STRIPE_TEST_SECRET_KEY``, which creates a real test-mode
+subscription Checkout when that key is present.
 """
 
 from __future__ import annotations
 import quickscale_modules_billing._payload as _payload
+import quickscale_modules_billing._settings as _settings
 import quickscale_modules_billing._validation as _validation
 
+from contextlib import suppress
 import hashlib
 import hmac
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import time
@@ -95,6 +100,102 @@ def _signed_body(
 
 def _real_stripe_client() -> StripeClient:
     return StripeClient(stripe_module=stripe, api_key=TEST_API_KEY)
+
+
+_LIVE_TEST_SECRET_KEY = os.environ.get("STRIPE_TEST_SECRET_KEY", "").strip()
+
+
+def test_every_stripe_metadata_key_fits_the_provider_limit() -> None:
+    """Stripe refuses metadata keys longer than 40 characters (its contract)."""
+    metadata_key_constants = {
+        name: value
+        for name, value in vars(_settings).items()
+        if name.endswith("_METADATA_KEY") and isinstance(value, str)
+    }
+
+    assert metadata_key_constants
+    assert {
+        name: key for name, key in metadata_key_constants.items() if len(key) > 40
+    } == {}
+
+
+@pytest.mark.django_db
+def test_rendered_checkout_metadata_keys_fit_the_provider_limit(
+    user,
+    organization,
+) -> None:
+    """The generated Checkout metadata, inline keys included, is provider-valid."""
+    plan = _create_plan(price_id="price_metadata_limit")
+    metadata = _payload._build_checkout_session_metadata(
+        user,
+        plan,
+        organization=organization,
+    )
+    metadata[_settings._SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY] = (
+        "quickscale_billing.subscription:1"
+    )
+
+    assert {key for key in metadata if len(key) > 40} == set()
+
+
+@pytest.mark.skipif(
+    not _LIVE_TEST_SECRET_KEY.startswith("sk_test_"),
+    reason="STRIPE_TEST_SECRET_KEY is not set to a Stripe test-mode key.",
+)
+def test_subscription_checkout_is_accepted_by_stripe_test_mode() -> None:
+    """The provider accepts the subscription Checkout the module builds."""
+    stripe.api_key = _LIVE_TEST_SECRET_KEY
+    stripe.api_version = STRIPE_API_VERSION
+    customer = stripe.Customer.create(
+        email="quickscale-contract@example.com",
+        metadata={"purpose": "quickscale-subscription-contract"},
+    )
+    product = stripe.Product.create(name="QuickScale subscription contract")
+    price = stripe.Price.create(
+        product=product.id,
+        unit_amount=1900,
+        currency="usd",
+        recurring={"interval": "month"},
+    )
+    metadata = {
+        _settings._ORG_REFERENCE_METADATA_KEY: "quickscale_orgs.organization:1",
+        _settings._USER_METADATA_KEY: "auth.user:1",
+        _settings._PLAN_SLUG_METADATA_KEY: "contract",
+        _settings._PLAN_CREDITS_METADATA_KEY: "100",
+        _settings._PLAN_INTERVAL_METADATA_KEY: "monthly",
+        _settings._PRICE_ID_METADATA_KEY: price.id,
+        _settings._SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY: (
+            "quickscale_billing.subscription:1"
+        ),
+    }
+    try:
+        client = StripeClient(
+            stripe_module=stripe,
+            api_key=_LIVE_TEST_SECRET_KEY,
+        )
+        session = client.create_subscription_checkout_session(
+            customer_id=customer.id,
+            price_id=price.id,
+            success_url="https://example.com/billing/subscription/success",
+            cancel_url="https://example.com/billing/subscription/cancel",
+            session_metadata=metadata,
+            subscription_metadata=metadata,
+            client_reference_id="auth.user:1",
+        )
+
+        assert session["mode"] == "subscription"
+        assert str(session["id"]).startswith("cs_")
+        assert session["client_reference_id"] == "auth.user:1"
+        assert session["metadata"][
+            _settings._SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY
+        ] == ("quickscale_billing.subscription:1")
+    finally:
+        with suppress(stripe.StripeError):
+            stripe.Customer.delete(customer.id)
+        with suppress(stripe.StripeError):
+            stripe.Price.modify(price.id, active=False)
+        with suppress(stripe.StripeError):
+            stripe.Product.modify(product.id, active=False)
 
 
 def test_normalize_mapping_keeps_real_sdk_object_identity() -> None:
@@ -574,11 +675,19 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
         _organization_reference(organization)
     )
     body, signature = _signed_body(updated_event)
+    stripe_client = _real_stripe_client()
+    provider_payload: dict[str, Any] = {"object": updated_event["data"]["object"]}
+
+    def retrieve_subscription(*, stripe_subscription_id: str) -> dict[str, Any]:
+        del stripe_subscription_id
+        return provider_payload["object"]
+
+    monkeypatch.setattr(stripe_client, "retrieve_subscription", retrieve_subscription)
 
     result = handle_stripe_event(
         body=body,
         signature=signature,
-        stripe_client=_real_stripe_client(),
+        stripe_client=stripe_client,
     )
     subscription.refresh_from_db()
 
@@ -604,11 +713,12 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
         _organization_reference(organization)
     )
     body, signature = _signed_body(bound_less_event)
+    provider_payload["object"] = bound_less_event["data"]["object"]
 
     handle_stripe_event(
         body=body,
         signature=signature,
-        stripe_client=_real_stripe_client(),
+        stripe_client=stripe_client,
     )
     subscription.refresh_from_db()
 

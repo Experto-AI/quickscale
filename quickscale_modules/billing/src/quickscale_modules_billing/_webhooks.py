@@ -107,7 +107,9 @@ def _process_verified_stripe_event(
             )
             processing_status = "processed"
         elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
-            _webhooks_invoice._handle_invoice_payment_failed_event(event_payload)
+            _webhooks_invoice._handle_invoice_payment_failed_event(
+                event_payload, stripe_client=stripe_client
+            )
             processing_status = "processed"
         elif event_type in {
             STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_CREATED,
@@ -115,7 +117,9 @@ def _process_verified_stripe_event(
             STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED,
         }:
             _subscription_events._handle_subscription_event(
-                event_payload, event_type=event_type
+                event_payload,
+                event_type=event_type,
+                stripe_client=stripe_client,
             )
             processing_status = "processed"
         else:

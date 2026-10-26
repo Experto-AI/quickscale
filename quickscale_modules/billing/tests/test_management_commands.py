@@ -186,7 +186,7 @@ def test_reconcile_checkouts_reports_a_blocked_subscription(
                 "id": "cs_command_open",
                 "status": "open",
                 "metadata": {
-                    "quickscale_subscription_checkout_reference": reference,
+                    _payload._SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY: reference,
                 },
             }
         }

@@ -42,6 +42,7 @@ from tests._stripe_payloads import (
     invoice_event,
     normalize_stripe_object,
     subscription_event,
+    subscription_object,
 )
 
 
@@ -146,6 +147,7 @@ class FakeSubscriptionStripeClient:
     prices: dict[str, dict[str, Any]] = field(default_factory=dict)
     customers: list[dict[str, Any]] = field(default_factory=list)
     checkout_sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    subscriptions: dict[str, dict[str, Any]] = field(default_factory=dict)
     event: dict[str, Any] | None = None
     create_subscription_checkout_error: Exception | None = None
     searched_references: list[str] = field(default_factory=list)
@@ -155,6 +157,7 @@ class FakeSubscriptionStripeClient:
     )
     retrieved_price_ids: list[str] = field(default_factory=list)
     retrieved_checkout_session_ids: list[str] = field(default_factory=list)
+    retrieved_subscription_ids: list[str] = field(default_factory=list)
     construct_calls: list[dict[str, Any]] = field(default_factory=list)
 
     def search_customers(
@@ -236,6 +239,23 @@ class FakeSubscriptionStripeClient:
         return normalize_stripe_object(
             stripe.checkout.Session,
             dict(self.checkout_sessions.get(checkout_session_id, {})),
+        )
+
+    def retrieve_subscription(self, *, stripe_subscription_id: str) -> dict[str, Any]:
+        """Return configured provider truth, else the last event's own object."""
+        self.retrieved_subscription_ids.append(stripe_subscription_id)
+        provider_payload = self.subscriptions.get(stripe_subscription_id)
+        if provider_payload is None and self.event is not None:
+            event_object = self.event.get("data", {}).get("object", {})
+            if str(event_object.get("id") or "").strip() == stripe_subscription_id:
+                provider_payload = event_object
+        if provider_payload is None:
+            raise BillingWebhookError(
+                f"No fake provider subscription configured for {stripe_subscription_id}."
+            )
+        return normalize_stripe_object(
+            stripe.Subscription,
+            dict(provider_payload),
         )
 
     def construct_event(
@@ -351,7 +371,9 @@ def test_create_subscription_checkout_session_retries_blank_reservation_idempote
     assert first_payload["idempotency_key"] == second_payload["idempotency_key"]
     assert first_payload["idempotency_key"]
     assert (
-        first_payload["session_metadata"]["quickscale_subscription_checkout_reference"]
+        first_payload["session_metadata"][
+            _payload._SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY
+        ]
         == reservation_reference
     )
     assert second_payload["session_metadata"] == first_payload["session_metadata"]
@@ -538,7 +560,7 @@ def test_response_lost_subscription_checkout_reconciles_exact_reservation(
     assert created_payload["idempotency_key"]
     assert (
         created_payload["session_metadata"][
-            "quickscale_subscription_checkout_reference"
+            _payload._SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY
         ]
         == reservation_reference
     )
@@ -1191,6 +1213,15 @@ def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
     )
     fake_client = FakeSubscriptionStripeClient(
         event=reconcile_event,
+        subscriptions={
+            "sub_invoice_first_incomplete": subscription_object(
+                subscription_id="sub_invoice_first_incomplete",
+                customer_id="cus_invoice_first_incomplete",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
     )
     monkeypatch.setattr(
         settings,
@@ -1279,6 +1310,15 @@ def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
     )
     fake_client = FakeSubscriptionStripeClient(
         event=past_due_event,
+        subscriptions={
+            "sub_failed": subscription_object(
+                subscription_id="sub_failed",
+                customer_id="cus_failed",
+                price_id=plan.stripe_price_id,
+                status="past_due",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
     )
     monkeypatch.setattr(
         settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_payment_failed"
@@ -1327,7 +1367,18 @@ def test_invoice_payment_failed_rejects_conflicting_provider_identity(
     event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
         _organization_reference(organization)
     )
-    fake_client = FakeSubscriptionStripeClient(event=event)
+    fake_client = FakeSubscriptionStripeClient(
+        event=event,
+        subscriptions={
+            "sub_conflicting_identity": subscription_object(
+                subscription_id="sub_conflicting_identity",
+                customer_id="cus_conflicting_identity",
+                price_id=plan.stripe_price_id,
+                status="past_due",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
+    )
     monkeypatch.setattr(
         settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
@@ -1381,7 +1432,16 @@ def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
             customer_id="cus_recovery",
             price_id=plan.stripe_price_id,
             subscription_id="sub_recovery",
-        )
+        ),
+        subscriptions={
+            "sub_recovery": subscription_object(
+                subscription_id="sub_recovery",
+                customer_id="cus_recovery",
+                price_id=plan.stripe_price_id,
+                status="past_due",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
     )
 
     failed_result = handle_stripe_event(
@@ -1390,6 +1450,13 @@ def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
         stripe_client=fake_client,
     )
 
+    fake_client.subscriptions["sub_recovery"] = subscription_object(
+        subscription_id="sub_recovery",
+        customer_id="cus_recovery",
+        price_id=plan.stripe_price_id,
+        status="active",
+        metadata={"stripe_price_id": plan.stripe_price_id},
+    )
     fake_client.event = _subscription_event(
         event_id="evt_resynced_active",
         event_type="customer.subscription.updated",
@@ -1461,7 +1528,16 @@ def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid
             customer_id="cus_recovery_invoice_paid",
             price_id=plan.stripe_price_id,
             subscription_id="sub_recovery_invoice_paid",
-        )
+        ),
+        subscriptions={
+            "sub_recovery_invoice_paid": subscription_object(
+                subscription_id="sub_recovery_invoice_paid",
+                customer_id="cus_recovery_invoice_paid",
+                price_id=plan.stripe_price_id,
+                status="past_due",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
     )
 
     failed_result = handle_stripe_event(
@@ -1470,6 +1546,13 @@ def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid
         stripe_client=fake_client,
     )
 
+    fake_client.subscriptions["sub_recovery_invoice_paid"] = subscription_object(
+        subscription_id="sub_recovery_invoice_paid",
+        customer_id="cus_recovery_invoice_paid",
+        price_id=plan.stripe_price_id,
+        status="active",
+        metadata={"stripe_price_id": plan.stripe_price_id},
+    )
     fake_client.event = _invoice_event(
         event_id="evt_paid_recovery_invoice_paid",
         event_type="invoice.paid",
@@ -1787,6 +1870,167 @@ def test_handle_stripe_event_ignores_non_creditable_invoice_paid_reason(
     assert result.status == "processed"
     assert CreditTransaction.all_objects.count() == 0
     assert CreditBalance.all_objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_late_subscription_update_cannot_reactivate_a_canceled_subscription(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An older delivery applies the provider's current canceled status."""
+    plan = _create_recurring_plan(price_id="price_ordered_delete")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_ordered_delete",
+        stripe_subscription_id="sub_ordered_delete",
+        status=Subscription.Status.ACTIVE,
+    )
+    deleted_event = _subscription_event(
+        event_id="evt_ordered_deleted",
+        event_type="customer.subscription.deleted",
+        subscription_id="sub_ordered_delete",
+        customer_id="cus_ordered_delete",
+        price_id=plan.stripe_price_id,
+        status="canceled",
+    )
+    deleted_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client = FakeSubscriptionStripeClient(
+        event=deleted_event,
+        subscriptions={
+            "sub_ordered_delete": subscription_object(
+                subscription_id="sub_ordered_delete",
+                customer_id="cus_ordered_delete",
+                price_id=plan.stripe_price_id,
+                status="canceled",
+                metadata={
+                    "quickscale_org_reference": _organization_reference(organization),
+                    "stripe_price_id": plan.stripe_price_id,
+                },
+            )
+        },
+    )
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_ordered_delete"
+    )
+
+    deleted_result = handle_stripe_event(
+        body=b'{"id":"evt_ordered_deleted"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    late_update = _subscription_event(
+        event_id="evt_ordered_late_update",
+        event_type="customer.subscription.updated",
+        subscription_id="sub_ordered_delete",
+        customer_id="cus_ordered_delete",
+        price_id=plan.stripe_price_id,
+        status="active",
+    )
+    late_update["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client.event = late_update
+    late_result = handle_stripe_event(
+        body=b'{"id":"evt_ordered_late_update"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    subscription.refresh_from_db()
+
+    assert deleted_result.status == "processed"
+    assert late_result.status == "processed"
+    assert subscription.status == Subscription.Status.CANCELED
+    assert fake_client.retrieved_subscription_ids == [
+        "sub_ordered_delete",
+        "sub_ordered_delete",
+    ]
+
+
+@pytest.mark.django_db
+def test_late_invoice_payment_failed_keeps_the_newer_provider_status(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed invoice delivered late cannot undo a newer paid status."""
+    plan = _create_recurring_plan(price_id="price_ordered_invoices")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id="cus_ordered_invoices",
+        stripe_subscription_id="sub_ordered_invoices",
+        status=Subscription.Status.PAST_DUE,
+    )
+    paid_event = _invoice_event(
+        event_id="evt_ordered_paid",
+        event_type="invoice.paid",
+        invoice_id="in_ordered_paid",
+        customer_id="cus_ordered_invoices",
+        price_id=plan.stripe_price_id,
+        subscription_id="sub_ordered_invoices",
+    )
+    paid_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client = FakeSubscriptionStripeClient(
+        event=paid_event,
+        subscriptions={
+            "sub_ordered_invoices": subscription_object(
+                subscription_id="sub_ordered_invoices",
+                customer_id="cus_ordered_invoices",
+                price_id=plan.stripe_price_id,
+                status="active",
+                metadata={"stripe_price_id": plan.stripe_price_id},
+            )
+        },
+    )
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_ordered_invoices"
+    )
+
+    paid_result = handle_stripe_event(
+        body=b'{"id":"evt_ordered_paid"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    failed_event = _invoice_event(
+        event_id="evt_ordered_failed",
+        event_type="invoice.payment_failed",
+        invoice_id="in_ordered_failed",
+        customer_id="cus_ordered_invoices",
+        price_id=plan.stripe_price_id,
+        subscription_id="sub_ordered_invoices",
+    )
+    failed_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client.event = failed_event
+    failed_result = handle_stripe_event(
+        body=b'{"id":"evt_ordered_failed"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    subscription.refresh_from_db()
+
+    assert paid_result.status == "processed"
+    assert failed_result.status == "processed"
+    assert subscription.status == Subscription.Status.ACTIVE
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+    assert CreditBalance.all_objects.get(organization=organization).balance == (
+        plan.credits_per_period
+    )
 
 
 def test_stripe_client_create_subscription_checkout_session_uses_checkout_api() -> None:

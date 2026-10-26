@@ -24,6 +24,9 @@ from quickscale_modules_billing._payload import (
 from quickscale_modules_billing._payload import (
     _map_stripe_subscription_status as _map_stripe_subscription_status,
 )
+from quickscale_modules_billing._payload import (
+    _normalize_mapping as _normalize_mapping,
+)
 from quickscale_modules_billing._resolution import (
     _resolve_user_for_subscription as _resolve_user_for_subscription,
 )
@@ -42,6 +45,7 @@ from quickscale_modules_billing.models import (
 )
 import quickscale_modules_billing._resolution as _resolution
 import quickscale_modules_billing._locks as _locks
+import quickscale_modules_billing._stripe_client as _stripe_client
 
 
 def _upsert_subscription_from_payload(
@@ -283,16 +287,70 @@ def _subscription_provider_identity(
     )
 
 
+def _retrieve_authoritative_subscription_payload(
+    *,
+    stripe_subscription_id: str,
+    stripe_client: Any | None,
+) -> dict[str, Any]:
+    """Return the provider's current subscription for one event about it.
+
+    Stripe does not promise delivery order, and an event carries the object as
+    it was when the event happened. Reading the provider object at processing
+    time makes the applied status the provider's current truth; the caller
+    holds the organization's provider mutation lock around this read and the
+    write that follows, so two deliveries cannot apply their snapshots out of
+    order.
+    """
+    normalized_id = stripe_subscription_id.strip()
+    if not normalized_id:
+        raise BillingWebhookError("Stripe subscription payload is missing an id.")
+    if stripe_client is None or not hasattr(stripe_client, "retrieve_subscription"):
+        raise BillingWebhookError(
+            "Stripe subscription retrieval is unavailable for webhook ordering."
+        )
+    try:
+        provider_payload = stripe_client.retrieve_subscription(
+            stripe_subscription_id=normalized_id
+        )
+    except _stripe_client._stripe_error_classes() as exc:
+        raise BillingWebhookError(
+            f"Stripe subscription {normalized_id} could not be retrieved; the "
+            "webhook will be retried."
+        ) from exc
+    normalized_payload = _normalize_mapping(provider_payload)
+    if str(normalized_payload.get("id") or "").strip() != normalized_id:
+        raise BillingWebhookError(
+            f"Stripe returned no matching subscription for {normalized_id}."
+        )
+    return normalized_payload
+
+
 def _handle_subscription_event(
     event_payload: Mapping[str, Any],
     *,
     event_type: str,
+    stripe_client: Any | None = None,
 ) -> Subscription:
-    subscription_payload = _extract_event_object(event_payload)
+    event_subscription = _extract_event_object(event_payload)
+    stripe_subscription_id = str(event_subscription.get("id") or "").strip()
+    organization = _resolution._resolve_organization_for_subscription(
+        subscription_payload=event_subscription
+    )
+    if organization is None:
+        raise BillingWebhookError(
+            "Could not resolve a local organization for the Stripe subscription."
+        )
     fallback_status = ""
     if event_type == STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED:
         fallback_status = Subscription.Status.CANCELED
-    return _upsert_subscription_from_payload(
-        subscription_payload,
-        fallback_status=fallback_status,
-    )
+    with _locks.subscription_provider_mutation_lock(organization):
+        provider_payload = _retrieve_authoritative_subscription_payload(
+            stripe_subscription_id=stripe_subscription_id,
+            stripe_client=stripe_client,
+        )
+        return _upsert_subscription_from_payload(
+            provider_payload,
+            fallback_status=fallback_status,
+            fallback_organization=organization,
+            provider_lock_held=True,
+        )
