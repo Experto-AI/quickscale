@@ -20,7 +20,7 @@ pytestmark = [
 ]
 
 APP_LABEL = "quickscale_billing"
-MIG_LATEST = "0001_initial"
+MIG_LATEST = "0002_credittransaction_reference"
 
 # Dependencies for clean migration apply.
 ORGS_MIG_LATEST = ("quickscale_orgs", "0001_initial")
@@ -129,6 +129,9 @@ _EXPECTED_PARTIAL_PREDICATES: dict[str, str] = {
     "quickscale_billing_credittransaction_stripe_event_id_unique": _normalize_pg_expr(
         "(stripe_event_id IS NOT NULL) AND (NOT ((stripe_event_id)::text = ''::text))"
     ),
+    "quickscale_billing_credittransaction_reference_unique": _normalize_pg_expr(
+        "(NOT ((reference)::text = ''::text))"
+    ),
 }
 
 
@@ -219,6 +222,33 @@ def test_credittransaction_unique_stripe_event_per_type_constraint() -> None:
     ), (
         "Missing partial unique constraint "
         "quickscale_billing_credittransaction_stripe_event_id_unique on CreditTransaction"
+    )
+
+
+def test_credittransaction_unique_reference_per_type_constraint() -> None:
+    """The ``quickscale_billing_credittransaction_reference_unique`` partial
+    unique constraint exists on CreditTransaction for a non-empty reference."""
+    executor = MigrationExecutor(connection)
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
+
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
+    CreditTransaction = apps.get_model(APP_LABEL, "CreditTransaction")
+    constraints = {
+        constraint.name: constraint
+        for constraint in CreditTransaction._meta.constraints
+    }
+
+    constraint = constraints.get(
+        "quickscale_billing_credittransaction_reference_unique"
+    )
+    assert constraint is not None, (
+        "Missing partial unique constraint "
+        "quickscale_billing_credittransaction_reference_unique on CreditTransaction"
+    )
+    assert tuple(constraint.fields) == (
+        "organization",
+        "reference",
+        "transaction_type",
     )
 
 

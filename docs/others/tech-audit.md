@@ -53,6 +53,14 @@ foreign owner's name is not serialized; a member mutation cannot target a role a
 cloud uploads disable key overwrite; and a JSON `null` in an optional public form field is stored
 empty on both persistence branches.
 
+**Fix record (2026-10-26).** SA314 (a) closes four findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`: `billing-invoice-payment-failed-unscoped`,
+`billing-credit-services-missing-org-scope`, `billing-debit-not-idempotent`, and
+`billing-zero-credit-plan-webhook-loop`. A failed invoice applies only for subscription billing
+reasons that name a subscription; `credit_user` and `debit_user` enter the organization's tenant
+scope themselves; a debit's caller-owned `reference` is protected by a per-organization unique
+constraint; and a zero-credit plan activates without a ledger write.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -236,18 +244,18 @@ items:
                quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py,
                quickscale_modules/billing/src/quickscale_modules_billing/models.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-invoice-payment-failed-unscoped, status: open, severity: S3, category: IX,
+  - {id: billing-invoice-payment-failed-unscoped, status: fixed, severity: S3, category: IX,
      title: "invoice.payment_failed with no subscription id marks the customer's current subscription past due",
      effort: Trivial, confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-credit-services-missing-org-scope, status: open, severity: S3, category: III,
+  - {id: billing-credit-services-missing-org-scope, status: fixed, severity: S3, category: III,
      title: "credit_user/debit_user fail under FORCE RLS outside a request context", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_credits.py,
                quickscale_modules/billing/README.md],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-debit-not-idempotent, status: open, severity: S3, category: II,
+  - {id: billing-debit-not-idempotent, status: fixed, severity: S3, category: II,
      title: "A retried usage debit double-spends credits", effort: Medium, confidence: High,
      reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_credits.py],
@@ -372,7 +380,7 @@ items:
                quickscale_core/src/quickscale_core/generator/templates/.env.example.j2,
                quickscale_core/src/quickscale_core/generator/templates/.gitignore.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-zero-credit-plan-webhook-loop, status: open, severity: S4, category: I,
+  - {id: billing-zero-credit-plan-webhook-loop, status: fixed, severity: S4, category: I,
      title: "A zero-credit plan makes invoice.paid fail and retry forever", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py,
@@ -473,7 +481,7 @@ Rows record audit-time severity; current status is in the machine-readable index
 | `notifications-message-status-aggregate-race` | S4 | II | Concurrent sibling webhooks leave the aggregate stale | Trivial | Medium | carried |
 | `forms-retention-skips-null-ip-rows` | S4 | IX | Retention skips rows stored without an IP | Trivial | High | carried |
 
-Quick wins (Trivial effort, open S2/S3): `billing-invoice-payment-failed-unscoped`.
+No open Trivial-effort S2/S3 finding remains.
 
 ## Findings
 
@@ -999,11 +1007,9 @@ machine-readable index above); no S1/S2 finding remains open.
 
 **Then (S3), in three batches:**
 
-- **Billing batch:** `billing-invoice-payment-failed-unscoped`,
-  `billing-credit-services-missing-org-scope`, `billing-debit-not-idempotent`,
-  `billing-checkout-double-submit`, `billing-zero-credit-plan-webhook-loop`. The webhook-ordering
-  fix has landed (SA310); the credit/idempotency changes touch `_credits.py` and need a migration
-  for the reference constraint.
+- **Billing batch:** `billing-checkout-double-submit` remains. The webhook-ordering fix landed
+  (SA310); SA314 (a) fixed the failed-invoice, credit-scope, debit-idempotency, and zero-credit
+  findings, including the debit-reference migration.
 - **Backups batch:** `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
@@ -1028,10 +1034,11 @@ reviewers.
   (`generated-compose-called-production-runs-debug`, `generated-redis-cache-missing-client`,
   `dockerignore-bakes-local-backups`, `generated-readme-examples-invalid`); otherwise read in full,
   secure defaults verified (secret guard, non-root, cookies/HSTS, conditional proxy trust).
-- **Billing:** findings 1 and 9 are fixed, five S3/S4 remain; webhook signature/raw body, price
-  parity, RLS targets, and the current-subscription constraint verified. Metadata-key and ordering
-  regressions run against a fake provider; the real test-mode subscription Checkout is
-  credential-gated in `test_stripe_contract.py`.
+- **Billing:** findings 1 and 9 are fixed, SA314 (a) fixed the failed-invoice, credit-scope,
+  debit-idempotency, and zero-credit S3/S4 findings, and `billing-checkout-double-submit` remains;
+  webhook signature/raw body, price parity, RLS targets, and the current-subscription constraint
+  verified. Metadata-key and ordering regressions run against a fake provider; the real test-mode
+  subscription Checkout is credential-gated in `test_stripe_contract.py`.
 - **Orgs:** `orgs-admin-can-demote-owner` is fixed; `orgs-bulk-delete-leaves-zero-owners`, two S4s,
   and four watchlist items remain; RLS predicate, purge atomicity, `TenantManager`, invitation
   throttle, and content-route roles verified.
@@ -1113,9 +1120,9 @@ reviewers.
   lease serializes destructive runs.
 - **Billing webhooks reconcile with the provider** (SA310): subscription and invoice handlers
   retrieve the current subscription under the organization's provider mutex before applying its
-  status, so a late delivery cannot overwrite newer provider state. Remaining: a failed invoice
-  with no subscription id still resolves the customer's current subscription
-  (`billing-invoice-payment-failed-unscoped`, SA314).
+  status, so a late delivery cannot overwrite newer provider state. SA314 (a) also ignores failed
+  invoices outside the subscription billing reasons that name a subscription and activates a
+  zero-credit plan without a ledger write.
 - **Media ownership/lifecycle is still not modeled** (SA311 closes the overwrite vector): cloud
   uploads never replace an existing key, but fixed upload paths carry no organization or user
   segment and row/tenant deletion has no generic cleanup. The structural fix is a media-asset
@@ -1333,3 +1340,15 @@ release.
 - 2026-10-26 — `forms-null-optional-field-500`: **resolved** (SA311: `_create_field_values`
   normalizes a JSON `null` to the empty string on both the accepted and honeypot persistence
   branches; regression tests assert 201 and an empty stored value, never 500).
+- 2026-10-26 — `billing-invoice-payment-failed-unscoped`: **resolved** (SA314 (a): a failed invoice
+  applies only for `subscription_create` and `subscription_cycle` billing reasons that name a
+  subscription; a one-off or unrelated failed invoice is recorded and ignored).
+- 2026-10-26 — `billing-credit-services-missing-org-scope`: **resolved** (SA314 (a): `credit_user`
+  and `debit_user` enter the organization's tenant scope themselves and restore the prior scope;
+  a threaded no-context test exercises both services under the restricted role).
+- 2026-10-26 — `billing-debit-not-idempotent`: **resolved** (SA314 (a): `debit_user` accepts a
+  caller-owned `reference`, a partial unique constraint covers
+  `(organization, reference, transaction_type)`, and a retried debit returns the original row).
+- 2026-10-26 — `billing-zero-credit-plan-webhook-loop`: **resolved** (SA314 (a): an `invoice.paid`
+  for a zero-credit plan activates the subscription and skips the credit call, so the event is
+  marked processed instead of retrying).

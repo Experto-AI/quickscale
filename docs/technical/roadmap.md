@@ -81,7 +81,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA320 (c) | yes | yes | yes: SA320, SA321 |
-| 2 | SA314 | yes | yes | yes: SA314, SA315, SA323, SA324 |
+| 2 | SA314 (b) | yes | yes | yes: SA314, SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -200,7 +200,7 @@ conformance check on `properties.PropertyAgent` and siblings.
   `billing-admin-org-filter` (proposals 4–5, gap 25).
 
   **Slices:**
-  - [ ] (a) Webhooks and credits: guard failed invoices by billing reason and subscription id;
+  - [x] (a) Webhooks and credits: guard failed invoices by billing reason and subscription id;
     end the zero-credit `invoice.paid` retry; wrap `credit_user`/`debit_user` in `org_scope`; add a
     debit reference with a unique constraint in a new migration. Tests cover a no-context thread
     and a retried debit (Tier 2-full).
