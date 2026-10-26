@@ -101,7 +101,8 @@ and the Stripe return pages are public.
 - `PurchaseCheckout` records one-time Checkout lifecycle state so account deletion and
   organization purge can reconcile or refuse live provider sessions; Stripe metadata and
   idempotency keys correlate completed or expired sessions even when the provider-create
-  response is lost.
+  response is lost. A repeated purchase request returns the organization's still-payable
+  checkout URL from its open reservation instead of creating a second payable session.
 - `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to
   the organization; recurring Checkout uses the same reservation-reference and response-loss
   recovery contract, while nullable user links remain provenance / compatibility only.
@@ -123,11 +124,15 @@ billing records attributed to it, so the handler no longer nulls billing's user 
 
 ### Plan-feature gate
 
-`require_org_feature(feature_key)` is the published view decorator that answers `402` when the
-request's organization has no active subscription or its plan does not list the feature key. It
-resolves the organization through `quickscale_modules_orgs.permissions.resolve_request_org` and
-reads billing's own active `Subscription` row, so orgs and other consumers do not name a
-higher-layer module.
+`require_org_feature(feature_key)` is the published gate for API views. It resolves the
+organization through `quickscale_modules_orgs.permissions.resolve_request_org` and reads
+billing's own active `Subscription` row, so orgs and other consumers do not name a higher-layer
+module. An anonymous caller raises `401`; an authenticated caller with no organization context,
+no active subscription, or a plan that does not list the feature raises `402` with the stable
+`feature_not_available` code. The one QuickScale exception handler renders both in the shared
+`{"error": {"code", "message"}}` shape. Wrap a function-based API view with `@api_view`
+outermost, so the raise happens inside DRF's dispatch; a plain Django view would let the exception
+reach Django's handler instead.
 
 ### Organization pricing handoff
 
