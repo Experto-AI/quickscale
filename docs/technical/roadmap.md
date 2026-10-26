@@ -12,7 +12,7 @@ production runs 0.89.0, and 0.89.0 is on PyPI (see
 [Deferred — property portal](#deferred-property-portal)).
 
 **Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
-database. All hardening tickets (SA310, SA311, SA314, SA315, SA320, SA321, SA323, SA324) land,
+database. All hardening tickets (SA311, SA314, SA315, SA320, SA321, SA323, SA324) land,
 the tag is re-cut, `bap-web` adopts it, SA191d (re-proof) is the release's final validation on
 `develop`, SA191d (production) ships the same tag, and the operator's Phases 5–6 sealing and PyPI
 publication follow ([publish_procedure.md](publish_procedure.md)).
@@ -43,10 +43,9 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA310, SA311, SA314, SA315, SA320, SA321, SA323, SA324 | Required |
-| SA310 | Fix the subscription Checkout S1 and order billing webhooks | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA311, SA314, SA315, SA320, SA321, SA323, SA324 | Required |
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
-| SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Required |
+| SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | — | Required |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Required |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Required |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Required |
@@ -58,7 +57,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA320 (b → c) ─► SA321
-Track 2: SA310 ─► SA311 ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
+Track 2: SA311 ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
          ─► SA191d (re-proof → production → retire, operator-gated)
 Track 3: [SA191d (production)] SA277
      release path: all hardening ─► re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof on develop)
@@ -74,8 +73,8 @@ re-cut, re-proof). Operator publication of 0.89.0 follows SA191d (production); S
 closes the ticket. Each slice ships with
 its own checks and handoff.
 
-**Order.** Module migration history is frozen, so a module schema change (SA310's optional
-version column, SA314's debit reference) ships as a new migration. When resumed, SA153's own tables
+**Order.** Module migration history is frozen, so a module schema change (SA314's debit
+reference) ships as a new migration. When resumed, SA153's own tables
 live in the project-owned extension as `0002+` migrations.
 
 ### Track states
@@ -83,7 +82,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA320 (b) — in progress | yes | yes | yes: SA320, SA321 |
-| 2 | SA310 | yes | yes | yes: SA310, SA311, SA314, SA315, SA323, SA324 |
+| 2 | SA311 | yes | yes | yes: SA311, SA314, SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -104,7 +103,7 @@ SA191d (production) clears SA277.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
   `decisions.md`, `README.md.j2` (SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
-  SA321), billing `_settings.py` (SA310, SA314), module manifests (SA320 (c)),
+  SA321), billing `_settings.py` (SA314), module manifests (SA320 (c)),
   `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
   (`App.test.tsx`, `AppRoutes.test.tsx`).
   Reconcile after each merge and run the consistency test.
@@ -190,17 +189,7 @@ conformance check on `properties.PropertyAgent` and siblings.
     then rename the new service/volume after 48 hours; verify health and the retained dump/refs.
     **Tier 3: plan review required** — deleting the old database irreversibly removes live rollback.
 
-- [ ] **SA310 — Fix the subscription Checkout S1 and apply billing webhooks in provider order.**
-
-  Closes tech `billing-subscription-checkout-metadata-key-too-long` (S1) and
-  `billing-webhook-status-applied-out-of-order`. Ordering strategy (re-fetch the provider object,
-  or a version column needing a new migration on the frozen history) is settled in planning; both
-  share `_settings.py` and the webhook tests.
-
-  **Acceptance:** every constant used as a Stripe metadata key is ≤40 characters by test; a
-  subscription Checkout succeeds against a Stripe test-mode contract test when credentials exist;
-  replaying an older subscription or invoice event after a newer one leaves the newer status
-  (Tier 2-full).
+- [x] **SA310 — Fix the subscription Checkout S1 and apply billing webhooks in provider order.**
 
 - [ ] **SA311 — Close the S2 tenant-boundary defects in CRM, orgs, storage and forms.**
 
@@ -312,7 +301,7 @@ and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 ### Deferred — property portal (Track 1)
 
-Not scheduled. Resumes only when SA310, SA311, SA314, SA315, SA320, SA321, SA323 and SA324 are
+Not scheduled. Resumes only when SA311, SA314, SA315, SA320, SA321, SA323 and SA324 are
 closed, SA191d (production) has passed, and 0.89.0 is published; it is then re-added to the
 scheduling table on top of the deployed `bap-web`.
 

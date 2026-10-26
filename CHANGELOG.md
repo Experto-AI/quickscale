@@ -40,6 +40,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Billing works against real Stripe.** Webhooks, checkout, delayed payments and reconciliation
     work against Stripe API version `2026-06-24.dahlia`; billing owns the organization's Stripe
     customer and its JSON API moves under its module mount.
+  - **Billing webhooks apply provider order.** Subscription and invoice webhooks read the current
+    subscription from Stripe under the organization's provider mutex before applying its status,
+    and the subscription Checkout metadata key fits Stripe's 40-character limit.
   - **Safe organization purge and account removal.** Purge refuses while live Stripe state exists
     and follows the installed tenant-model graph; account removal disables and anonymizes instead
     of deleting, through app-declared handlers.

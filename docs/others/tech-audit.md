@@ -37,6 +37,14 @@ and restore holds an advisory lock; a failed restore leaves the target database 
 resolves the `media-sync-manifest-traversal` watchlist entry by rejecting a `..` segment at the
 capture, sync and restore boundary.
 
+**Fix record (2026-10-26).** SA310 closes two findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`:
+`billing-subscription-checkout-metadata-key-too-long` and
+`billing-webhook-status-applied-out-of-order`. The subscription Checkout reference key is
+`quickscale_sub_checkout_reference` (33 characters), and subscription and invoice webhooks read
+the provider's current subscription under the organization's provider mutex before applying its
+status.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -167,7 +175,7 @@ the delta (SA253, 2026-10-10); it is not an unreviewed delta change.
 schema: tech-audit/v6
 audited: 82ff3e7d141cf943ab900eaae5f214c0edfc9e07
 items:
-  - {id: billing-subscription-checkout-metadata-key-too-long, status: open, severity: S1, category: IX,
+  - {id: billing-subscription-checkout-metadata-key-too-long, status: fixed, severity: S1, category: IX,
      title: "Subscription Checkout metadata key exceeds Stripe's 40-character limit", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_settings.py,
@@ -213,7 +221,7 @@ items:
                quickscale_modules/forms/src/quickscale_modules_forms/views.py,
                quickscale_modules/forms/src/quickscale_modules_forms/models.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-webhook-status-applied-out-of-order, status: open, severity: S2, category: II,
+  - {id: billing-webhook-status-applied-out-of-order, status: fixed, severity: S2, category: II,
      title: "Subscription and invoice webhooks apply payload status without provider ordering", effort: Medium,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_subscription_events.py,
@@ -1018,8 +1026,10 @@ reviewers.
   (`generated-compose-called-production-runs-debug`, `generated-redis-cache-missing-client`,
   `dockerignore-bakes-local-backups`, `generated-readme-examples-invalid`); otherwise read in full,
   secure defaults verified (secret guard, non-root, cookies/HSTS, conditional proxy trust).
-- **Billing:** findings 1, 9, and five S3/S4; webhook signature/raw body, price parity, RLS targets,
-  and the current-subscription constraint verified. The provider-contract tests are fake-client only.
+- **Billing:** findings 1 and 9 are fixed, five S3/S4 remain; webhook signature/raw body, price
+  parity, RLS targets, and the current-subscription constraint verified. Metadata-key and ordering
+  regressions run against a fake provider; the real test-mode subscription Checkout is
+  credential-gated in `test_stripe_contract.py`.
 - **Orgs:** findings `orgs-admin-can-demote-owner`, `orgs-bulk-delete-leaves-zero-owners`, two S4s,
   and four watchlist items; RLS predicate, purge atomicity, `TenantManager`, invitation throttle, and
   content-route roles verified.
@@ -1099,10 +1109,11 @@ reviewers.
 - **Backups hold a coherent recovery point** (arch F6, closed by SA322): media is captured into the
   versioned snapshot and restored from it, project migration identity is enforced, and a restore
   lease serializes destructive runs.
-- **No provider-object reconciliation seam for billing**: the signed webhook payload is the only
-  source of truth, so ordering and missed-event recovery are ad hoc. The ticket is
-  `billing-webhook-status-applied-out-of-order`; the structural fix is a provider adapter that
-  retrieves the object.
+- **Billing webhooks reconcile with the provider** (SA310): subscription and invoice handlers
+  retrieve the current subscription under the organization's provider mutex before applying its
+  status, so a late delivery cannot overwrite newer provider state. Remaining: a failed invoice
+  with no subscription id still resolves the customer's current subscription
+  (`billing-invoice-payment-failed-unscoped`, SA314).
 - **Media ownership/lifecycle is not modeled**: fixed upload paths, no org/user key segment, and no
   generic cleanup on row/tenant deletion. The ticket is `media-s3-fixed-path-overwrite`; the
   structural fix is a media-asset owner/key model.
@@ -1121,8 +1132,10 @@ reviewers.
 
 ## Tooling gaps
 
-- **No Stripe test-mode contract test**: the fake client cannot enforce provider key limits (BILL-01)
-  or event ordering. Add one test-mode smoke test for subscription create and a signed-event replay.
+- **Stripe test-mode contract coverage is credential-gated**: `test_stripe_contract.py` creates a
+  real subscription Checkout when `STRIPE_TEST_SECRET_KEY` is set and enumerates every
+  metadata-key constant against Stripe's 40-character limit; the late subscription and invoice
+  replays live in `tests/test_subscriptions.py`, and the live case skips without credentials.
 - **No S3 overwrite test**: the storage tests use `FileSystemStorage`, which auto-renames; add a
   fake S3 backend test asserting distinct keys, and a cross-org upload test.
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
@@ -1293,3 +1306,11 @@ release.
   `backups-filename-second-resolution-collision`: **resolved** (SA322 (b): the validate action
   requires change permission and refuses a restoring or deleted artifact, backup directories and
   files are created owner-only, and filenames carry a random token).
+- 2026-10-26 — `billing-subscription-checkout-metadata-key-too-long`: **resolved** (SA310: the
+  subscription Checkout reference metadata key is 33 characters and a test enumerates every
+  metadata-key constant and the rendered Checkout metadata against Stripe's 40-character limit;
+  a credential-gated test-mode contract test exercises the real subscription Checkout).
+- 2026-10-26 — `billing-webhook-status-applied-out-of-order`: **resolved** (SA310: subscription
+  and invoice handlers retrieve the provider's current subscription under the organization's
+  provider mutex and apply its status, so a late delivery cannot overwrite a newer provider
+  status; tests replay a late update after deletion and a late failure after payment).
