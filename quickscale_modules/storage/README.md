@@ -55,13 +55,14 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 private-media authorization, so the switch never had an effect. Public media delivery keeps its
 current contract; private-media authorization arrives as a separate, enforced surface.
 
-Cloud uploads never overwrite an existing object. The module's S3-compatible
+Cloud uploads allocate a fresh object key for every save. The module's S3-compatible
 `STORAGES["default"]` backend (`quickscale_modules_storage.backends.UniqueKeyS3Storage`) appends a
-random token to every allocated key, so two uploads of the same filename — including concurrent
-ones that both see the key as free — are stored under distinct keys instead of one replacing the
-other tenant's media. It keeps `file_overwrite: False` (equivalent to
+random token to the allocated key, so two uploads of the same filename — including concurrent ones
+that both see the key as free — are stored under distinct keys instead of one replacing the other
+tenant's media. It keeps `file_overwrite: False` (equivalent to
 `AWS_S3_FILE_OVERWRITE=False` for a custom configuration) as a second guard. Existing object keys
-are unaffected.
+are unaffected. A field whose own `max_length` leaves no room for the token keeps Django's stock
+allocation; the generated media fields use Django's default limit and always have room.
 
 The same desired state in `quickscale.yml`:
 
