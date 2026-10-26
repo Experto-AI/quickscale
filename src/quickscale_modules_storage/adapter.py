@@ -32,6 +32,10 @@ def _cloud_storage_settings(resolved: ResolvedOptions) -> dict[str, Any]:
     }
     storage_options: dict[str, Any] = {
         "querystring_auth": querystring_auth,
+        # Never replace an existing object: fixed upload_to prefixes are shared
+        # across organizations, so an overwrite would substitute another
+        # tenant's media.  django-storages appends a suffix instead.
+        "file_overwrite": False,
         **optional_options,
     }
     settings: dict[str, Any] = {

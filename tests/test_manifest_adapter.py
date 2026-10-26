@@ -189,6 +189,7 @@ class TestStorageManifestAdapter:
                 "BACKEND": "storages.backends.s3.S3Storage",
                 "OPTIONS": {
                     "querystring_auth": False,
+                    "file_overwrite": False,
                     **extra_options,
                 },
             },
@@ -219,6 +220,7 @@ class TestStorageManifestAdapter:
         ]
         assert list(spec.settings["STORAGES"]["default"]["OPTIONS"]) == [
             "querystring_auth",
+            "file_overwrite",
             *extra_options,
         ]
         assert spec.settings["AWS_QUERYSTRING_AUTH"] is False
@@ -263,7 +265,7 @@ class TestStorageManifestAdapter:
         assert spec.settings["STORAGES"] == {
             "default": {
                 "BACKEND": "storages.backends.s3.S3Storage",
-                "OPTIONS": {"querystring_auth": True},
+                "OPTIONS": {"querystring_auth": True, "file_overwrite": False},
             },
             "staticfiles": {
                 "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -407,3 +409,39 @@ class TestStorageMediaUrlContract:
         """A non-string MEDIA_URL is a raw-type refusal, never a coercion."""
         with pytest.raises(ManifestError, match="modules.storage.media_url"):
             _storage_manifest_adapter({"media_url": raw_value})
+
+
+class TestCloudUploadKeyUniqueness:
+    """Cloud uploads never replace another tenant's same-named object."""
+
+    def test_same_filename_uploads_get_distinct_keys(self) -> None:
+        """The emitted file_overwrite=False makes django-storages pick a new key."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+        from storages.backends.s3 import S3Storage
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+
+        class RecordingS3Storage(S3Storage):
+            """Real S3Storage name handling with the provider connection faked."""
+
+            def __init__(self, **settings: Any) -> None:
+                super().__init__(**settings)
+                self.keys: set[str] = set()
+
+            def exists(self, name: str) -> bool:
+                return name in self.keys
+
+            def _save(self, name: str, content: Any) -> str:
+                self.keys.add(name)
+                return name
+
+        storage = RecordingS3Storage(**options)
+        first = storage.save("listings/images/shared.jpg", ContentFile(b"first"))
+        second = storage.save("listings/images/shared.jpg", ContentFile(b"second"))
+
+        assert first == "listings/images/shared.jpg"
+        assert second != first
+        assert storage.keys == {first, second}
+        assert options["file_overwrite"] is False
