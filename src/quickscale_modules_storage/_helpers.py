@@ -164,7 +164,7 @@ def select_storage_backend(
 
     return StorageBackendSelection(
         backend=backend,
-        django_backend="quickscale_modules_storage.backends.UniqueKeyS3Storage",
+        django_backend="quickscale_modules_storage._backends.UniqueKeyS3Storage",
         use_s3_compatible=True,
         options=options,
     )
@@ -208,7 +208,7 @@ def list_s3_compatible_media_inventory(
 
     resolved_storage_factory = storage_factory
     if resolved_storage_factory is None:
-        from quickscale_modules_storage.backends import UniqueKeyS3Storage
+        from quickscale_modules_storage._backends import UniqueKeyS3Storage
 
         resolved_storage_factory = UniqueKeyS3Storage
 
