@@ -4,15 +4,18 @@
 
 ## Goal and finish line
 
-Cut over production to the regenerated `bap-web` as-is (SA191d), close the 2026-10-23 audits'
-findings (starting with the defects that block publication), and publish 0.89.0. The property
-portal (SA153, SA154) is deferred: it starts only after all hardening tickets close, production
-runs the regenerated `bap-web`, and 0.89.0 is on PyPI (see
+Fixes first, release on `develop`, ship 0.89.0 to production. Close every 2026-10-23 audit
+ticket, re-cut 0.89.0, update `bap-web` to that tag, prove the release on its `develop`
+environment, then cut over production to the same tag (SA191d) and publish 0.89.0 to PyPI. The
+property portal (SA153, SA154) is deferred: it starts only after all hardening tickets close,
+production runs 0.89.0, and 0.89.0 is on PyPI (see
 [Deferred — property portal](#deferred-property-portal)).
 
 **Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
-database. SA310 (S1) and SA311 (S2s) land, the tag is re-cut and re-validated, and the operator's
-Phases 5–6 sealing and PyPI publication follow the re-cut tag and SA191d ([publish_procedure.md](publish_procedure.md)).
+database. All hardening tickets (SA310, SA311, SA314, SA315, SA320, SA321, SA323, SA324) land,
+the tag is re-cut, `bap-web` adopts it, SA191d (re-proof) is the release's final validation on
+`develop`, SA191d (production) ships the same tag, and the operator's Phases 5–6 sealing and PyPI
+publication follow ([publish_procedure.md](publish_procedure.md)).
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence and fix
@@ -40,34 +43,35 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Cut over production to the regenerated `bap-web` in place (delegated, operator-gated) | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA310, SA311, SA314, SA315, SA320, SA321, SA323, SA324 | Required |
 | SA310 | Fix the subscription Checkout S1 and order billing webhooks | 2 | — | Required |
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
-| SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Optional |
-| SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Optional |
-| SA320 | Deliver module resource contracts through managed hooks | 1 | — | Optional |
-| SA321 | Make the generated production deployment contract an artifact | 1 | — | Optional |
-| SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Optional |
-| SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Optional |
+| SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | SA310 | Required |
+| SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Required |
+| SA320 | Deliver module resource contracts through managed hooks | 1 | — | Required |
+| SA321 | Make the generated production deployment contract an artifact | 1 | — | Required |
+| SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Required |
+| SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA320 (b → c) ─► SA321
-Track 2: SA191d (re-proof) ─► SA310 ─► SA311 ─► SA191d (production → retire, operator-gated)
-         ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
+Track 2: SA310 ─► SA311 ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
+         ─► SA191d (re-proof → production → retire, operator-gated)
 Track 3: [SA191d (production)] SA277
-     release path: SA310, SA311 ─► re-cut 0.89.0 ─┐
-                   SA191d (production, as-is) ────┴─► publication
+     release path: all hardening ─► re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof on develop)
+                   ─► SA191d (production, same tag) ─► publication ─► SA191d (retire)
      portal (deferred): all hardening closed + publication ─► SA153 ─► SA154
 ```
 
 Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
 SA277 waits for SA191d (production).
-SA191d's operator gates are idle time on Track 2, filled with SA310/SA311 and then the Optional
-module tickets. SA191d (retire) closes the ticket; (re-proof) owns the `develop` deployment and its
-checks. Operator publication of 0.89.0 follows SA191d and the re-cut tag. Each slice ships with
+SA191d (re-proof) owns the `develop` deployment and the release's final checks; (production) ships
+exactly the tag re-proof passed; a defect found there follows the release re-entry loop (fix,
+re-cut, re-proof). Operator publication of 0.89.0 follows SA191d (production); SA191d (retire)
+closes the ticket. Each slice ships with
 its own checks and handoff.
 
 **Order.** Module migration history is frozen, so a module schema change (SA310's optional
@@ -78,11 +82,12 @@ live in the project-owned extension as `0002+` migrations.
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA320 (b) | yes | yes | yes: SA320, SA321 |
-| 2 | SA191d (re-proof) | yes | no: SA191d operator gates | yes: SA191d (re-proof), SA310, SA311 |
+| 1 | SA320 (b) — in progress | yes | yes | yes: SA320, SA321 |
+| 2 | SA310 | yes | yes | yes: SA310, SA311, SA314, SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
-**Clearing blockers.** Track 1: none. Track 2: the operator's SA191d publication, production-switch and retirement approvals. Track 3:
+**Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
+then the operator's `develop` push, production-switch, publication and retirement approvals. Track 3:
 SA191d (production) clears SA277.
 
 ### Ownership and merge coordination
@@ -152,13 +157,15 @@ declares `auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, and 
 PostgreSQL 18 service restored from `~/bap-cutover/new-2026-10-22.dump`, new variables, and a
 force-push over the unrelated history (kept as `legacy-main`, `legacy-develop`, `v-legacy`); the
 old PostgreSQL 17 service stays as the rollback until acceptance, and DNS is never touched.
-`develop` already runs it. The procedure and its run record are `bap-web/CUTOVER.md`. Secrets
+`develop` already runs the regenerated stack (rehearsed 2026-10-23). The procedure and its run record are `bap-web/CUTOVER.md`. Secrets
 live in `~/bap-cutover/` (mode 600), never printed or committed. After Railway's 2026-10-21
 incident every old variable is exposed: none is carried, and the old PostgreSQL 17 credentials
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
-defect is fixed in `bap-web`. The module fixes below reach `bap-web` through its next ordinary
-update; the cutover ships `bap-web` as-is and waits for none of them, not even the
-re-cut tag.
+defect is fixed in `bap-web`. The module fixes below reach `bap-web` as one update to the re-cut
+0.89.0 tag before re-proof; the cutover waits for all of them. `bap-web` keeps SA153 (h) (public
+property head, crawler summary, sitemap, robots); its `properties` models must be classified in
+the tenant contract, since the 2026-10-26 `develop` CI run failed the tenant isolation
+conformance check on `properties.PropertyAgent` and siblings.
 
 - [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
 
@@ -170,10 +177,11 @@ re-cut tag.
   requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) Push the updated `bap-web` to `develop` and re-pass the acceptance there with
-    CI green and both dependency audits clean apart from the recorded dev-only exception
-    (Tier 2-fast).
-  - [ ] (production) After re-proof and operator approval, execute `CUTOVER.md` § S4 steps 1–5;
+  - [ ] (re-proof) After all hardening and the re-cut, update `bap-web` to the 0.89.0 tag, push
+    it to `develop`, and pass the acceptance there as the release's final validation, with CI
+    green (tenant conformance included) and both dependency audits clean apart from the recorded
+    dev-only exception (Tier 2-full).
+  - [ ] (production) After re-proof and operator approval, ship the same commit and tag: execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
     or expose credentials; review restore validation and rollback before execution.
