@@ -98,7 +98,8 @@
         "theme": "showcase_react"
       }
     },
-    "sa320": "Regenerated 2026-10-24 \u2014 the generated theme gains the managed frontend/src/quickscaleSeam.hooks.ts rendered from each active manifest's frontend_resources declaration; CrmPage.tsx imports CRM_RESOURCE_PATHS and CrmStats from it instead of declaring the five subpaths and the response interface, and the managed seam path list gains the hook file (SA320). All three variants gain 1 path (frontend/src/quickscaleSeam.hooks.ts) and change 1 hash (frontend/src/pages/CrmPage.tsx). All unrelated paths, hashes, and modes remain authoritative."
+    "sa320": "Regenerated 2026-10-24 \u2014 the generated theme gains the managed frontend/src/quickscaleSeam.hooks.ts rendered from each active manifest's frontend_resources declaration; CrmPage.tsx imports CRM_RESOURCE_PATHS and CrmStats from it instead of declaring the five subpaths and the response interface, and the managed seam path list gains the hook file (SA320). All three variants gain 1 path (frontend/src/quickscaleSeam.hooks.ts) and change 1 hash (frontend/src/pages/CrmPage.tsx). All unrelated paths, hashes, and modes remain authoritative.",
+    "sa320b": "Regenerated 2026-10-26 \u2014 the remaining theme module payload types and resource paths move onto the managed frontend/src/quickscaleSeam.hooks.ts (SA320 slice b): the manifest frontend_resources grammar gains parameterized paths rendered as typed builders and optional/nullable/array/reference/union type forms; orgs, billing, social and forms declare their contracts; the org, form and social hooks import the generated types and builders, and the social client no longer carries a fallback endpoint literal. 10 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgs.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/quickscaleSeam.hooks.ts, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/useApiErrors.test.ts, frontend/src/test/useOrgs.test.tsx. All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
@@ -231,7 +232,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "644",
-      "sha256": "6c4f05f4669840c86fb14bf9f4070b77eee322c724ccf3079893fd91ed516a25"
+      "sha256": "4bfa3aeeb76079e12e4ca06d8caf5c3d6808f3058cfd1fcdd4e0d274bdb84007"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "644",
@@ -315,11 +316,11 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "644",
-      "sha256": "89c98d9454265f10f03277f22d1252b2c159ff0137eac8859f65de882ff883e4"
+      "sha256": "d70adb9db81280651e7bcedac5cb70a3567aba54c28903ec5c3654067ed8bf7a"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "644",
-      "sha256": "37ddab4ce9d98b6534a16b1a80959a10e95654de6134426d125459a46bcb0b32"
+      "sha256": "0ff0c9d9b21fded3cbd5ea4f9c4add2b9b652724613e3622e79ba962f0268c7f"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "644",
@@ -327,11 +328,11 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "644",
-      "sha256": "91aa91f47e956da65b4e7faaf2199f5355bfa343951f768a7a7fa02dcedd14b4"
+      "sha256": "b83f57803a37e9050f6079bb398ac1006341f7eddbe58685d2c721243856015c"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "644",
-      "sha256": "0f9ae30cb869498adb15b15a09366aae117eec626c5e5fa1e9c60e45fbe9cd65"
+      "sha256": "1b3c2a45376ed006c39c53731a7ddeb418b2eec665d40252041a327bd47f79f5"
     },
     "frontend/src/index.css": {
       "mode": "644",
@@ -431,7 +432,7 @@
     },
     "frontend/src/quickscaleSeam.hooks.ts": {
       "mode": "644",
-      "sha256": "25aa99f74d84797225d77cddc577138135c81c2de531046c41bc4b16213a2524"
+      "sha256": "b647ab04d80ea30df14fe4ede9f6aac9a5247817e0787a97b3d313ab672d8143"
     },
     "frontend/src/quickscaleSeam.keys.ts": {
       "mode": "644",
@@ -471,11 +472,11 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "644",
-      "sha256": "1a0f5bfdb73f02eddb50aa67a07e76882a33927a437eeddbdcaf5cbf943e071b"
+      "sha256": "3960c8fbc9e8b1bcaf32ac40e7f421f029dd29ef624c6ef8522fbd6c5291f459"
     },
     "frontend/src/test/formFields.test.tsx": {
       "mode": "644",
-      "sha256": "db436976bc1c7902b7fc72fa69465fbfed240789771f7ccf8659498decf41f47"
+      "sha256": "aa2f1d06907528e701db0946f729945ab9a212353906a189a7c82e0caf263382"
     },
     "frontend/src/test/layoutComponents.test.tsx": {
       "mode": "644",
@@ -515,7 +516,7 @@
     },
     "frontend/src/test/useApiErrors.test.ts": {
       "mode": "644",
-      "sha256": "dc07200f3dbf37163879b09124ab6012a7c73725033647efef53ebe4a9835aa9"
+      "sha256": "1f48bc823c5e8ee279029ba1b7066afac044bc2eb36629ae59eb131f4af86b86"
     },
     "frontend/src/test/useModules.test.tsx": {
       "mode": "644",
@@ -527,7 +528,7 @@
     },
     "frontend/src/test/useOrgs.test.tsx": {
       "mode": "644",
-      "sha256": "de88ea1cd0343b073f5c6422306d62db924d8a873b90839ca3377a6a4787af19"
+      "sha256": "d54fb477f9fde830ee4aa9de41716c80b6e0b90df75f83f3e89ed0935a62b5d7"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
@@ -809,7 +810,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "644",
-      "sha256": "6c4f05f4669840c86fb14bf9f4070b77eee322c724ccf3079893fd91ed516a25"
+      "sha256": "4bfa3aeeb76079e12e4ca06d8caf5c3d6808f3058cfd1fcdd4e0d274bdb84007"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "644",
@@ -893,11 +894,11 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "644",
-      "sha256": "89c98d9454265f10f03277f22d1252b2c159ff0137eac8859f65de882ff883e4"
+      "sha256": "d70adb9db81280651e7bcedac5cb70a3567aba54c28903ec5c3654067ed8bf7a"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "644",
-      "sha256": "37ddab4ce9d98b6534a16b1a80959a10e95654de6134426d125459a46bcb0b32"
+      "sha256": "0ff0c9d9b21fded3cbd5ea4f9c4add2b9b652724613e3622e79ba962f0268c7f"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "644",
@@ -905,11 +906,11 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "644",
-      "sha256": "91aa91f47e956da65b4e7faaf2199f5355bfa343951f768a7a7fa02dcedd14b4"
+      "sha256": "b83f57803a37e9050f6079bb398ac1006341f7eddbe58685d2c721243856015c"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "644",
-      "sha256": "0f9ae30cb869498adb15b15a09366aae117eec626c5e5fa1e9c60e45fbe9cd65"
+      "sha256": "1b3c2a45376ed006c39c53731a7ddeb418b2eec665d40252041a327bd47f79f5"
     },
     "frontend/src/index.css": {
       "mode": "644",
@@ -1009,7 +1010,7 @@
     },
     "frontend/src/quickscaleSeam.hooks.ts": {
       "mode": "644",
-      "sha256": "25aa99f74d84797225d77cddc577138135c81c2de531046c41bc4b16213a2524"
+      "sha256": "b647ab04d80ea30df14fe4ede9f6aac9a5247817e0787a97b3d313ab672d8143"
     },
     "frontend/src/quickscaleSeam.keys.ts": {
       "mode": "644",
@@ -1049,11 +1050,11 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "644",
-      "sha256": "1a0f5bfdb73f02eddb50aa67a07e76882a33927a437eeddbdcaf5cbf943e071b"
+      "sha256": "3960c8fbc9e8b1bcaf32ac40e7f421f029dd29ef624c6ef8522fbd6c5291f459"
     },
     "frontend/src/test/formFields.test.tsx": {
       "mode": "644",
-      "sha256": "db436976bc1c7902b7fc72fa69465fbfed240789771f7ccf8659498decf41f47"
+      "sha256": "aa2f1d06907528e701db0946f729945ab9a212353906a189a7c82e0caf263382"
     },
     "frontend/src/test/layoutComponents.test.tsx": {
       "mode": "644",
@@ -1093,7 +1094,7 @@
     },
     "frontend/src/test/useApiErrors.test.ts": {
       "mode": "644",
-      "sha256": "dc07200f3dbf37163879b09124ab6012a7c73725033647efef53ebe4a9835aa9"
+      "sha256": "1f48bc823c5e8ee279029ba1b7066afac044bc2eb36629ae59eb131f4af86b86"
     },
     "frontend/src/test/useModules.test.tsx": {
       "mode": "644",
@@ -1105,7 +1106,7 @@
     },
     "frontend/src/test/useOrgs.test.tsx": {
       "mode": "644",
-      "sha256": "de88ea1cd0343b073f5c6422306d62db924d8a873b90839ca3377a6a4787af19"
+      "sha256": "d54fb477f9fde830ee4aa9de41716c80b6e0b90df75f83f3e89ed0935a62b5d7"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
@@ -1387,7 +1388,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "644",
-      "sha256": "6c4f05f4669840c86fb14bf9f4070b77eee322c724ccf3079893fd91ed516a25"
+      "sha256": "4bfa3aeeb76079e12e4ca06d8caf5c3d6808f3058cfd1fcdd4e0d274bdb84007"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "644",
@@ -1471,11 +1472,11 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "644",
-      "sha256": "89c98d9454265f10f03277f22d1252b2c159ff0137eac8859f65de882ff883e4"
+      "sha256": "d70adb9db81280651e7bcedac5cb70a3567aba54c28903ec5c3654067ed8bf7a"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "644",
-      "sha256": "37ddab4ce9d98b6534a16b1a80959a10e95654de6134426d125459a46bcb0b32"
+      "sha256": "0ff0c9d9b21fded3cbd5ea4f9c4add2b9b652724613e3622e79ba962f0268c7f"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "644",
@@ -1483,11 +1484,11 @@
     },
     "frontend/src/hooks/useOrgs.ts": {
       "mode": "644",
-      "sha256": "91aa91f47e956da65b4e7faaf2199f5355bfa343951f768a7a7fa02dcedd14b4"
+      "sha256": "b83f57803a37e9050f6079bb398ac1006341f7eddbe58685d2c721243856015c"
     },
     "frontend/src/hooks/usePublicSocialSurface.ts": {
       "mode": "644",
-      "sha256": "0f9ae30cb869498adb15b15a09366aae117eec626c5e5fa1e9c60e45fbe9cd65"
+      "sha256": "1b3c2a45376ed006c39c53731a7ddeb418b2eec665d40252041a327bd47f79f5"
     },
     "frontend/src/index.css": {
       "mode": "644",
@@ -1587,7 +1588,7 @@
     },
     "frontend/src/quickscaleSeam.hooks.ts": {
       "mode": "644",
-      "sha256": "25aa99f74d84797225d77cddc577138135c81c2de531046c41bc4b16213a2524"
+      "sha256": "b647ab04d80ea30df14fe4ede9f6aac9a5247817e0787a97b3d313ab672d8143"
     },
     "frontend/src/quickscaleSeam.keys.ts": {
       "mode": "644",
@@ -1627,11 +1628,11 @@
     },
     "frontend/src/test/csrf.test.tsx": {
       "mode": "644",
-      "sha256": "1a0f5bfdb73f02eddb50aa67a07e76882a33927a437eeddbdcaf5cbf943e071b"
+      "sha256": "3960c8fbc9e8b1bcaf32ac40e7f421f029dd29ef624c6ef8522fbd6c5291f459"
     },
     "frontend/src/test/formFields.test.tsx": {
       "mode": "644",
-      "sha256": "db436976bc1c7902b7fc72fa69465fbfed240789771f7ccf8659498decf41f47"
+      "sha256": "aa2f1d06907528e701db0946f729945ab9a212353906a189a7c82e0caf263382"
     },
     "frontend/src/test/layoutComponents.test.tsx": {
       "mode": "644",
@@ -1671,7 +1672,7 @@
     },
     "frontend/src/test/useApiErrors.test.ts": {
       "mode": "644",
-      "sha256": "dc07200f3dbf37163879b09124ab6012a7c73725033647efef53ebe4a9835aa9"
+      "sha256": "1f48bc823c5e8ee279029ba1b7066afac044bc2eb36629ae59eb131f4af86b86"
     },
     "frontend/src/test/useModules.test.tsx": {
       "mode": "644",
@@ -1683,7 +1684,7 @@
     },
     "frontend/src/test/useOrgs.test.tsx": {
       "mode": "644",
-      "sha256": "de88ea1cd0343b073f5c6422306d62db924d8a873b90839ca3377a6a4787af19"
+      "sha256": "d54fb477f9fde830ee4aa9de41716c80b6e0b90df75f83f3e89ed0935a62b5d7"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",

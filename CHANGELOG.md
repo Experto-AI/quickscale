@@ -65,7 +65,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     in `quickscale status`.
   - **Module resource contracts are generated.** The managed
     `frontend/src/quickscaleSeam.hooks.ts` carries each shipped module's declared API resource
-    subpaths and payload types, and theme pages import it instead of restating them.
+    subpaths, parameterized path builders, and payload types, and the theme's module pages import
+    them instead of restating a path or response shape.
   - **Railway deploys preserve live configuration** and reuse a pre-linked directory; the settings
     module comes from project state.
   - **Disaster recovery streams large objects** and restores check migration content instead of

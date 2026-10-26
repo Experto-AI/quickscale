@@ -271,7 +271,11 @@ def rule_12_manifest_options(corpus: Corpus) -> list[str]:
             for key, option in options.items():
                 violations.extend(_option_schema_violations(module, kind, key, option))
         violations.extend(_derived_consumer_violations(corpus, module))
-        if _contains_key(manifest, "validation_rules"):
+        # ``frontend_resources`` declares API response shapes, so a payload
+        # field may legitimately be named ``validation_rules``; the retired-key
+        # rule governs manifest authoring, not the generated frontend contract.
+        authoring = {key: value for key, value in manifest.items() if key != "frontend_resources"}
+        if _contains_key(authoring, "validation_rules"):
             violations.append(f"rule 12: {module.name}: manifest declares retired validation_rules")
     return violations
 

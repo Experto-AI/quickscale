@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FormRenderer } from '@/components/forms/FormRenderer'
+import { FORMS_RESOURCE_PATHS } from '@/quickscaleSeam.hooks'
 import type { FormFieldSchema, FormSchema } from '@/hooks/useFormSchema'
 import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
@@ -224,7 +225,7 @@ describe('form field rendering', () => {
 
     expect(await screen.findByText('Thanks for your message.')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenLastCalledWith(
-      '/forms/api/contact/submit/',
+      `/forms/api/${FORMS_RESOURCE_PATHS.submit('contact')}`,
       expect.objectContaining({ method: 'POST' }),
     )
 

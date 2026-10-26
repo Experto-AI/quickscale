@@ -56,7 +56,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA320 (b → c) ─► SA321
+Track 1: SA320 (c) ─► SA321
 Track 2: SA311 ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
          ─► SA191d (re-proof → production → retire, operator-gated)
 Track 3: [SA191d (production)] SA277
@@ -81,7 +81,7 @@ live in the project-owned extension as `0002+` migrations.
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA320 (b) — in progress | yes | yes | yes: SA320, SA321 |
+| 1 | SA320 (c) | yes | yes | yes: SA320, SA321 |
 | 2 | SA311 | yes | yes | yes: SA311, SA314, SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
@@ -128,7 +128,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   26).
 
   **Slices:**
-  - [ ] (b) Move the remaining theme pages' module paths and types onto the generated
+  - [x] (b) Move the remaining theme pages' module paths and types onto the generated
     hooks; the closed-world check passes over the full theme (Tier 2-full).
   - [ ] (c) Move the per-module branches in core templates (admin index, CI/Makefile, Compose,
     base settings, the notifications `ANYMAIL` block) into module-declared manifest blocks or a

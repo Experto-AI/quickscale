@@ -174,10 +174,11 @@ requires every seam entry against and the theme's tests build their fixtures
 from, so the module set has one generated home and a module that joins the set
 changes no user-owned theme file.  ``frontend/src/quickscaleSeam.hooks.ts`` is
 the managed module-hook file: it renders each active manifest's
-``frontend_resources`` declaration — the module's API resource subpaths and
-payload types — so a user-owned page imports a resource path or response type
-instead of restating it, and a module release that changes either changes only
-this file (SA320).  All three are classified as
+``frontend_resources`` declaration — the module's API resource subpaths (a
+``{parameter}`` segment becomes a typed builder) and payload types (interfaces
+and union aliases) — so a user-owned page imports a resource path, builder, or
+response type instead of restating it, and a module release that changes either
+changes only this file (SA320).  All three are classified as
 recipient-managed protected root files
 (``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the recipient's
 copies and never writes donor content over them, and a project does not

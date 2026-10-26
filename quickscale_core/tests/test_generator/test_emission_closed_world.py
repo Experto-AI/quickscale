@@ -15,10 +15,12 @@ flagged.
 
 The same closed world covers module resource contracts (SA320): no user-owned
 emitted TypeScript file may name a module's manifest-declared API resource
-subpath (``stats/``) or declare its payload type (``interface CrmStats``).
-Both live in the managed ``frontend/src/quickscaleSeam.hooks.ts`` file,
-rendered from the shipped manifests' ``frontend_resources`` declarations, so
-a module that changes either is covered without editing this test.  Module wiring (URL includes, shell routes,
+subpath (``stats/``), hand-write the shape a ``{parameter}`` path builder
+produces (``members/${id}/role/``), or declare its payload type (``interface
+CrmStats``, ``type OrgRole``).  Both live in the managed
+``frontend/src/quickscaleSeam.hooks.ts`` file, rendered from the shipped
+manifests' ``frontend_resources`` declarations, so a module that changes
+either is covered without editing this test.  Module wiring (URL includes, shell routes,
 template URLs) reaches a project only through the versioned
 ``quickscale_core.runtime`` library and the managed ``urls_modules.py`` /
 ``settings/modules.py`` files that ``apply`` regenerates, so a module release
@@ -182,6 +184,30 @@ def _declared_frontend_contract() -> tuple[frozenset[str], frozenset[str]]:
 
 
 _FRONTEND_RESOURCE_PATHS, _FRONTEND_PAYLOAD_TYPES = _declared_frontend_contract()
+
+#: A ``{parameter}`` placeholder in a declared resource path.
+_RESOURCE_PLACEHOLDER = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}")
+
+#: One dynamic path segment: a JavaScript template expression, a literal
+#: ``{parameter}`` placeholder, or a concrete identifier.
+_RESOURCE_DYNAMIC_SEGMENT = r"(?:\$\{[^}]*\}|\{[^}]*\}|[^/\s'\"`]+)"
+
+
+def _resource_template_pattern(template: str) -> re.Pattern[str] | None:
+    """Return the matcher for a declared path's hand-written equivalent.
+
+    A manifest declares ``members/{membershipId}/role/``; the managed hook
+    renders a builder, so a user-owned file that writes the same path by hand
+    has to spell one of the dynamic segment forms the matcher accepts.  A path
+    whose only content is a placeholder (``{orgSlug}/``) carries no static
+    module token to detect; its builder is the contract and the generated-hook
+    tests pin it.
+    """
+    parts = _RESOURCE_PLACEHOLDER.split(template)
+    if not any(part.strip("/") for part in parts):
+        return None
+    return re.compile(_RESOURCE_DYNAMIC_SEGMENT.join(re.escape(part) for part in parts))
+
 
 #: A module's namespaced URL name (``quickscale_billing:pricing_page``).
 _MODULE_URL_NAME = re.compile(
@@ -363,6 +389,20 @@ def _template_violations(text: str) -> list[str]:
     return violations
 
 
+#: One import statement, including a multiline brace list.  A type import is
+#: an import, not a declaration: the closed world forbids declaring a module
+#: payload type in user-owned code, never importing it.
+_TS_IMPORT = re.compile(
+    r"^import\s+(?:type\s+)?(?:[\s\S]*?)\bfrom\s+['\"][^'\"]+['\"]\s*;?",
+    re.MULTILINE,
+)
+
+
+def _strip_ts_imports(text: str) -> str:
+    """Return *text* with its import statements removed."""
+    return _TS_IMPORT.sub("", text)
+
+
 def _strip_ts_comments(text: str) -> str:
     """Return *text* with line and block comments removed.
 
@@ -431,11 +471,22 @@ def _typescript_violations(text: str) -> list[str]:
                 "shipped module flag set"
             )
     for resource_path in sorted(_FRONTEND_RESOURCE_PATHS):
+        if _RESOURCE_PLACEHOLDER.search(resource_path):
+            pattern = _resource_template_pattern(resource_path)
+            if pattern is None:
+                continue
+            for match in pattern.finditer(clean):
+                violations.append(
+                    f"line {_line_number(clean, match.start())}: module resource "
+                    f"path {resource_path!r}"
+                )
+            continue
         for match in re.finditer(re.escape(resource_path), clean):
             violations.append(
                 f"line {_line_number(clean, match.start())}: module resource "
                 f"subpath {resource_path!r}"
             )
+    declarations = _strip_ts_imports(clean)
     for type_name in sorted(_FRONTEND_PAYLOAD_TYPES):
         pattern = re.compile(
             r"(?:^|[\n;])\s*(?:export\s+)?(?:interface|type)\s+"
@@ -443,7 +494,7 @@ def _typescript_violations(text: str) -> list[str]:
             + r"\b",
             re.MULTILINE,
         )
-        for match in pattern.finditer(clean):
+        for match in pattern.finditer(declarations):
             violations.append(
                 f"line {_line_number(clean, match.start())}: module payload "
                 f"type declaration {type_name!r}"
@@ -617,12 +668,38 @@ def test_typescript_detector_rejects_a_module_payload_type_declaration() -> None
     assert _typescript_violations("type CrmStats = { contacts: number }\n")
 
 
+def test_typescript_detector_rejects_a_hand_written_resource_builder_path() -> None:
+    assert _typescript_violations("const path = `acme/members/${membershipId}/role/`\n")
+    assert _typescript_violations("const path = 'acme/members/7/role/'\n")
+
+
+def test_typescript_detector_rejects_a_payload_union_declaration() -> None:
+    assert _typescript_violations(
+        "export type OrgRole = 'viewer' | 'member' | 'admin' | 'owner'\n"
+    )
+
+
+def test_typescript_detector_accepts_a_multiline_type_import() -> None:
+    # Importing a generated type is the prescribed use; only a declaration is
+    # a user-owned restatement.
+    assert not _typescript_violations(
+        "import {\n  type OrgMember,\n  type OrgRole,\n"
+        "} from '@/quickscaleSeam.hooks'\n"
+    )
+
+
 def test_typescript_detector_accepts_the_managed_hook_import() -> None:
     # The managed hook owns the subpath and the type; a page imports both and
     # is not flagged, which is what makes the managed file the passing control.
     assert not _typescript_violations(
         "import { CRM_RESOURCE_PATHS, type CrmStats } from '@/quickscaleSeam.hooks'\n"
         "const stats = `${crmApiBase}${CRM_RESOURCE_PATHS.stats}`\n"
+    )
+    # A parameterized path's builder is the managed form; only the managed
+    # file carries the template itself.
+    assert not _typescript_violations(
+        "import { ORGS_RESOURCE_PATHS } from '@/quickscaleSeam.hooks'\n"
+        "const path = ORGS_RESOURCE_PATHS.memberRole(7)\n"
     )
 
 

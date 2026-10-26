@@ -196,9 +196,11 @@ Engine boundary: §[DR Engine Boundary Contract](decisions.md#disaster-recovery-
 - ✅ Backward compatible: modules without manifest treated as all-immutable
 - ✅ Options that would require rewriting generated theme-owned frontend routes, navigation, or page registries are not valid mutable plan/apply config; use fixed built-in routes or treat the frontend change as fresh-generation/manual-adoption work
 - ✅ A module whose theme page calls its API declares the resource subpaths and payload types in
-  `frontend_resources`; the generated managed `frontend/src/quickscaleSeam.hooks.ts` renders them,
-  and a user-owned page imports them instead of restating a subpath or response shape. The
-  closed-world emission check rejects either shape in a user-owned file (Module Conventions rule 31)
+  `frontend_resources`; a `{parameter}` path segment renders a typed builder, and a payload type may
+  use optional, array, declared-reference, nullable, or union forms. The generated managed
+  `frontend/src/quickscaleSeam.hooks.ts` renders them, and a user-owned page imports them instead
+  of restating a subpath or response shape. The closed-world emission check rejects either shape in
+  a user-owned file (Module Conventions rule 31)
 - ✅ Every `contract_vintage` carries an `sa<NNN>-<slug>` `id`, its identity in the one
   adopted-step namespace: the loader refuses a vintage without one, and the CLI satisfies a
   declared vintage only while the project records its id — adoption is the one mechanism
