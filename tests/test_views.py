@@ -390,6 +390,51 @@ def test_role_change_form_rejects_non_owner_transfer_to_owner() -> None:
 
 
 @pytest.mark.django_db
+def test_role_change_form_rejects_admin_changing_an_owner() -> None:
+    """An ADMIN cannot change the role of a member ranked above them."""
+    organization = Organization.objects.create(name="Atlas", slug="atlas")
+    actor = get_user_model().objects.create_user(
+        username="atlas-admin-owner-target",
+        email="atlas-admin-owner-target@example.com",
+        password="secret123",
+    )
+    target = get_user_model().objects.create_user(
+        username="atlas-owner-target",
+        email="atlas-owner-target@example.com",
+        password="secret123",
+    )
+    other_owner = get_user_model().objects.create_user(
+        username="atlas-other-owner",
+        email="atlas-other-owner@example.com",
+        password="secret123",
+    )
+    acting_membership = OrganizationMembership.objects.create(
+        user=actor,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    form = org_forms.RoleChangeForm(
+        {"role": OrgRole.MEMBER},
+        target_membership=target_membership,
+        acting_membership=acting_membership,
+    )
+
+    assert not form.is_valid()
+    assert form.errors["role"] == [OrganizationMembership.OWNER_MUTATION_MESSAGE]
+
+
+@pytest.mark.django_db
 def test_role_change_form_save_updates_membership() -> None:
     organization = Organization.objects.create(name="Comet", slug="comet")
     owner = get_user_model().objects.create_user(
@@ -1287,6 +1332,180 @@ def test_member_list_blocks_last_owner_removal_when_other_members_exist(
     assert remove_response.status_code == 400
     assert "You cannot remove the last owner" in remove_response.content.decode()
     assert OrganizationMembership.objects.filter(pk=owner_membership.pk).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("json_request", [False, True], ids=["html", "json"])
+def test_admin_cannot_change_an_owner_role(client, settings, json_request) -> None:
+    """An ADMIN's role change against an OWNER is refused on both surfaces."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Rigel", slug="rigel")
+    admin_user = get_user_model().objects.create_user(
+        username=f"rigel-admin-{json_request}",
+        email=f"rigel-admin-{json_request}@example.com",
+        password="secret123",
+    )
+    target_owner = get_user_model().objects.create_user(
+        username=f"rigel-owner-{json_request}",
+        email=f"rigel-owner-{json_request}@example.com",
+        password="secret123",
+    )
+    other_owner = get_user_model().objects.create_user(
+        username=f"rigel-other-{json_request}",
+        email=f"rigel-other-{json_request}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    client.force_login(admin_user)
+
+    if json_request:
+        response = client.post(
+            f"/orgs/api/{organization.slug}/members/{target_membership.pk}/role/",
+            data=json.dumps({"role": OrgRole.MEMBER}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert response.json()["error"]["fields"] == {
+            "role": [OrganizationMembership.OWNER_MUTATION_MESSAGE]
+        }
+    else:
+        response = client.post(
+            f"/orgs/{organization.slug}/members/",
+            {
+                "action": "change-role",
+                "membership_id": target_membership.pk,
+                "role": OrgRole.MEMBER,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            OrganizationMembership.OWNER_MUTATION_MESSAGE in response.content.decode()
+        )
+
+    target_membership.refresh_from_db()
+    assert target_membership.role == OrgRole.OWNER
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("json_request", [False, True], ids=["html", "json"])
+def test_admin_cannot_remove_an_owner(client, settings, json_request) -> None:
+    """An ADMIN's removal of an OWNER is refused on both surfaces."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Saiph", slug="saiph")
+    admin_user = get_user_model().objects.create_user(
+        username=f"saiph-admin-{json_request}",
+        email=f"saiph-admin-{json_request}@example.com",
+        password="secret123",
+    )
+    target_owner = get_user_model().objects.create_user(
+        username=f"saiph-owner-{json_request}",
+        email=f"saiph-owner-{json_request}@example.com",
+        password="secret123",
+    )
+    other_owner = get_user_model().objects.create_user(
+        username=f"saiph-other-{json_request}",
+        email=f"saiph-other-{json_request}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    client.force_login(admin_user)
+
+    if json_request:
+        response = client.post(
+            f"/orgs/api/{organization.slug}/members/{target_membership.pk}/remove/",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert response.json()["error"]["fields"] == {
+            "non_field_errors": [OrganizationMembership.OWNER_MUTATION_MESSAGE]
+        }
+    else:
+        response = client.post(
+            f"/orgs/{organization.slug}/members/",
+            {
+                "action": "remove",
+                "membership_id": target_membership.pk,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            OrganizationMembership.OWNER_MUTATION_MESSAGE in response.content.decode()
+        )
+
+    assert OrganizationMembership.objects.filter(pk=target_membership.pk).exists()
+
+
+@pytest.mark.django_db
+def test_platform_operator_can_remove_an_owner(client, settings) -> None:
+    """A platform operator keeps the cross-organization escape hatch."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Mizar", slug="mizar")
+    target_owner = get_user_model().objects.create_user(
+        username="mizar-owner",
+        email="mizar-owner@example.com",
+        password="secret123",
+    )
+    other_owner = get_user_model().objects.create_user(
+        username="mizar-other-owner",
+        email="mizar-other-owner@example.com",
+        password="secret123",
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    superuser = get_user_model().objects.create_superuser(
+        username="mizar-operator",
+        email="mizar-operator@example.com",
+        password="secret123",
+    )
+    client.force_login(superuser)
+
+    response = client.post(
+        f"/orgs/{organization.slug}/members/",
+        {
+            "action": "remove",
+            "membership_id": target_membership.pk,
+        },
+    )
+
+    assert response.status_code == 302
+    assert not OrganizationMembership.objects.filter(pk=target_membership.pk).exists()
 
 
 @pytest.mark.django_db

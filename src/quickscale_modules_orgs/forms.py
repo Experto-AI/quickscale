@@ -19,6 +19,7 @@ from .models import (
     OrganizationInvitation,
     OrganizationMembership,
 )
+from .permissions import role_outranks_actor
 from .signals import organization_created
 
 
@@ -305,6 +306,8 @@ class RoleChangeForm(forms.Form):
         **kwargs: Any,
     ) -> None:
         self.target_membership = target_membership
+        self.acting_membership = acting_membership
+        self.acting_user_is_superuser = acting_user_is_superuser
         self.owner_like = acting_user_is_superuser or (
             acting_membership is not None and acting_membership.role == OrgRole.OWNER
         )
@@ -329,6 +332,10 @@ class RoleChangeForm(forms.Form):
         """Validate ownership transfer, demotion, and last-owner constraints."""
 
         role = cast(str, self.cleaned_data["role"])
+
+        if self._target_outranks_actor():
+            raise forms.ValidationError(OrganizationMembership.OWNER_MUTATION_MESSAGE)
+
         owner_count = self._owner_count()
 
         if role == OrgRole.OWNER and not self.owner_like:
@@ -356,6 +363,18 @@ class RoleChangeForm(forms.Form):
             raise forms.ValidationError("You cannot demote the last owner.")
 
         return role
+
+    def _target_outranks_actor(self) -> bool:
+        """Return whether the target's current role outranks the actor's."""
+        if self.acting_user_is_superuser:
+            return False
+        acting_role = (
+            self.acting_membership.role if self.acting_membership is not None else None
+        )
+        return role_outranks_actor(
+            target_role=self.target_membership.role,
+            actor_role=acting_role,
+        )
 
     def save(self) -> OrganizationMembership:
         """Persist the validated role change."""
