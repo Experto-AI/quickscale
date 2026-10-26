@@ -506,3 +506,52 @@ class TestCloudUploadKeyUniqueness:
         assert len(set(results)) == 2
         assert set(storage.payloads) == set(results)
         assert sorted(storage.payloads.values()) == [b"org-a", b"org-b"]
+
+    def test_constrained_max_length_still_allocates_a_token(self) -> None:
+        """A short field limit keeps its contract and still gets a unique key."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        first = storage.save("a.jpg", ContentFile(b"first"), max_length=10)
+        second = storage.save("a.jpg", ContentFile(b"second"), max_length=10)
+
+        assert len(first) <= 10
+        assert len(second) <= 10
+        assert first.endswith(".jpg")
+        assert second.endswith(".jpg")
+        assert first != second
+        assert storage.payloads == {first: b"first", second: b"second"}
+
+    def test_long_path_within_max_length_still_saves(self) -> None:
+        """An oversized original name is trimmed instead of raising."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        oversized = "d/" + ("a" * 95) + ".jpg"
+        saved = storage.save(oversized, ContentFile(b"payload"), max_length=100)
+
+        assert len(saved) <= 100
+        assert saved.endswith(".jpg")
+        assert storage.payloads == {saved: b"payload"}
+
+    def test_below_token_floor_keeps_stock_allocation(self) -> None:
+        """A field with no token space preserves Django's stock behavior."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        saved = storage.save("a.b", ContentFile(b"payload"), max_length=4)
+
+        assert saved == "a.b"
+        assert storage.payloads == {saved: b"payload"}
