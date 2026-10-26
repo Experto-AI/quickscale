@@ -55,10 +55,13 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 private-media authorization, so the switch never had an effect. Public media delivery keeps its
 current contract; private-media authorization arrives as a separate, enforced surface.
 
-Cloud uploads never overwrite an existing object. The module sets `file_overwrite: False` on its
-S3-compatible `STORAGES["default"]` backend (equivalent to `AWS_S3_FILE_OVERWRITE=False` for a
-custom configuration), so a later upload of the same filename is stored under a suffixed key
-instead of replacing the earlier tenant's media. Existing object keys are unaffected.
+Cloud uploads never overwrite an existing object. The module's S3-compatible
+`STORAGES["default"]` backend (`quickscale_modules_storage.backends.UniqueKeyS3Storage`) appends a
+random token to every allocated key, so two uploads of the same filename — including concurrent
+ones that both see the key as free — are stored under distinct keys instead of one replacing the
+other tenant's media. It keeps `file_overwrite: False` (equivalent to
+`AWS_S3_FILE_OVERWRITE=False` for a custom configuration) as a second guard. Existing object keys
+are unaffected.
 
 The same desired state in `quickscale.yml`:
 

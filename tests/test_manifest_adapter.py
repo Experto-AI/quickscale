@@ -17,6 +17,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +187,7 @@ class TestStorageManifestAdapter:
         assert spec.settings["QUICKSCALE_STORAGE_BACKEND"] == backend
         assert spec.settings["STORAGES"] == {
             "default": {
-                "BACKEND": "storages.backends.s3.S3Storage",
+                "BACKEND": "quickscale_modules_storage.backends.UniqueKeyS3Storage",
                 "OPTIONS": {
                     "querystring_auth": False,
                     "file_overwrite": False,
@@ -264,7 +265,7 @@ class TestStorageManifestAdapter:
         assert spec.settings["MEDIA_URL"] == "/uploads/"
         assert spec.settings["STORAGES"] == {
             "default": {
-                "BACKEND": "storages.backends.s3.S3Storage",
+                "BACKEND": "quickscale_modules_storage.backends.UniqueKeyS3Storage",
                 "OPTIONS": {"querystring_auth": True, "file_overwrite": False},
             },
             "staticfiles": {
@@ -412,36 +413,96 @@ class TestStorageMediaUrlContract:
 
 
 class TestCloudUploadKeyUniqueness:
-    """Cloud uploads never replace another tenant's same-named object."""
+    """Cloud uploads allocate a distinct key for every save, including races."""
 
-    def test_same_filename_uploads_get_distinct_keys(self) -> None:
-        """The emitted file_overwrite=False makes django-storages pick a new key."""
+    @staticmethod
+    def _recording_storage(
+        options: dict[str, Any],
+        *,
+        barrier: threading.Barrier | None = None,
+    ) -> Any:
+        """Real allocation and save path with the provider connection faked."""
         pytest.importorskip("storages.backends.s3")
-        from django.core.files.base import ContentFile
-        from storages.backends.s3 import S3Storage
+        from quickscale_modules_storage.backends import UniqueKeyS3Storage
 
-        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
-        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
-
-        class RecordingS3Storage(S3Storage):
-            """Real S3Storage name handling with the provider connection faked."""
-
+        class RecordingStorage(UniqueKeyS3Storage):
             def __init__(self, **settings: Any) -> None:
                 super().__init__(**settings)
-                self.keys: set[str] = set()
+                self.payloads: dict[str, bytes] = {}
+                self.lock = threading.Lock()
+                self.barrier = barrier
 
             def exists(self, name: str) -> bool:
-                return name in self.keys
+                with self.lock:
+                    return name in self.payloads
 
             def _save(self, name: str, content: Any) -> str:
-                self.keys.add(name)
+                if self.barrier is not None:
+                    self.barrier.wait(timeout=10)
+                with self.lock:
+                    self.payloads[name] = content.read()
                 return name
 
-        storage = RecordingS3Storage(**options)
+        return RecordingStorage(**options)
+
+    def test_same_filename_uploads_get_distinct_keys(self) -> None:
+        """Every save carries a different token, even when no key exists yet."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        assert spec.settings["STORAGES"]["default"]["BACKEND"] == (
+            "quickscale_modules_storage.backends.UniqueKeyS3Storage"
+        )
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
         first = storage.save("listings/images/shared.jpg", ContentFile(b"first"))
         second = storage.save("listings/images/shared.jpg", ContentFile(b"second"))
 
-        assert first == "listings/images/shared.jpg"
-        assert second != first
-        assert storage.keys == {first, second}
+        assert first != second
+        assert storage.payloads == {first: b"first", second: b"second"}
         assert options["file_overwrite"] is False
+
+    def test_concurrent_same_filename_uploads_keep_both_payloads(self) -> None:
+        """Two writers that both see a free key still get distinct keys."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(
+            options,
+            barrier=threading.Barrier(2),
+        )
+        results: list[str] = []
+        errors: list[BaseException] = []
+        results_lock = threading.Lock()
+
+        def upload(payload: bytes) -> None:
+            try:
+                name = storage.save(
+                    "listings/images/shared.jpg",
+                    ContentFile(payload),
+                )
+            except BaseException as error:  # pragma: no cover - failure path
+                with results_lock:
+                    errors.append(error)
+                return
+            with results_lock:
+                results.append(name)
+
+        threads = [
+            threading.Thread(target=upload, args=(b"org-a",)),
+            threading.Thread(target=upload, args=(b"org-b",)),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert errors == []
+        assert len(results) == 2
+        assert len(set(results)) == 2
+        assert set(storage.payloads) == set(results)
+        assert sorted(storage.payloads.values()) == [b"org-a", b"org-b"]
