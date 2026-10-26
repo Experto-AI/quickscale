@@ -9,6 +9,7 @@ keep working.
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping
 
 from scripts.module_conventions._routes_view_index import _dotted_name
 from scripts.module_conventions._webhooks_routes import _as_view_target, _route_entries
@@ -57,8 +58,30 @@ UPLOAD_MULTIPART_PARSERS = frozenset(
 #: The two DRF view attributes rule 9's content contract claims.
 CONTENT_POLICY_ATTRIBUTES = ("renderer_classes", "parser_classes")
 
+_BARE_ERROR_RESPONSE_NAMES = frozenset(
+    {
+        "HttpResponse",
+        "HttpResponseBadRequest",
+        "HttpResponseForbidden",
+        "HttpResponseGone",
+        "HttpResponseNotAllowed",
+        "HttpResponseNotFound",
+        "HttpResponseServerError",
+        "JsonResponse",
+    }
+)
+_EXPLICIT_ERROR_RESPONSE_NAMES = _BARE_ERROR_RESPONSE_NAMES - {
+    "HttpResponse",
+    "JsonResponse",
+}
 
-def rule_9_http_apis(corpus: Corpus) -> list[str]:
+
+def rule_9_http_apis(
+    corpus: Corpus,
+    *,
+    html_only_gates: Mapping[tuple[str, str, str], str],
+) -> list[str]:
+    """Rule 9 over the module corpus, with the recorded HTML-only gates."""
     violations: list[str] = []
     for module in corpus.modules:
         webhook_view_names = _webhook_view_names(module)
@@ -73,6 +96,9 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
             violations.extend(_pagination_violations(module.name, rel, tree, paginator_classes))
             violations.extend(
                 _content_policy_pin_violations(f"{module.name}: {rel}", tree, webhook_view_names)
+            )
+            violations.extend(
+                _gate_decorator_violations(module.name, rel, tree, html_only_gates=html_only_gates)
             )
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and _call_func_name(node) == "HttpResponse":
@@ -96,6 +122,126 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
                         )
     violations.extend(_rendered_managed_json_violations())
     violations.extend(_composed_json_default_violations())
+    return violations
+
+
+def _http_response_bindings(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Resolve a module's Django response-class bindings for the gate scan.
+
+    Local bindings map a name (including an alias) to the canonical Django
+    response class, so ``HttpResponseForbidden as Forbidden`` still reads as an
+    error response.
+    """
+    imported: dict[str, str] = {}
+    namespaces: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in {
+            "django.http",
+            "django.http.response",
+        }:
+            for alias in node.names:
+                if alias.name in _BARE_ERROR_RESPONSE_NAMES:
+                    imported[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in {"django.http", "django.http.response"}:
+                    namespaces[alias.asname or alias.name.split(".")[0]] = alias.name
+    return imported, namespaces
+
+
+def _response_constructor(
+    node: ast.expr,
+    imported: dict[str, str],
+    namespaces: dict[str, str],
+) -> str | None:
+    """Return the canonical Django response class a call target resolves to."""
+    if isinstance(node, ast.Name):
+        return imported.get(node.id)
+    dotted = _dotted_name(node)
+    if dotted is None:
+        return None
+    root, _, rest = dotted.partition(".")
+    if not rest:
+        return imported.get(dotted)
+    if f"{namespaces.get(root, root)}.{rest}" in {
+        f"django.http.{rest}",
+        f"django.http.response.{rest}",
+    }:
+        return rest
+    return None
+
+
+def _error_status(call: ast.Call, constructor: str) -> bool:
+    """
+    Return whether a response construction carries a 4xx/5xx status.
+
+    A status the detector cannot read fails closed: a gate must not answer with
+    a response it builds whichever value a computed status holds.
+    """
+    if constructor in _EXPLICIT_ERROR_RESPONSE_NAMES:
+        return True
+    status_keyword = _keyword(call, "status")
+    if status_keyword is None:
+        return False
+    status = _literal(status_keyword)
+    if status is None:
+        return True
+    return isinstance(status, int) and not isinstance(status, bool) and 400 <= status <= 599
+
+
+def _gate_decorator_violations(
+    module_name: str,
+    rel: str,
+    tree: ast.Module,
+    *,
+    html_only_gates: Mapping[tuple[str, str, str], str],
+) -> list[str]:
+    """
+    Return rule 9's bare-error-response violations for gate decorators.
+
+    A gate decorator factory returns a nested wrapper (directly or through a
+    second nested function).  The wrapper must answer an error by raising a
+    declared module error; a response it builds itself has no shared shape.
+    """
+    imported, namespaces = _http_response_bindings(tree)
+    nested_ids: set[int] = set()
+    for parent in ast.walk(tree):
+        if not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for child in ast.walk(parent):
+            if child is not parent and isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                nested_ids.add(id(child))
+    violations: list[str] = []
+    for factory in ast.walk(tree):
+        if not isinstance(factory, ast.FunctionDef) or id(factory) in nested_ids:
+            continue
+        if (module_name, rel, factory.name) in html_only_gates:
+            continue
+        returned_names = {
+            child.value.id
+            for child in factory.body
+            if isinstance(child, ast.Return) and isinstance(child.value, ast.Name)
+        }
+        if not returned_names:
+            continue
+        wrappers = [
+            child
+            for child in ast.walk(factory)
+            if isinstance(child, ast.FunctionDef) and child.name in returned_names
+        ]
+        for wrapper in wrappers:
+            for child in ast.walk(wrapper):
+                if not isinstance(child, ast.Return) or not isinstance(child.value, ast.Call):
+                    continue
+                constructor = _response_constructor(child.value.func, imported, namespaces)
+                if constructor is None or not _error_status(child.value, constructor):
+                    continue
+                violations.append(
+                    f"rule 9: {module_name}: {rel}:{child.lineno} gate decorator "
+                    f"{factory.name} returns a bare {constructor}; raise a declared "
+                    "module error so the one handler renders the shared error shape"
+                )
     return violations
 
 

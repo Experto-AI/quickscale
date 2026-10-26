@@ -396,6 +396,97 @@ def test_error_body_control() -> None:
     assert _violations(checker.rule_9_http_apis, broken)
 
 
+def test_published_gate_error_shape_control() -> None:
+    """Rule 9: a gate raises a declared error instead of returning a bare 402/403."""
+    module = _golden_module()
+    shaped_gate = (
+        "from functools import wraps\n"
+        "from rest_framework.exceptions import NotAuthenticated\n\n"
+        "from quickscale_modules_demo.exceptions import DemoError\n\n\n"
+        "def require_demo_gate():\n"
+        "    def decorator(view_func):\n"
+        "        @wraps(view_func)\n"
+        "        def wrapped(request):\n"
+        "            if not getattr(request, 'user', None):\n"
+        "                raise NotAuthenticated()\n"
+        "            raise DemoError('feature unavailable')\n"
+        "        return wrapped\n"
+        "    return decorator\n"
+    )
+    accepted = _with_files(module, **{"permissions.py": shaped_gate})
+    assert _violations(checker.rule_9_http_apis, accepted) == []
+
+    bare_gate = (
+        "from functools import wraps\n"
+        "from django.http import HttpResponse\n\n\n"
+        "def require_demo_gate():\n"
+        "    def decorator(view_func):\n"
+        "        @wraps(view_func)\n"
+        "        def wrapped(request):\n"
+        "            return HttpResponse(status=402)\n"
+        "        return wrapped\n"
+        "    return decorator\n"
+    )
+    refused = _with_files(module, **{"permissions.py": bare_gate})
+    assert any(
+        "gate decorator require_demo_gate returns a bare HttpResponse" in violation
+        for violation in _violations(checker.rule_9_http_apis, refused)
+    )
+
+    forbidden_gate = bare_gate.replace(
+        "from django.http import HttpResponse",
+        "from django.http import HttpResponseForbidden",
+    ).replace("HttpResponse(status=402)", "HttpResponseForbidden()")
+    refused_forbidden = _with_files(module, **{"permissions.py": forbidden_gate})
+    assert any(
+        "returns a bare HttpResponseForbidden" in violation
+        for violation in _violations(checker.rule_9_http_apis, refused_forbidden)
+    )
+
+    computed_status_gate = bare_gate.replace("status=402", "status=HTTP_402")
+    refused_computed = _with_files(module, **{"permissions.py": computed_status_gate})
+    assert any(
+        "returns a bare HttpResponse" in violation
+        for violation in _violations(checker.rule_9_http_apis, refused_computed)
+    )
+
+    aliased_forbidden_gate = forbidden_gate.replace(
+        "from django.http import HttpResponseForbidden",
+        "from django.http import HttpResponseForbidden as Forbidden",
+    ).replace("return HttpResponseForbidden()", "return Forbidden()")
+    refused_aliased = _with_files(module, **{"permissions.py": aliased_forbidden_gate})
+    assert any(
+        "returns a bare HttpResponseForbidden" in violation
+        for violation in _violations(checker.rule_9_http_apis, refused_aliased)
+    )
+
+
+def test_html_only_gate_exemption_control(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rule 9 sanctions a recorded HTML-only gate and rejects an unrecorded one."""
+    module = _golden_module()
+    bare_gate = (
+        "from functools import wraps\n"
+        "from django.http import HttpResponseForbidden\n\n\n"
+        "def require_demo_gate():\n"
+        "    def decorator(view_func):\n"
+        "        @wraps(view_func)\n"
+        "        def wrapped(request):\n"
+        "            return HttpResponseForbidden()\n"
+        "        return wrapped\n"
+        "    return decorator\n"
+    )
+    recorded_gate = _with_files(module, **{"permissions.py": bare_gate})
+    assert any(
+        "gate decorator" in violation
+        for violation in _violations(checker.rule_9_http_apis, recorded_gate)
+    )
+    monkeypatch.setattr(
+        "scripts.module_conventions.rules_routes.HTML_ONLY_GATES",
+        {("demo", "permissions.py", "require_demo_gate"): "HTML-only control gate"},
+    )
+    assert _violations(checker.rule_9_http_apis, recorded_gate) == []
+
+
 def test_throttle_scope_control() -> None:
     module = _golden_module()
     broken = _with_files(

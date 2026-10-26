@@ -16,6 +16,7 @@ from typing import Any, Final, cast
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.urls import NoReverseMatch, reverse
+from rest_framework.exceptions import NotAuthenticated
 
 # The Stripe API version this module is written against (the version
 # stripe-python 15.x ships pinned) is the one authored constant in
@@ -29,6 +30,7 @@ from quickscale_core.runtime.manifest import (
 from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
     BillingDisabledError,
+    OrgFeatureUnavailableError,
 )
 from quickscale_modules_billing.models import (
     CREDIT_TRANSACTION_BUSINESS_REFERENCE_KEYS,
@@ -213,12 +215,20 @@ def _ensure_billing_enabled(settings_snapshot: BillingSettingsSnapshot) -> None:
 
 
 def require_org_feature(feature_key: str) -> Callable:
-    """Return a view decorator answering 402 when the org's plan lacks the feature.
+    """Return a view decorator refusing an organization without the feature.
 
     Module Conventions rule 34 publishes the plan-feature gate here: the
     request's organization is resolved through orgs' published
     ``resolve_request_org`` and the entitlement is read from billing's own
     active subscription, so no lower-layer module names billing.
+
+    Rule 9's published-gate contract: the decorator wraps an API view and
+    never builds an error body.  An anonymous caller raises DRF's
+    ``NotAuthenticated`` (``401``); an authenticated caller with no
+    organization context, no active subscription, or a plan that does not
+    list the feature raises :class:`OrgFeatureUnavailableError`
+    (``402``/``feature_not_available``).  The one QuickScale exception handler
+    renders each in the shared error shape.
     """
     from quickscale_modules_orgs.current_org import (
         CurrentOrgError,
@@ -231,24 +241,28 @@ def require_org_feature(feature_key: str) -> Callable:
         def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
             user = getattr(request, "user", None)
             if not bool(user is not None and getattr(user, "is_authenticated", False)):
-                return HttpResponse(status=402)
+                raise NotAuthenticated()
 
             resolve_request_org(request, kwargs)
             try:
                 organization = require_current_org(request)
-            except CurrentOrgError:
-                return HttpResponse(status=402)
+            except CurrentOrgError as exc:
+                raise OrgFeatureUnavailableError(
+                    "The request has no organization context for the feature gate."
+                ) from exc
 
             subscription = _get_active_org_subscription(organization)
             plan = getattr(subscription, "plan", None)
             features = getattr(plan, "features", None)
-            if subscription is None or plan is None:
-                return HttpResponse(status=402)
             if (
-                not isinstance(features, (list, tuple, set))
+                subscription is None
+                or plan is None
+                or not isinstance(features, (list, tuple, set))
                 or feature_key not in features
             ):
-                return HttpResponse(status=402)
+                raise OrgFeatureUnavailableError(
+                    f"The organization's plan does not include the {feature_key!r} feature."
+                )
             return cast(HttpResponse, view_func(request, *args, **kwargs))
 
         return wrapped

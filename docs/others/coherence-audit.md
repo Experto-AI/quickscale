@@ -137,31 +137,31 @@ items:
     last_verified: "2026-10-24"
   - id: billing-feature-gate
     kind: rule-violation
-    status: open
-    regressed: true
+    status: fixed
+    regressed: false
     verification: confirmed
     aspect: H
     cost: [ambiguity]
     population: modules
     members_affected: [billing]
     rule_ref: "module_conventions rule 9; prior unauthenticated-status-code"
-    check: {kind: conformance, state: proposed, model: contract-based}
+    check: {kind: conformance, state: enforced, model: contract-based}
     handoff: [tech]
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-26"
   - id: billing-admin-org-filter
     kind: drift
-    status: open
+    status: fixed
     verification: confirmed
     aspect: E
     cost: [tax]
     population: tenant-models
     members_affected: [billing]
     rule_ref: "organizations.md §Admin Panel Contract"
-    check: {kind: structural, state: proposed, model: contract-based}
+    check: {kind: structural, state: enforced, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-26"
   - id: forms-tenant-isolation-evidence
     kind: drift
     status: open
@@ -270,7 +270,7 @@ gaps:
   - {id: 21, rule: 17, state: closed, last_verified: "2026-10-25"}
   - {id: 22, rule: 37, state: open, last_verified: "2026-10-24"}
   - {id: 23, rule: 19, state: open, last_verified: "2026-10-24"}
-  - {id: 25, rule: 9, state: open, last_verified: "2026-10-24"}
+  - {id: 25, rule: 9, state: closed, last_verified: "2026-10-26"}
   - {id: 26, rule: 30, state: open, last_verified: "2026-10-24"}
   - {id: 28, rule: 11, state: open, last_verified: "2026-10-24"}
   - {id: 29, rule: 23, state: open, last_verified: "2026-10-24"}
@@ -278,14 +278,14 @@ gaps:
 
 ## Summary table
 
-Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **6** (22, 23, 25, 26, 28, and 29; prior 21 closed 2026-10-25). Cost classes overlap; the unique confirmed-item total is 11: defect 1 · collision 0 · ambiguity 6 · tax 7.
+Current confirmed open items: **9**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **5** (22, 23, 26, 28, and 29; prior 21 closed 2026-10-25, 25 closed 2026-10-26). Cost classes overlap; the unique confirmed-item total is 9: defect 1 · collision 0 · ambiguity 5 · tax 6.
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
 | `generated-module-branches` | rule-violation | L / generator-templates | tax, ambiguity | 4 template groups / all generated projects | open | confirmed · high |
 | `notifications-anymail-wiring-split` | rule-violation | B / modules | tax | 1/12 modules | open | confirmed · high |
-| `billing-feature-gate` | rule-violation | H / modules | ambiguity | 1/12 modules | open (regressed) | confirmed · medium-high |
-| `billing-admin-org-filter` | drift | E / tenant-models | tax | 4/20 admin classes | open | confirmed · high |
+| `billing-feature-gate` | rule-violation | H / modules | ambiguity | 1/12 modules | fixed (was regressed) | confirmed · medium-high |
+| `billing-admin-org-filter` | drift | E / tenant-models | tax | 4/20 admin classes | fixed | confirmed · high |
 | `forms-tenant-isolation-evidence` | drift | M / tenant-isolation-suites | tax | 1/6 suites | open | confirmed · high |
 | `tenant-suite-default-role` | drift | M / test-settings | tax | 3/12 suites | open | confirmed · medium-high |
 | `crm-null-org-legacy` | rule-violation | G / tenant-models | tax, ambiguity | CRM + orgs shared admin | open | confirmed · high |
@@ -360,15 +360,15 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 | Public-read mixin primes tenant context | blog, listings | `BlogPublicReadMixin(PublicSystemOrgReadMixin)`, `ListingsPublicReadMixin(PublicSystemOrgReadMixin)` | `blog/views.py:240`; `listings/views.py:103` | present |
 | Empty public-read marker | billing (6 pages), forms (1 page) | empty class body; no context priming | `billing/views.py:427-434`; `forms/views.py:622-624` | divergent |
 | Tenant admin uses `TenantModelAdmin` | 20/20 | all tenant-model admins | §G table; harness rule 13 | present |
-| Tenant admin exposes organization list filter | 16/20 | blog/crm/forms/listings/social include it; billing 4 do not | `billing/admin.py:47-116`; `organizations.md:635` | divergent |
+| Tenant admin exposes organization list filter | 20/20 | every tenant admin lists it; billing's four since SA314 (b) | `billing/admin.py:47-122`; `organizations.md:635` | present |
 | Tenant admin organization immutable on change | billing read-only; blog/crm shared mixin; forms local override; listings/social editable leaves | see §9 | `orgs/admin.py:425-560`; `forms/admin.py:71-78,170-177` | consistent by design, trigger noted |
 | Public JSON error shape | billing/CRM/forms/blog/listings/orgs | one handler; module errors carry status/code where API-facing | `module_conventions.md:217-252` | present |
-| Published gate decorator error shape | billing `require_org_feature` (and orgs `require_org_role` if used on JSON) | bare `HttpResponse(status=402)` / `HttpResponseForbidden()` | `billing/_settings.py:216-253`; `orgs/permissions.py:54-83` | divergent |
+| Published gate decorator error shape | billing `require_org_feature`; orgs `require_org_role` is HTML-only | one declared-error shape (`401` anonymous, `402` `feature_not_available`); the HTML gate's blank `403` is the recorded exception | `billing/_settings.py:217-270`; `orgs/permissions.py:76-98`; rule 9 harness | present |
 | Inbound webhook throttle | billing, notifications | empty throttle classes; signature is authentication | `billing/views.py:537-554`; `notifications/views.py:13-31`; rule 26 | present |
 
 **Already consistent (keep):** every module page/API declares a guard; `is_staff` appears only in analytics’ traffic filter and orgs’ operator paths; org-role checks go through `user_has_org_role`/`HasOrgRole`; webhooks are signature-verified and return the shared accepted/duplicate body. The webhook empty throttle is consistent by design (rule 26), not the divergence the technical hand-off suspected.
 
-**Items:** `billing-feature-gate`, `billing-admin-org-filter`, `public-read-marker-mixins`.
+**Items:** `public-read-marker-mixins`; `billing-feature-gate` and `billing-admin-org-filter` are fixed (§4–5).
 
 ### G — Data model basics and tenant contract
 
@@ -552,29 +552,38 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 
 ### 4. `billing-feature-gate` (reopened) — published gate returns an unshaped 402
 
-- **ID / kind / status:** `billing-feature-gate` · `rule-violation` · `open` · `regressed: true` (prior `unauthenticated-status-code` cell).
+- **ID / kind / status:** `billing-feature-gate` · `rule-violation` · `fixed` · was `regressed: true` (prior `unauthenticated-status-code` cell).
 - **Aspect / population / context:** H (secondary E) · `modules` · billing’s published `require_org_feature`; 1/12 modules.
 - **Table / evidence:** §E/H.1 row 7. `billing/_settings.py:216-253` returns bare `HttpResponse(status=402)` at four paths; the tests assert 402 for anonymous and no-context (`tests/test_feature_gate.py:143-191`); README calls it the plan-feature gate (`billing/README.md:120-126`). The same shape issue exists in orgs’ `require_org_role` (`orgs/permissions.py:54-83`) if it is applied to a JSON endpoint.
 - **Difference and cost:** **ambiguity.** A client that parses the one QuickScale error shape receives an empty body; a 402 without a code cannot be distinguished from `InsufficientCreditsError` (also 402); an anonymous caller receives 402 instead of the declared 401. The decorator is published for project use, so the cost lands on project views.
 - **Declared rule:** rule 9 (`module_conventions.md:217-252`): every JSON error has the one shape; session APIs answer 401; module code builds no error body. Rule 19 for the anonymous outcome.
 - **Options:** (a) raise a billing error subclass with `status_code=402` and `default_code` (mapped by the one handler) and `NotAuthenticated` for anonymous; (b) return a DRF `Response` with the shape; (c) document the decorator as HTML-only and return 401/403 there.
 - **Recommended rule:** *coherence proposal 4* — A published gate decorator that may wrap a JSON endpoint returns the one QuickScale error shape with a stable code and the correct 401/403/402 class; an HTML-only gate is named/documented as such.
-- **Enforcement:** proposed rule 9 scan of published decorators/gates, with control cases for a shaped 402 and a 401 anonymous. Evidence state: `proposed`.
+- **Enforcement:** rule 9's harness scans published gate decorator factories and requires a raise of a declared module error; controls accept a shaped `402` and a `401` anonymous gate, reject a bare response, and record orgs' HTML-only gate as the exception. Evidence state: `enforced`.
 - **Migration / acceptance:** add the error class/response; update tests; existing project views get the shape after the module upgrade; rollback by restoring the old decorator. Acceptance: a feature-gated JSON view answers `{"error":{"code":…}}` and anonymous is 401. Responsibility: billing owner.
 - **Confidence / hand-off:** medium-high (code confirmed; JSON use is the documented intent, not a shipped module endpoint) · tech.
+- **Resolution (2026-10-26, SA314 (b)):** `require_org_feature` raises `NotAuthenticated` for an
+  anonymous caller and `OrgFeatureUnavailableError` (`402`/`feature_not_available`) when the
+  organization is unentitled; the one QuickScale handler renders both, and the gate documents that
+  it wraps an API view. Rule 9's harness now scans published gate decorators, rejects a bare error
+  response, and records orgs' HTML-only `require_org_role` as the sanctioned exception; the shaped
+  and bare controls pass.
 
 ### 5. `billing-admin-org-filter` — billing’s tenant admins omit the organization filter
 
-- **ID / kind / status:** `billing-admin-org-filter` · `drift` · `open`.
+- **ID / kind / status:** `billing-admin-org-filter` · `drift` · `fixed`.
 - **Aspect / population / context:** E (secondary O) · `tenant-models` · 20 registered tenant-model admins; billing 4.
 - **Table / evidence:** §E/H.1 row 4. `billing/admin.py:47-116` — `CreditBalanceAdmin` has no `list_filter`; `CreditTransactionAdmin` filters `transaction_type, created_at`; `SubscriptionAdmin` filters `status, plan`; `PurchaseCheckoutAdmin` filters `status, plan`. The other 16 tenant admins include `organization` in `list_filter` (blog 4, CRM 7, forms 2 custom, listings 1, social 2).
 - **Difference and cost:** **tax.** `organizations.md:635` says org-aware admin list views should expose an `organization` column and list filter so the operator can focus on a client. Billing is the most sensitive tenant surface and the only one without it; the operator must know the raw `organization__id__exact` query parameter.
 - **Declared rule:** `organizations.md` §Admin Panel Contract (`:631-637`), a recorded operator contract.
 - **Options:** add `"organization"` to `list_filter`; use forms’ always-rendered `OrganizationListFilter` for the System-only fresh project; leave read-only filters as-is.
 - **Recommended rule:** *coherence proposal 5* — Every tenant-model admin exposes the organization column and an organization filter, even when the model is read-only.
-- **Enforcement:** proposed rule 13/admin census check; control case rejects a tenant admin without the filter and accepts one with it. Evidence state: `proposed`.
+- **Enforcement:** rule 13's admin census requires a tenant admin's organization column and filter (the plain field or a module's selector class), following module-local bases; the control rejects an admin without them. Evidence state: `enforced`.
 - **Migration / acceptance:** add the filter to the four classes; no data migration; rollback trivial. Acceptance: each admin changelist shows the filter. Responsibility: billing owner.
 - **Confidence / hand-off:** high · none.
+- **Resolution (2026-10-26, SA314 (b)):** all four billing tenant admins expose `organization` in
+  `list_display` and `list_filter`; rule 13's harness requires the pair on every tenant-model
+  admin, follows module-local admin bases, and has a control that rejects an admin without them.
 
 ### 6. `forms-tenant-isolation-evidence` — forms’ RLS proof covers one of four tenant tables
 
@@ -673,7 +682,7 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 
 ## Proposed rules
 
-These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and retained as the settled rule text; the rest are not settled decisions. They are separated from settled-rule compliance work.
+These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted and retained as the settled rule text; the rest are not settled decisions. They are separated from settled-rule compliance work.
 
 **Coherence proposal 1 — Generated templates name no module.** Generator templates outside the listed presentation/diagnostic exceptions contain no per-module branch, constant, URL, or module-prefixed setting. Module-specific admin, CI, compose, or settings behaviour is declared by the module (manifest or module-owned template) or emitted from a managed generic block. Allowed: the 404 path diagnostics (rule 41), the theme’s module surfaces (rules 31/37), the seam tables, and the `.env.example` managed catalog.
 
@@ -681,9 +690,9 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 **Coherence proposal 3 — Every option has a live consumer (adopted).** An accepted manifest option projects a setting that a supported path reads or enforces. An option with no consumer is removed or rejected with a clear “not supported” message; a “reserved” option is not accepted silently.
 
-**Coherence proposal 4 — Published gates return the API shape.** A published gate decorator that may wrap a JSON endpoint returns the one QuickScale error shape with a stable code and the correct 401/403/402 class; an HTML-only gate is named and documented as such.
+**Coherence proposal 4 — Published gates return the API shape (adopted).** A published gate decorator that may wrap a JSON endpoint returns the one QuickScale error shape with a stable code and the correct 401/403/402 class; an HTML-only gate is named and documented as such.
 
-**Coherence proposal 5 — Tenant admin operator contract.** Every tenant-model admin exposes the organization column and an organization list filter, even when the model is read-only, so the per-org operator path is usable without a raw query parameter.
+**Coherence proposal 5 — Tenant admin operator contract (adopted).** Every tenant-model admin exposes the organization column and an organization list filter, even when the model is read-only, so the per-org operator path is usable without a raw query parameter.
 
 **Coherence proposal 6 — Tenant isolation evidence is complete.** A tenant module’s RLS boundary test exercises every enrolled tenant table with matching, non-matching, and unset org context; its isolation test exercises the regular-member view path, not only the operator path.
 
@@ -713,7 +722,7 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 **Gap 23 — rule 19 accepts a public-read mixin by name only.** `PUBLIC_READ_MIXIN_SUFFIX` and `_is_sanctioned_guard_name` accept any `*PublicReadMixin` (`_routes_authorization.py:31-62`); there is no check that it subclasses `PublicSystemOrgReadMixin` or primes context. Control: an empty mixin should fail; the blog/listings mixin should pass. State `observed-in-source`; linked item 10.
 
-**Gap 25 — rule 9 does not scan published gate decorators.** The harness scans module views and module-owned helpers; `require_org_feature` is a decorator returning `HttpResponse`, not a view, so the bare 402 is invisible. Control: a decorator that returns a shaped 402 passes; the current one fails. State `observed-in-source`; linked item 4.
+**Gap 25 (closed 2026-10-26) — rule 9 does not scan published gate decorators.** The harness scanned module views and module-owned helpers; `require_org_feature` was a decorator returning `HttpResponse`, not a view, so the bare 402 was invisible. Rule 9's detector now scans gate decorator factories and rejects a bare error response; a shaped 402 is a raise of a declared module error, and orgs' HTML-only `require_org_role` is the recorded exception. Controls pass: a shaped gate and a 401 anonymous gate are accepted, a bare 402/403 is refused, and a recorded HTML-only gate is skipped. Linked item 4.
 
 **Gap 26 — rule 30 checks module adapters, not core templates.** The notifications `ANYMAIL` block is written in `settings/base.py.j2`, outside the adapter/manifest the harness reads. Control: a core template that reads `QUICKSCALE_<MODULE>_*` fails; a generic composition passes. State `observed-in-source`; linked items 1–2.
 
@@ -783,7 +792,7 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 | `markdownx-shared-mount` | resolved (storage owns the shared mount) |
 | `tenant-authorization` | resolved (20/20 tenant admins use `TenantModelAdmin`; guards present) |
 | `option-schema-and-validation` | resolved (manifest schema/validation remains; the storage switch is retired) |
-| `unauthenticated-status-code` | **regressed** — `billing-feature-gate` returns 402 for anonymous |
+| `unauthenticated-status-code` | resolved (was regressed; SA314 (b) makes the gate answer 401 for anonymous) |
 | `module-error-http-mapping` | resolved for module errors; `notifications-validation-status` remains a pending candidate |
 | `startup-checks-and-errors` | resolved (no literal setting-list in `checks.py`; rule 6 allows prose) |
 | `upward-name-references` | resolved (no runtime higher-layer references; docstring examples excluded) |
@@ -826,3 +835,4 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 - 2026-10-24 — `core-cli-module-knowledge`: still accepted; trigger not fired.
 - 2026-10-24 — gap 21: still open; gaps 22, 23, 25, 26, 28 and 29: new, open.
 - 2026-10-25 — gap 21: closed; the computed-operation detector, both fixture controls, and the two commands' `--dry-run` handling landed.
+- 2026-10-26 — `billing-feature-gate` and `billing-admin-org-filter`: fixed by SA314 (b); proposals 4 and 5 adopted, gap 25 closed with its gate controls.

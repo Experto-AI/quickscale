@@ -52,7 +52,9 @@ from scripts.module_conventions._routes_http_apis import (
     _session_authentication_bindings,
     _session_authentication_violations,
     _sibling_paginator_imports,
-    rule_9_http_apis,
+)
+from scripts.module_conventions._routes_http_apis import (
+    rule_9_http_apis as _rule_9_http_apis,
 )
 from scripts.module_conventions._routes_templates import (
     _is_admin_model_override,
@@ -181,6 +183,24 @@ __all__ = (
     "rule_8_templates",
     "rule_9_http_apis",
 )
+
+#: Rule 9's published-gate contract: a gate decorator answers an error by
+#: raising a declared module error (rule 10) so the one exception handler
+#: renders the shared shape; a bare response would reach a JSON client as an
+#: empty body.  A gate that only wraps an HTML view is recorded here with the
+#: reason it is sanctioned.
+HTML_ONLY_GATES: dict[tuple[str, str, str], str] = {
+    ("orgs", "permissions.py", "require_org_role"): (
+        "HTML page gate: it returns a blank forbidden response directly and no "
+        "shipped JSON endpoint wraps it"
+    ),
+}
+
+
+def rule_9_http_apis(corpus: Corpus) -> list[str]:
+    """Rule 9 over the module corpus and the recorded HTML-only gates."""
+    return _rule_9_http_apis(corpus, html_only_gates=HTML_ONLY_GATES)
+
 
 # Rule 41's stated exceptions: orgs' tenancy-mode shell reservations and
 # forms' shallow reservations stay host-rendered, but since SA258 they render

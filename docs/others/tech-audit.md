@@ -61,6 +61,12 @@ reasons that name a subscription; `credit_user` and `debit_user` enter the organ
 scope themselves; a debit's caller-owned `reference` is protected by a per-organization unique
 constraint; and a zero-credit plan activates without a ledger write.
 
+**Fix record (2026-10-26).** SA314 (b) closes `billing-checkout-double-submit`, recorded below and
+now carrying `status: fixed`: a repeated purchase Checkout request resolves the organization's open
+reservation against Stripe and returns its still-payable hosted URL instead of creating a second
+payable session; an expired session is closed locally before the replacement, and a completed one
+refuses replacement until its credit webhook is processed.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -260,7 +266,7 @@ items:
      reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_credits.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-checkout-double-submit, status: open, severity: S3, category: II,
+  - {id: billing-checkout-double-submit, status: fixed, severity: S3, category: II,
      title: "A second purchase Checkout POST creates a second payable session", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_checkout.py],
@@ -1007,9 +1013,9 @@ machine-readable index above); no S1/S2 finding remains open.
 
 **Then (S3), in three batches:**
 
-- **Billing batch:** `billing-checkout-double-submit` remains. The webhook-ordering fix landed
-  (SA310); SA314 (a) fixed the failed-invoice, credit-scope, debit-idempotency, and zero-credit
-  findings, including the debit-reference migration.
+- **Billing batch is closed.** SA314 (a) fixed the failed-invoice, credit-scope,
+  debit-idempotency, and zero-credit findings, including the debit-reference migration; SA314 (b)
+  fixed the repeated purchase Checkout, and the webhook-ordering fix landed with SA310.
 - **Backups batch:** `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
@@ -1034,11 +1040,11 @@ reviewers.
   (`generated-compose-called-production-runs-debug`, `generated-redis-cache-missing-client`,
   `dockerignore-bakes-local-backups`, `generated-readme-examples-invalid`); otherwise read in full,
   secure defaults verified (secret guard, non-root, cookies/HSTS, conditional proxy trust).
-- **Billing:** findings 1 and 9 are fixed, SA314 (a) fixed the failed-invoice, credit-scope,
-  debit-idempotency, and zero-credit S3/S4 findings, and `billing-checkout-double-submit` remains;
-  webhook signature/raw body, price parity, RLS targets, and the current-subscription constraint
-  verified. Metadata-key and ordering regressions run against a fake provider; the real test-mode
-  subscription Checkout is credential-gated in `test_stripe_contract.py`.
+- **Billing:** findings 1 and 9 are fixed; SA314 (a) fixed the failed-invoice, credit-scope,
+  debit-idempotency, and zero-credit S3/S4 findings, and SA314 (b) fixed the repeated purchase
+  Checkout; webhook signature/raw body, price parity, RLS targets, and the current-subscription
+  constraint verified. Metadata-key and ordering regressions run against a fake provider; the real
+  test-mode subscription Checkout is credential-gated in `test_stripe_contract.py`.
 - **Orgs:** `orgs-admin-can-demote-owner` is fixed; `orgs-bulk-delete-leaves-zero-owners`, two S4s,
   and four watchlist items remain; RLS predicate, purge atomicity, `TenantManager`, invitation
   throttle, and content-route roles verified.
@@ -1070,9 +1076,10 @@ reviewers.
 ## Clean sweeps and rejected candidates
 
 - **Billing:** purchase metadata key is 38 chars (within Stripe's limit); purchase/subscription
-  create/response-loss recovery and idempotency keys verified; Stripe signature over the raw body,
-  API-version gate, customer/subscription identity checks, price parity, and RLS on billing tables
-  verified. Refuted: “the purchase path has the same metadata-key defect” (38 chars).
+  create/response-loss recovery, idempotency keys, and the repeated-purchase reuse path verified;
+  Stripe signature over the raw body, API-version gate, customer/subscription identity checks,
+  price parity, and RLS on billing tables verified. Refuted: “the purchase path has the same
+  metadata-key defect” (38 chars).
 - **Orgs:** FORCE-RLS policy predicate and `TenantManager` fail-closed behavior verified; purge is
   atomic and tombstoned; invitation acceptance is token + normalized email; content routes require
   membership; single-row last-owner guards verified. Refuted: “non-superuser org users can reach
@@ -1353,6 +1360,11 @@ release.
 - 2026-10-26 — `billing-debit-not-idempotent`: **resolved** (SA314 (a): `debit_user` accepts a
   caller-owned `reference`, a partial unique constraint covers
   `(organization, reference, transaction_type)`, and a retried debit returns the original row).
+- 2026-10-26 — `billing-checkout-double-submit`: **resolved** (SA314 (b): a repeated purchase
+  Checkout request reuses the organization's open reservation while Stripe reports its session
+  open, returns its hosted URL, closes an expired session before the replacement, and refuses to
+  replace a completed one until its credit webhook is processed; tests cover reuse, expiry,
+  completion, and an unclassifiable provider answer).
 - 2026-10-26 — `billing-zero-credit-plan-webhook-loop`: **resolved** (SA314 (a): an `invoice.paid`
   for a zero-credit plan activates the subscription and skips the credit call, so the event is
   marked processed instead of retrying).

@@ -819,7 +819,7 @@ Implementation detail: [organizations.md §Operator Debug Mode](./organizations.
 - Billing requires auth-backed users at apply/runtime; QuickScale does not support a standalone billing install without the auth module.
 - Billing ships module-owned Django routes for public pricing (`/billing/pricing/`) and the signed-in dashboard (`/billing/dashboard/`). Fresh starter output may link into those pages, but QuickScale does not generate a starter-owned billing React page and does not rewrite existing project React files to adopt billing automatically.
 - `WebhookEvent` is the transport-level replay/idempotency gate for incoming billing webhooks.
-- `debit_user` is the approved service API for credit consumption.
+- `debit_user` is the approved service API for credit consumption. Billing's published plan-feature gate (`require_org_feature`) answers errors through the one QuickScale exception handler (`401` anonymous, `402` with the stable `feature_not_available` code), and a repeated one-time Checkout reuses the organization's open reservation while its Stripe session is payable instead of creating a second payable session.
 
 **Not part of the current contract:**
 - ❌ Independent namespace-package distribution for published modules/themes

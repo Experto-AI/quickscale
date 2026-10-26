@@ -44,7 +44,8 @@ def test_admin_registration_controls() -> None:
         "from quickscale_modules_demo.models import Widget\n\n\n"
         "@admin.register(Widget)\n"
         "class WidgetAdmin(TenantModelAdmin):\n"
-        "    pass\n"
+        '    list_display = ["organization"]\n'
+        '    list_filter = ["organization"]\n'
     )
     accepted = _with_files(module, **{"admin.py": tenant_admin})
     assert _violations(checker.rule_13_tenant_models, accepted) == []
@@ -60,6 +61,66 @@ def test_admin_registration_controls() -> None:
     assert any(
         "use TenantModelAdmin" in violation
         for violation in _violations(checker.rule_13_tenant_models, refused)
+    )
+
+
+def test_admin_organization_column_and_filter_control() -> None:
+    """Rule 13: a tenant admin exposes the organization column and filter."""
+    module = _golden_module()
+    missing_both = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+                "from quickscale_modules_demo.models import Widget\n\n\n"
+                "@admin.register(Widget)\n"
+                "class WidgetAdmin(TenantModelAdmin):\n"
+                "    list_display = ['pk']\n"
+                "    list_filter = ['status']\n"
+            )
+        },
+    )
+    violations = _violations(checker.rule_13_tenant_models, missing_both)
+    assert any("organization column in list_display" in violation for violation in violations)
+    assert any("organization filter in list_filter" in violation for violation in violations)
+
+    with_selector = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+                "from quickscale_modules_demo.admin_filters import OrganizationListFilter\n"
+                "from quickscale_modules_demo.models import Widget\n\n\n"
+                "@admin.register(Widget)\n"
+                "class WidgetAdmin(TenantModelAdmin):\n"
+                "    list_display = ['organization', 'pk']\n"
+                "    list_filter = [OrganizationListFilter, 'status']\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_13_tenant_models, with_selector) == []
+
+    computed_override = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+                "from quickscale_modules_demo.models import Widget\n\n\n"
+                "class WidgetAdminBase(TenantModelAdmin):\n"
+                "    list_display = ['organization']\n"
+                "    list_filter = ['organization']\n\n\n"
+                "@admin.register(Widget)\n"
+                "class WidgetAdmin(WidgetAdminBase):\n"
+                "    list_filter = build_filters()\n"
+            )
+        },
+    )
+    assert any(
+        "organization filter in list_filter" in violation
+        for violation in _violations(checker.rule_13_tenant_models, computed_override)
     )
 
 
@@ -98,7 +159,8 @@ def test_admin_multi_model_registration_control() -> None:
         "from quickscale_modules_demo.models import Gadget, Widget\n\n\n"
         "@admin.register(Widget, Gadget)\n"
         "class MixedAdmin(TenantModelAdmin):\n"
-        "    pass\n"
+        '    list_display = ["organization"]\n'
+        '    list_filter = ["organization"]\n'
     )
     refused = _with_files(module, **{"admin.py": mixed})
     violations = _violations(checker.rule_13_tenant_models, refused)
@@ -171,7 +233,8 @@ def test_admin_base_chain_and_alias_controls() -> None:
                 "from quickscale_modules_demo.models import Widget\n\n\n"
                 "@admin.register(Widget)\n"
                 "class WidgetAdmin(WidgetAdminBase):\n"
-                "    pass\n"
+                '    list_display = ["organization"]\n'
+                '    list_filter = ["organization"]\n'
             ),
             "_admin_base.py": (
                 "from quickscale_modules_orgs.admin import TenantModelAdmin\n\n\n"
@@ -191,7 +254,8 @@ def test_admin_base_chain_and_alias_controls() -> None:
                 "from quickscale_modules_demo.models import Widget\n\n\n"
                 "@admin.register(Widget)\n"
                 "class WidgetAdmin(OrgsAdmin):\n"
-                "    pass\n"
+                '    list_display = ["organization"]\n'
+                '    list_filter = ["organization"]\n'
             )
         },
     )

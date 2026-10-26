@@ -69,7 +69,9 @@ org-scoped views and APIs:
 - `is_platform_operator(user)`, the one platform-operator check: an authenticated superuser, the
   account class allowed to act across organizations. Every module calls it instead of reading
   `is_superuser` (rule 44).
-- `require_org_role(min_role)`, a decorator for function views.
+- `require_org_role(min_role)`, an HTML page gate for function views: it returns an empty `403`
+  response directly (the project's error page handler is not invoked), so a JSON endpoint uses
+  `HasOrgRole` instead.
 - `OrgRoleMixin`, a class-based-view mixin with a configurable `min_org_role`.
 - `HasOrgRole(min_role)`, the DRF permission class for JSON endpoints; it resolves the request's
   organization the same way and delegates to `user_has_org_role`, refusing a request with no

@@ -43,6 +43,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Billing webhooks apply provider order.** Subscription and invoice webhooks read the current
     subscription from Stripe under the organization's provider mutex before applying its status,
     and the subscription Checkout metadata key fits Stripe's 40-character limit.
+  - **Billing Checkout and gates are idempotent and tenant-correct.** A repeated purchase request
+    returns the organization's still-payable Checkout URL instead of opening a second session;
+    `require_org_feature` answers `401`/`402` in the shared error shape with the
+    `feature_not_available` code; and billing's tenant admins filter by organization.
   - **Safe organization purge and account removal.** Purge refuses while live Stripe state exists
     and follows the installed tenant-model graph; account removal disables and anonymizes instead
     of deleting, through app-declared handlers.

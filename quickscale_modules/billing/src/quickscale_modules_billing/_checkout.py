@@ -22,6 +22,12 @@ from quickscale_modules_billing._payload import (
     _extract_checkout_session_expires_at as _extract_checkout_session_expires_at,
 )
 from quickscale_modules_billing._payload import (
+    _extract_live_checkout_session_url as _extract_live_checkout_session_url,
+)
+from quickscale_modules_billing._payload import (
+    _normalize_mapping as _normalize_mapping,
+)
+from quickscale_modules_billing._payload import (
     _purchase_checkout_reference as _purchase_checkout_reference,
 )
 from quickscale_modules_billing._payload import (
@@ -140,15 +146,49 @@ def _create_checkout_session(
                 "Multiple purchase checkouts have unknown creation outcomes; "
                 "manual provider reconciliation is required."
             )
-        reservation = (
-            preparing_reservations[0]
-            if preparing_reservations
-            else PurchaseCheckout.all_objects.create(
+        open_reservations: list[PurchaseCheckout] = []
+        if preparing_reservations:
+            reservation = preparing_reservations[0]
+        else:
+            # A repeated POST while a reservation is open must not create a
+            # second payable provider session. Resolve the open reservations
+            # against Stripe and reuse the one whose session is still payable.
+            open_reservations = list(
+                PurchaseCheckout.all_objects.select_for_update()
+                .filter(
+                    user=user,
+                    organization=organization,
+                    plan=plan,
+                    status=PurchaseCheckout.Status.OPEN,
+                )
+                .order_by("-pk")
+            )
+            reservation = (
+                open_reservations[0]
+                if open_reservations
+                else PurchaseCheckout.all_objects.create(
+                    user=user,
+                    organization=organization,
+                    plan=plan,
+                )
+            )
+
+    if open_reservations:
+        live_checkout_url = _reuse_open_purchase_checkout_url(
+            open_reservations,
+            stripe_client=resolved_client,
+        )
+        if live_checkout_url:
+            return live_checkout_url
+        # Every open reservation resolved to a terminal provider session, so a
+        # fresh reservation carries the replacement session.
+        with org_scope(organization):
+            _locks._lock_organization_for_billing_mutation(organization)
+            reservation = PurchaseCheckout.all_objects.create(
                 user=user,
                 organization=organization,
                 plan=plan,
             )
-        )
 
     reservation_reference = _purchase_checkout_reference(reservation)
     session_metadata = _build_checkout_session_metadata(
@@ -206,6 +246,85 @@ def _create_checkout_session(
             "Stripe checkout session creation did not return a hosted URL."
         )
     return checkout_url
+
+
+def _reuse_open_purchase_checkout_url(
+    reservations: list[PurchaseCheckout],
+    *,
+    stripe_client: Any,
+) -> str:
+    """Return a still-payable hosted URL from the organization's open reservations.
+
+    A repeated POST reuses the reservation whose provider session is still
+    payable instead of creating a second payable session.  Each inspected
+    reservation is resolved against Stripe: an open session returns its hosted
+    URL, an expired session is closed locally so the caller can create a
+    replacement, and a completed session refuses replacement because its
+    credit may still arrive through a webhook.  A provider answer the module
+    cannot classify fails closed.
+    """
+    retrieve = getattr(stripe_client, "retrieve_checkout_session", None)
+    if not callable(retrieve):
+        raise BillingError(
+            "Stripe checkout retrieval is unavailable; the existing purchase "
+            "checkout cannot be reused or replaced safely."
+        )
+    for reservation in reservations:
+        checkout_session_id = str(reservation.stripe_checkout_session_id or "").strip()
+        if not checkout_session_id:
+            # An open reservation without a session id cannot be payable, so
+            # it is closed and the caller creates a replacement.
+            _close_open_purchase_checkout(reservation)
+            continue
+        checkout_session = _normalize_mapping(
+            retrieve(checkout_session_id=checkout_session_id)
+        )
+        provider_status = str(checkout_session.get("status") or "").strip().lower()
+        if provider_status == "expired":
+            _close_open_purchase_checkout(
+                reservation,
+                checkout_session_id=checkout_session_id,
+            )
+            continue
+        if provider_status == "complete":
+            raise BillingValidationError(
+                "Stripe purchase checkout completed and may require credit "
+                f"synchronization ({checkout_session_id}); wait for its webhook "
+                "before creating another checkout."
+            )
+        if provider_status != "open":
+            raise BillingError(
+                "Stripe purchase checkout reconciliation returned an unsupported "
+                f"or blank status for {checkout_session_id}."
+            )
+        checkout_url = _extract_live_checkout_session_url(checkout_session)
+        if not checkout_url:
+            raise BillingError(
+                "Stripe reports the existing purchase checkout as open but did "
+                "not return a reusable hosted URL; automatic replacement was "
+                "refused."
+            )
+        return checkout_url
+    return ""
+
+
+def _close_open_purchase_checkout(
+    reservation: PurchaseCheckout,
+    *,
+    checkout_session_id: str = "",
+) -> None:
+    """Mark one open reservation expired without overwriting a newer provider state."""
+    filters: dict[str, Any] = {
+        "pk": reservation.pk,
+        "status": PurchaseCheckout.Status.OPEN,
+    }
+    if checkout_session_id:
+        filters["stripe_checkout_session_id"] = checkout_session_id
+    with org_scope(reservation.organization):
+        _locks._lock_organization_for_billing_mutation(reservation.organization)
+        PurchaseCheckout.all_objects.filter(**filters).update(
+            status=PurchaseCheckout.Status.EXPIRED
+        )
 
 
 def create_billing_portal_session(

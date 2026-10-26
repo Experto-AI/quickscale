@@ -82,6 +82,7 @@ from quickscale_modules_billing.exceptions import (
     BillingWebhookError as BillingWebhookError,
     BillingWebhookSignatureError as BillingWebhookSignatureError,
     InsufficientCreditsError as InsufficientCreditsError,
+    OrgFeatureUnavailableError as OrgFeatureUnavailableError,
     OrgSelectionRequiredError as OrgSelectionRequiredError,
 )
 
@@ -178,6 +179,7 @@ __all__ = [
     "InsufficientCreditsError",
     "is_enabled",
     "organization_pricing_page_url",
+    "OrgFeatureUnavailableError",
     "OrgSelectionRequiredError",
     "resume_current_subscription",
     "reconcile_account_deletion_subscription_checkout",

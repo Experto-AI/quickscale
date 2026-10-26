@@ -404,13 +404,18 @@ Plan
 Views check feature access via a decorator:
 
 ```python
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
 from quickscale_modules_billing.services import require_org_feature
 
+@api_view(["GET"])
 @require_org_feature("crm")
-def crm_index(request): ...
+def crm_index(request):
+    return Response(...)
 ```
 
-This decorator resolves the current organization's active subscription through billing's ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent. It is published by `quickscale_modules_billing.services`; orgs must not name billing, a higher-layer module ([module_conventions.md](module_conventions.md#module-conventions) rule 34).
+This decorator resolves the current organization's active subscription through billing's ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It raises billing's declared errors instead of building a response: an anonymous API caller gets HTTP 401, and an organization with no active subscription or without the feature key gets HTTP 402 with code `feature_not_available`; the shared QuickScale exception handler renders them, so the gate wraps an API view. It is published by `quickscale_modules_billing.services`; orgs must not name billing, a higher-layer module ([module_conventions.md](module_conventions.md#module-conventions) rule 34).
 
 ### Migration Path from User-Scoped Billing
 

@@ -12,7 +12,7 @@ production runs 0.89.0, and 0.89.0 is on PyPI (see
 [Deferred — property portal](#deferred-property-portal)).
 
 **Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
-database. All hardening tickets (SA314, SA315, SA320, SA321, SA323, SA324) land,
+database. All hardening tickets (SA315, SA320, SA321, SA323, SA324) land,
 the tag is re-cut, `bap-web` adopts it, SA191d (re-proof) is the release's final validation on
 `develop`, SA191d (production) ships the same tag, and the operator's Phases 5–6 sealing and PyPI
 publication follow ([publish_procedure.md](publish_procedure.md)).
@@ -43,8 +43,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA314, SA315, SA320, SA321, SA323, SA324 | Required |
-| SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA315, SA320, SA321, SA323, SA324 | Required |
 | SA315 | Close orgs and auth lifecycle defects | 2 | — | Required |
 | SA320 | Deliver module resource contracts through managed hooks | 1 | — | Required |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Required |
@@ -56,7 +55,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA320 (c) ─► SA321
-Track 2: SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
+Track 2: SA315 (a, b) ─► SA323 ─► SA324 (a, b)
          ─► SA191d (re-proof → production → retire, operator-gated)
 Track 3: [SA191d (production)] SA277
      release path: all hardening ─► re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof on develop)
@@ -81,7 +80,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA320 (c) | yes | yes | yes: SA320, SA321 |
-| 2 | SA314 (b) | yes | yes | yes: SA314, SA315, SA323, SA324 |
+| 2 | SA315 (a) | yes | yes | yes: SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -102,7 +101,7 @@ SA191d (production) clears SA277.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
   `decisions.md`, `README.md.j2` (SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
-  SA321), billing `_settings.py` (SA314), module manifests (SA320 (c)),
+  SA321), billing `_settings.py`, module manifests (SA320 (c)),
   `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
   (`App.test.tsx`, `AppRoutes.test.tsx`).
   Reconcile after each merge and run the consistency test.
@@ -192,22 +191,7 @@ conformance check on `properties.PropertyAgent` and siblings.
 
 - [x] **SA311 — Close the S2 tenant-boundary defects in CRM, orgs, storage and forms.**
 
-- [ ] **SA314 — Make billing credits, Checkout and gates idempotent and tenant-correct.**
-
-  Closes tech `billing-invoice-payment-failed-unscoped`, `billing-zero-credit-plan-webhook-loop`,
-  `billing-credit-services-missing-org-scope`, `billing-debit-not-idempotent`,
-  `billing-checkout-double-submit`, and coherence `billing-feature-gate` and
-  `billing-admin-org-filter` (proposals 4–5, gap 25).
-
-  **Slices:**
-  - [x] (a) Webhooks and credits: guard failed invoices by billing reason and subscription id;
-    end the zero-credit `invoice.paid` retry; wrap `credit_user`/`debit_user` in `org_scope`; add a
-    debit reference with a unique constraint in a new migration. Tests cover a no-context thread
-    and a retried debit (Tier 2-full).
-  - [ ] (b) After (a), reuse the open purchase reservation on a repeated POST;
-    `require_org_feature` returns the QuickScale error shape with a stable code; billing's tenant
-    admins show the organization column and filter; detectors carry the audit's controls
-    (Tier 2-full).
+- [x] **SA314 — Make billing credits, Checkout and gates idempotent and tenant-correct.**
 
 - [ ] **SA315 — Close orgs and auth lifecycle defects.**
 
@@ -291,7 +275,7 @@ and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 ### Deferred — property portal (Track 1)
 
-Not scheduled. Resumes only when SA314, SA315, SA320, SA321, SA323 and SA324 are
+Not scheduled. Resumes only when SA315, SA320, SA321, SA323 and SA324 are
 closed, SA191d (production) has passed, and 0.89.0 is published; it is then re-added to the
 scheduling table on top of the deployed `bap-web`.
 
