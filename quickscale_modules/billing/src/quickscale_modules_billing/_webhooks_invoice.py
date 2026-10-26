@@ -119,7 +119,7 @@ def _process_invoice_paid_event(
     resolved_organization: Any | None,
     stripe_client: Any | None,
     provider_lock_held: bool,
-) -> CreditTransaction:
+) -> CreditTransaction | None:
     """Resolve an invoice subscription, keeping provider I/O outside atomics."""
 
     subscription_id = _invoice_subscription_id(invoice_payload)
@@ -414,7 +414,7 @@ def _finalize_invoice_paid_event(
     expected_identity: SubscriptionProviderIdentity,
     expected_customer_id: str,
     provider_subscription: Mapping[str, Any] | None = None,
-) -> CreditTransaction:
+) -> CreditTransaction | None:
     """Reload and apply invoice state under the provider and database locks."""
     with org_scope(mutation_organization):
         mutation_organization = _locks._lock_organization_for_billing_mutation(
@@ -452,6 +452,11 @@ def _finalize_invoice_paid_event(
         if subscription_id:
             reference_data["stripe_subscription_id"] = subscription_id
 
+        # A plan that grants no credits must not call credit_user: its
+        # amount <= 0 guard would roll back the activation and retry forever.
+        if plan.credits_per_period <= 0:
+            return None
+
         return credit_user(
             user,
             organization=organization,
@@ -468,11 +473,21 @@ def _handle_invoice_payment_failed_event(
     event_payload: Mapping[str, Any],
     *,
     stripe_client: Any | None = None,
-) -> Subscription:
+) -> Subscription | None:
     invoice_payload = _extract_event_object(event_payload)
     invoice_id = str(invoice_payload.get("id") or "").strip()
     if not invoice_id:
         raise BillingWebhookError("Stripe invoice payload is missing an id.")
+
+    # Only a subscription invoice can make a subscription past due. A failed
+    # one-off or unrelated invoice for the same customer is recorded and
+    # ignored, as the paid handler already does for its non-creditable reasons.
+    billing_reason = str(invoice_payload.get("billing_reason") or "").strip().lower()
+    if billing_reason not in _CREDITABLE_INVOICE_BILLING_REASONS:
+        return None
+    subscription_id = _invoice_subscription_id(invoice_payload)
+    if not subscription_id:
+        return None
 
     resolved_organization = _resolution._resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
@@ -481,7 +496,6 @@ def _handle_invoice_payment_failed_event(
         raise BillingWebhookError(
             "Could not resolve a local organization for the Stripe invoice."
         )
-    subscription_id = _invoice_subscription_id(invoice_payload)
     with _locks.subscription_provider_mutation_lock(resolved_organization):
         provider_subscription: Mapping[str, Any] | None = None
         if subscription_id:

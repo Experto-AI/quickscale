@@ -9,7 +9,8 @@
       "0001_initial.py": "bd19bde8c370fa2f4b1091efbd47aadd1c03e835feee587ed31f4afdd838114a"
     },
     "billing": {
-      "0001_initial.py": "c39f04dfafc85428f640599101cb7195bef27f014cf12ad93cea2e1fa630b4fc"
+      "0001_initial.py": "c39f04dfafc85428f640599101cb7195bef27f014cf12ad93cea2e1fa630b4fc",
+      "0002_credittransaction_reference.py": "3b81b9064edd31874c08258dce1ee6757ced52f8db29245d0aef7c9c60b68a81"
     },
     "blog": {
       "0001_initial.py": "fc4cfe45993670c5b2c37527507425b6be97ed171871f665c3ce309beaca1a79"
