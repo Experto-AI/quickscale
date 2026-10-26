@@ -225,8 +225,16 @@ items:
   - **Post-snapshot (2026-10-24):** SA320 (a) moved `CrmPage.tsx`'s five subpaths and `CrmStats`
     into the generated managed `frontend/src/quickscaleSeam.hooks.ts`, and the closed-world test
     now rejects a declared resource subpath or payload type in a user-owned file with the managed
-    hook as its passing control. The other pages and templates above still carry theirs, so the
-    finding stays open for SA320 (b)/(c).
+    hook as its passing control.
+  - **Post-snapshot (2026-10-26):** SA320 (b) moved the remaining theme pages onto the hook: orgs,
+    billing, social and forms declare their `frontend_resources` (parameterized paths render typed
+    builders; payload types may use optional, array, reference, nullable and union forms), and
+    `useOrgs.ts`, `useFormSchema.ts`, `FormRenderer.tsx`, `usePublicSocialSurface.ts` and
+    `useModules.ts` import the generated declarations instead of restating them; the emitted social
+    templates already read the module's settings paths, so they carry no module resource literal.
+    The closed-world check now also rejects a hand-written builder path and a union alias
+    declaration, with the managed hook as its control. The core-template module branches remain, so
+    the finding stays open for SA320 (c).
   - `test_emission_closed_world.py:489` / `:540-550` permits "a single module reference"; it
     forbids enumerations, not resource subpaths or payload shapes.
   - Contract steps: `project_contract.yml` has **61 step ids** and 116 adoption sub-steps; growth
@@ -242,12 +250,12 @@ items:
   (`quickscaleSeam.hooks.*`), no detector for module subpaths/payload types in user-owned files,
   and no adoption verification against file content. The closed-world test and contract-vintage
   gate are real, but their scope stopped at enumerations and template *wiring*; SA316 hashes every
-  managed output. **SA320 (a) has since landed (2026-10-24):** the generated
-  `frontend/src/quickscaleSeam.hooks.ts` renders each active manifest's `frontend_resources`, the
-  closed-world test rejects a declared resource subpath or payload type in a user-owned file with
-  the managed hook as its passing control, and `CrmPage.tsx` imports the hook. The remaining theme
-  files above still restate their paths and types, so the finding remains open for SA320 (b)/(c).
-  SA153's roadmap line still owns the portal's managed-hook boundary.
+  managed output. **SA320 (a) has since landed (2026-10-24)** and **(b) on 2026-10-26:** the
+  generated `frontend/src/quickscaleSeam.hooks.ts` renders each active manifest's
+  `frontend_resources`, the closed-world test rejects a declared resource subpath, builder path, or
+  payload type in a user-owned file with the managed hook as its passing control, and the theme's
+  page hooks and the CRM page import it. The core-template module branches remain, so the finding
+  stays open for SA320 (c). SA153's roadmap line still owns the portal's managed-hook boundary.
 - **Why it compounds:** growth variable = **declared adoption steps × live projects**. Each module
   resource or payload change adds a step (steps are monotonic; the roadmap's stated target is
   "toward zero"); each live project must adopt every step by hand. Built on top: the contract-vintage
@@ -284,9 +292,9 @@ items:
   **Acceptance check:** changing a module endpoint subpath produces no new `project_contract.yml`
   step and no user-owned diff; the page imports the regenerated hook. Source-checkable through the
   emission mapping. **First step:** delivered by SA320 (a) on 2026-10-24 — `CrmPage.tsx`'s section
-  paths and `CrmStats` type now come from the generated `frontend/src/quickscaleSeam.hooks.ts`. The
-  next step is SA320 (b): move the remaining theme pages' module paths and types onto the generated
-  hook, then SA320 (c) for the per-module core-template branches.
+  paths and `CrmStats` type now come from the generated `frontend/src/quickscaleSeam.hooks.ts`.
+  SA320 (b) delivered the remaining theme pages on 2026-10-26; the next step is SA320 (c) for the
+  per-module core-template branches.
 - **Remaining delivery ownership:** SA277 (Track 3) owns the two-stage upgrade rule; it does not
   remove resource contracts from user-owned pages. SA153 (j, Track 1) owns the portal's
   managed-hook boundary. Completing either alone is not closure.
@@ -371,8 +379,9 @@ items:
 
 **Probe A — SA153 adds a project-owned public page (next feature).** Stations: user-owned theme page,
 module endpoint, manifest wiring, `project_contract.yml` step, adoption in `bap-web-new`, docs, and
-the managed-hook file (delivered by SA320 (a); the remaining pages still bypass it). Seven stations,
-and the page↔endpoint pair is held by no gate. Verdict: **finding evidence for F1.** The roadmap
+the managed-hook file (delivered by SA320 (a) and (b); only the core-template branches remain).
+Seven stations, and the page↔endpoint pair is held by no gate. Verdict: **finding evidence for F1.**
+The roadmap
 itself assigns the managed-hook boundary to SA153.
 
 **Probe B — add a 13th module.** Stations: module directory and `module.yml`, package
@@ -564,6 +573,11 @@ watchlist **6**.
   captured set (a version 1 snapshot warns and stays database-only), and holds a dedicated restore
   advisory lock; a PostgreSQL drill restores database, media and project schema, an aborted restore
   rolls back, and a SIGKILLed restore leaves the target database unchanged.
+- 2026-10-26 — `generated-file-ownership-unmodeled`: **still-open, slice (b) landed**. SA320 (b)
+  moves the remaining theme pages onto the managed hook: orgs, billing, social and forms declare
+  their resource paths (parameterized paths as typed builders) and payload types; the theme hooks
+  import the generated declarations; and the closed-world check rejects a hand-written builder path
+  or union alias. The core-template module branches remain for SA320 (c).
 - 2026-10-24 — `generated-file-ownership-unmodeled`: **still-open, slice (a) landed**. SA320 (a)
   generates `frontend/src/quickscaleSeam.hooks.ts` from each active manifest's `frontend_resources`
   section (CRM declares five subpaths and `CrmStats`), moves `CrmPage.tsx` onto it, and extends the

@@ -198,6 +198,14 @@ class FrontendResources:
     maps a response type name (``CrmStats``) to its fields and TypeScript
     types (``contacts: number``).
 
+    A path may carry ``{parameter}`` placeholders (``members/{membershipId}/role/``);
+    the managed hook renders a typed builder for it instead of a string, so a
+    path with a runtime identifier has one generated home too.  A payload type
+    is either a field mapping (rendered as an interface) or a union expression
+    string (rendered as a type alias); a field maps a field name to a scalar,
+    a declared type name, an array of either, or a nullable form, and an
+    optional field appends ``?`` to its name.
+
     The generated project's managed ``frontend/src/quickscaleSeam.hooks.ts``
     renders these declarations for the shipped module set, so a module
     resource path or payload shape has one generated home and a module release
@@ -206,14 +214,17 @@ class FrontendResources:
     Attributes:
         paths: Resource name -> module-relative API subpath, in declaration
             order.  A subpath is appended to the module's ``moduleApiPaths``
-            base, never written by a user-owned file.
-        payload_types: Type name -> ordered field name/type pairs, in
-            declaration order.  A field type is ``string``, ``number``, or
-            ``boolean``.
+            base, never written by a user-owned file.  A value with a
+            ``{parameter}`` placeholder renders as a builder function.
+        payload_types: Type name -> ordered field name/type pairs, or a
+            union expression string, in declaration order.  A field type is a
+            scalar (``string``, ``number``, ``boolean``), a declared type
+            name, an array of either (``OrgSummary[]``), or a nullable form
+            (``string | null``).
     """
 
     paths: dict[str, str] = field(default_factory=dict)
-    payload_types: dict[str, dict[str, str]] = field(default_factory=dict)
+    payload_types: dict[str, dict[str, str] | str] = field(default_factory=dict)
 
 
 @dataclass

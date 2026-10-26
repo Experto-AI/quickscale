@@ -83,6 +83,47 @@ dependencies:
   - sqlparse
   - quickscale-core
 
+# Frontend resource contract consumed by the managed theme hook
+# (frontend/src/quickscaleSeam.hooks.ts). The schema path is the module API base
+# plus the visitor's form slug; the submit suffix is declared here, and the
+# payload types are the response shapes the renderer consumes, so a user-owned
+# page imports them instead of restating them.
+frontend_resources:
+  paths:
+    schema: "{slug}/"
+    submit: "{slug}/submit/"
+  payload_types:
+    FormFieldOption:
+      value: string
+      label: string
+    ValidationRules:
+      min_length?: number
+      max_length?: number
+      min?: number
+      max?: number
+      regex?: string
+    FieldType: "'text' | 'email' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'number' | 'url' | 'tel' | 'date' | 'hidden'"
+    LayoutHint: "'full' | 'half_left' | 'half_right'"
+    FormFieldSchema:
+      name: string
+      field_type: FieldType
+      label: string
+      required: boolean
+      order: number
+      placeholder?: string
+      help_text?: string
+      layout_hint: LayoutHint
+      options: "FormFieldOption[]"
+      validation_rules: ValidationRules
+      is_active: boolean
+    FormSchema:
+      slug: string
+      title: string
+      description?: string
+      success_message: string
+      redirect_url?: string
+      fields: "FormFieldSchema[]"
+
 # Retired option keys are refused by name with the message declared here.
 retired_options:
   forms_per_page: >-

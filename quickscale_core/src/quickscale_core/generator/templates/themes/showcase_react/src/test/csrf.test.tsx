@@ -4,6 +4,7 @@ import { fireEvent, waitFor } from '@testing-library/dom'
 import { FormRenderer } from '@/components/forms/FormRenderer'
 import { getCsrfToken } from '@/lib/csrf'
 import { apiRequest } from '@/hooks/useApi'
+import { FORMS_RESOURCE_PATHS } from '@/quickscaleSeam.hooks'
 import type { FormSchema } from '@/hooks/useFormSchema'
 import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
@@ -249,7 +250,7 @@ describe('CSRF request callers', () => {
       })
 
       expect(fetchMock).toHaveBeenCalledWith(
-        '/forms/api/contact/submit/',
+        `/forms/api/${FORMS_RESOURCE_PATHS.submit('contact')}`,
         expect.objectContaining({ method: 'POST' }),
       )
       expect(requestHeaders().get('X-CSRFToken')).toBe(secondCsrfToken)

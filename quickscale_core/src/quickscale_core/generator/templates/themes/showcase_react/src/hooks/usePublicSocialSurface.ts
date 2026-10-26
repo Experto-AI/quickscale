@@ -1,8 +1,30 @@
 import { useQuery } from '@tanstack/react-query'
 import { ApiError, apiRequest } from '@/hooks/useApi'
-import { useProjectConfig, type PublicSocialSurface } from '@/hooks/useModules'
+import { useProjectConfig } from '@/hooks/useModules'
 
-export type SocialPayloadStatus = 'enabled' | 'empty' | 'disabled' | 'error'
+import type {
+  PublicSocialSurface,
+  SocialBasePayload,
+  SocialEmbedRecord,
+  SocialEmbedResolutionStatus,
+  SocialEmbedsPayload,
+  SocialLinkRecord,
+  SocialLinkTreePayload,
+  SocialPayloadStatus,
+} from '@/quickscaleSeam.hooks'
+
+// The social payload types live in the managed hook file; this hook re-exports
+// them for the public pages, shell, and tests that import this module.
+export type {
+  PublicSocialSurface,
+  SocialBasePayload,
+  SocialEmbedRecord,
+  SocialEmbedResolutionStatus,
+  SocialEmbedsPayload,
+  SocialLinkRecord,
+  SocialLinkTreePayload,
+  SocialPayloadStatus,
+}
 
 export interface PublicSocialNavigation {
   home: string
@@ -10,69 +32,9 @@ export interface PublicSocialNavigation {
   embeds: string
 }
 
-interface SocialLinkRecord {
-  id: number
-  title: string
-  description: string
-  provider_name: string
-  provider_display_name: string
-  url: string
-  source_url: string
-  display_order: number
-}
-
-type SocialEmbedResolutionStatus = 'pending' | 'resolved' | 'error'
-
-interface SocialEmbedRecord extends SocialLinkRecord {
-  resolution_status: SocialEmbedResolutionStatus
-  resolution_error: string | null
-  embed_url: string | null
-  thumbnail_url: string | null
-  embed_width: number | null
-  embed_height: number | null
-  thumbnail_width: number | null
-  thumbnail_height: number | null
-  last_resolution_attempt_at: string | null
-  last_resolved_at: string | null
-}
-
-interface SocialBasePayload {
-  module: 'social'
-  surface: PublicSocialSurface
-  status: SocialPayloadStatus
-  enabled: boolean
-  public_path: string
-  integration_base_path: string
-  integration_embeds_path: string
-  provider_allowlist: string[]
-  embed_provider_allowlist: string[]
-  error: string | null
-}
-
-export interface SocialLinkTreePayload extends SocialBasePayload {
-  surface: 'link_tree'
-  layout_variant: string
-  links_per_page: number
-  total_links: number
-  links: SocialLinkRecord[]
-}
-
-export interface SocialEmbedsPayload extends SocialBasePayload {
-  surface: 'embeds'
-  cache_ttl_seconds: number
-  embeds_per_page: number
-  total_embeds: number
-  embeds: SocialEmbedRecord[]
-}
-
 type SocialPayloadBySurface = {
   link_tree: SocialLinkTreePayload
   embeds: SocialEmbedsPayload
-}
-
-const DEFAULT_ENDPOINTS: Record<PublicSocialSurface, string> = {
-  link_tree: '/_quickscale/social/',
-  embeds: '/_quickscale/social/embeds/',
 }
 
 const DEFAULT_NAVIGATION: PublicSocialNavigation = {
@@ -246,12 +208,22 @@ async function fetchPublicSocialPayload<TSurface extends PublicSocialSurface>(
 export function usePublicSocialSurface<TSurface extends PublicSocialSurface>(surface: TSurface) {
   const config = useProjectConfig()
   const publicPage = config.publicPage?.surface === surface ? config.publicPage : undefined
-  const endpoint = publicPage?.endpoint ?? DEFAULT_ENDPOINTS[surface]
+  // The managed seam's publicPage config carries the module's endpoint; the
+  // client never guesses a module path when the producer did not supply one.
+  const endpoint = publicPage?.endpoint
   const navigation = publicPage?.navigation ?? DEFAULT_NAVIGATION
 
   const query = useQuery<SocialPayloadBySurface[TSurface], Error>({
-    queryKey: ['public-social', surface, endpoint],
-    queryFn: () => fetchPublicSocialPayload(surface, endpoint),
+    queryKey: ['public-social', surface, endpoint ?? ''],
+    queryFn: () => {
+      if (!endpoint) {
+        throw new Error(
+          'The public page config is missing the managed social endpoint.',
+        )
+      }
+      return fetchPublicSocialPayload(surface, endpoint)
+    },
+    enabled: Boolean(endpoint),
     retry: false,
   })
 

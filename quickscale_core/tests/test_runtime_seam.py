@@ -579,17 +579,33 @@ class TestSeamHooks:
 
     def test_hooks_carry_each_declared_path_and_payload_type(self) -> None:
         """Every manifest declaration reaches the hook file, and nothing else."""
+        import re
+
         hooks = render_seam_hooks()
         contracts = _declared_frontend_contracts()
         assert contracts, "at least one shipped manifest must declare its contract"
 
         for module_name, contract in contracts.items():
-            assert f"export const {module_name.upper()}_RESOURCE_PATHS = {{" in hooks
+            if contract.paths:
+                assert (
+                    f"export const {module_name.upper()}_RESOURCE_PATHS = {{" in hooks
+                )
             for resource, path in contract.paths.items():
-                assert f"  {resource}: '{path}'," in hooks
-            for type_name, fields in contract.payload_types.items():
+                placeholders = re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", path)
+                if not placeholders:
+                    assert f"  {resource}: '{path}'," in hooks
+                    continue
+                parameters = ", ".join(
+                    f"{name}: string | number" for name in placeholders
+                )
+                template = re.sub(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", r"${\1}", path)
+                assert f"  {resource}: ({parameters}) => `{template}`," in hooks
+            for type_name, declaration in contract.payload_types.items():
+                if isinstance(declaration, str):
+                    assert f"export type {type_name} = {declaration}" in hooks
+                    continue
                 assert f"export interface {type_name} {{" in hooks
-                for field_name, field_type in fields.items():
+                for field_name, field_type in declaration.items():
                     assert f"  {field_name}: {field_type}" in hooks
 
     def test_hooks_state_the_regenerate_contract(self) -> None:

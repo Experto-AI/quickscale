@@ -677,12 +677,12 @@ also carry no release stamp (`v0.80.0` or `0.80.0`); `__version__` is an identit
   renders the validator's required key manifest, both from the shipped set (SA276), so a module
   that joins the set changes no user-owned theme file. A module's API resource subpaths and
   payload types are generated too: the module declares them in its manifest's
-  `frontend_resources` section (a resource name to a module-relative API subpath, a payload type
-  name to its field/type pairs), and the managed `frontend/src/quickscaleSeam.hooks.ts` renders
-  each module's declaration beside the seam files (SA320). A user-owned page imports the
-  generated constant and type instead of restating a subpath or a response shape, so a module
-  release that changes either changes no user-owned file; the closed-world emission check rejects
-  a user-owned file that names a declared resource subpath or declares a declared payload type.
+  `frontend_resources` section (a resource name to a module-relative API subpath, a `{parameter}`
+  segment rendering a typed builder; a payload type name to its field/type pairs — optional `?`
+  fields, arrays, references and `| null` accepted — or to a union expression), with the managed
+  `frontend/src/quickscaleSeam.hooks.ts` rendering it (SA320). A user-owned page imports the
+  generated declaration, not restating it, so a module release changes no user-owned file; the
+  closed-world check rejects a named declared subpath, builder path, or payload type.
   The theme's SPA pages and presentation tables still name the modules that have React surfaces,
   as [frontend.md](frontend.md) § Module frontend surfaces records; a module with a React surface
   adds itself there.

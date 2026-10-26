@@ -68,6 +68,75 @@ frontend_resources:
     assert manifest.frontend_resources.payload_types == {}
 
 
+def test_section_allows_a_path_without_a_trailing_slash() -> None:
+    manifest = _load(
+        """
+frontend_resources:
+  paths:
+    settings: settings
+"""
+    )
+
+    assert manifest.frontend_resources is not None
+    assert manifest.frontend_resources.paths == {"settings": "settings"}
+
+
+def test_section_parses_a_parameterized_path() -> None:
+    manifest = _load(
+        """
+frontend_resources:
+  paths:
+    memberRole: members/{membershipId}/role/
+"""
+    )
+
+    assert manifest.frontend_resources is not None
+    assert manifest.frontend_resources.paths == {
+        "memberRole": "members/{membershipId}/role/"
+    }
+
+
+def test_section_parses_rich_payload_type_forms() -> None:
+    manifest = _load(
+        """
+frontend_resources:
+  payload_types:
+    OrgRole: "'viewer' | 'member'"
+    OrgSummary:
+      id: string
+      role?: OrgRole
+      name: "OrgRole | null"
+      tags: "string[]"
+    OrgListResponse:
+      organizations: "OrgSummary[]"
+"""
+    )
+
+    assert manifest.frontend_resources is not None
+    assert manifest.frontend_resources.payload_types == {
+        "OrgRole": "'viewer' | 'member'",
+        "OrgSummary": {
+            "id": "string",
+            "role?": "OrgRole",
+            "name": "OrgRole | null",
+            "tags": "string[]",
+        },
+        "OrgListResponse": {"organizations": "OrgSummary[]"},
+    }
+
+
+def test_section_refuses_an_undeclared_payload_type_reference() -> None:
+    with pytest.raises(ManifestError, match="undeclared payload type"):
+        _load(
+            """
+frontend_resources:
+  payload_types:
+    OrgSummary:
+      role: OrgRole
+"""
+        )
+
+
 def test_section_may_declare_only_payload_types() -> None:
     manifest = _load(
         """
@@ -103,20 +172,24 @@ frontend_resources:
             "module-relative",
         ),
         (
-            "frontend_resources:\n  paths:\n    stats: stats\n",
-            "ending in '/'",
-        ),
-        (
             "frontend_resources:\n  paths:\n    stats: stats/../admin/\n",
             "'.' or '..'",
         ),
         (
             "frontend_resources:\n  paths:\n    stats: stats/?page=1\n",
-            "module-relative",
+            "query string",
         ),
         (
             "frontend_resources:\n  paths:\n    stats: stats/<int:pk>/\n",
-            "module-relative",
+            "angle-bracket",
+        ),
+        (
+            "frontend_resources:\n  paths:\n    stats: '{id}/stats/{id}/'\n",
+            "placeholder once",
+        ),
+        (
+            "frontend_resources:\n  paths:\n    detail: '{class}/'\n",
+            "reserved word",
         ),
         (
             "frontend_resources:\n  payload_types:\n    crmstats:\n      contacts: number\n",
@@ -132,15 +205,15 @@ frontend_resources:
         ),
         (
             "frontend_resources:\n  payload_types:\n    CrmStats:\n      contacts: int\n",
-            "must use one of",
+            "must be a scalar",
         ),
         (
             "frontend_resources:\n  payload_types:\n    CrmStats:\n      contacts: []\n",
-            "must use one of",
+            "must be a scalar",
         ),
         (
             "frontend_resources:\n  payload_types:\n    CrmStats:\n      contacts: {}\n",
-            "must use one of",
+            "must be a scalar",
         ),
     ],
 )

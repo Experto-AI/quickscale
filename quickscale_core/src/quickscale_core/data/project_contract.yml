@@ -433,3 +433,10 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current frontend/src/pages/CrmPage.tsx: import CrmStats and CRM_RESOURCE_PATHS from the managed frontend/src/quickscaleSeam.hooks.ts instead of declaring the interface and the stats/, contacts/, companies/, deals/, and tags/ subpaths in the page, then commit the page edit; update refuses a dirty tree."
       - "From the clean tree, run quickscale update --confirm-contract-adoption when CRM is installed so the embedded module manifests are updated before the managed frontend/src/quickscaleSeam.hooks.ts is regenerated from them, then rebuild the frontend. A project without embedded modules runs quickscale apply --confirm-contract-adoption instead, which renders the hook from the shipped manifests. Commit the managed hook with the adopted page, and do not hand-edit it because the next apply or update regenerates it; a confirmed apply that leaves an older embedded CRM manifest unwritten omits CRM_RESOURCE_PATHS and CrmStats and the adopted page will not build."
+
+  - id: sa320b-theme-module-contracts
+    minimum: "0.89.0"
+    title: "Adopt the theme's generated module contracts"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/hooks/useOrgs.ts, useFormSchema.ts, useModules.ts, usePublicSocialSurface.ts, src/components/forms/FormRenderer.tsx, and the emitted theme tests: import every module resource path, parameterized builder, response type, and the social public-page surface type from the managed frontend/src/quickscaleSeam.hooks.ts instead of declaring or writing them, and take the public-page endpoint from the seam's publicPage config."
+      - "From a clean tree, run quickscale update --confirm-contract-adoption when orgs, billing, forms, or social is installed so their embedded manifests are updated before the managed frontend/src/quickscaleSeam.hooks.ts is regenerated, then rebuild the frontend; a project without embedded modules runs quickscale apply --confirm-contract-adoption. Commit the managed hook with the adopted pages and do not hand-edit it because the next apply or update regenerates it."

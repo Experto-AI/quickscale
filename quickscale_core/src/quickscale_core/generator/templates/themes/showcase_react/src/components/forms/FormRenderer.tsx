@@ -12,6 +12,7 @@ import { FormSuccess } from '@/components/forms/FormSuccess'
 import { ApiError, apiRequest, getApiFieldErrors, getApiPayloadMessage } from '@/hooks/useApi'
 import { useFormSchema } from '@/hooks/useFormSchema'
 import { useProjectConfig } from '@/hooks/useModules'
+import { FORMS_RESOURCE_PATHS } from '@/quickscaleSeam.hooks'
 import type { FormFieldSchema } from '@/hooks/useFormSchema'
 
 interface FormRendererProps {
@@ -110,7 +111,7 @@ export function FormRenderer({ slug, apiBasePath }: FormRendererProps) {
     try {
       // The shared client parses the one QuickScale error shape
       // ({"error": {"code", "message", "fields"}}) and throws ApiError.
-      await apiRequest(`${formsApiBasePath}${slug}/submit/`, {
+      await apiRequest(`${formsApiBasePath}${FORMS_RESOURCE_PATHS.submit(slug)}`, {
         method: 'POST',
         body: JSON.stringify(data),
       })
