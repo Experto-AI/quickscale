@@ -17,6 +17,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -186,9 +187,10 @@ class TestStorageManifestAdapter:
         assert spec.settings["QUICKSCALE_STORAGE_BACKEND"] == backend
         assert spec.settings["STORAGES"] == {
             "default": {
-                "BACKEND": "storages.backends.s3.S3Storage",
+                "BACKEND": "quickscale_modules_storage._backends.UniqueKeyS3Storage",
                 "OPTIONS": {
                     "querystring_auth": False,
+                    "file_overwrite": False,
                     **extra_options,
                 },
             },
@@ -219,6 +221,7 @@ class TestStorageManifestAdapter:
         ]
         assert list(spec.settings["STORAGES"]["default"]["OPTIONS"]) == [
             "querystring_auth",
+            "file_overwrite",
             *extra_options,
         ]
         assert spec.settings["AWS_QUERYSTRING_AUTH"] is False
@@ -262,8 +265,8 @@ class TestStorageManifestAdapter:
         assert spec.settings["MEDIA_URL"] == "/uploads/"
         assert spec.settings["STORAGES"] == {
             "default": {
-                "BACKEND": "storages.backends.s3.S3Storage",
-                "OPTIONS": {"querystring_auth": True},
+                "BACKEND": "quickscale_modules_storage._backends.UniqueKeyS3Storage",
+                "OPTIONS": {"querystring_auth": True, "file_overwrite": False},
             },
             "staticfiles": {
                 "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -407,3 +410,160 @@ class TestStorageMediaUrlContract:
         """A non-string MEDIA_URL is a raw-type refusal, never a coercion."""
         with pytest.raises(ManifestError, match="modules.storage.media_url"):
             _storage_manifest_adapter({"media_url": raw_value})
+
+
+class TestCloudUploadKeyUniqueness:
+    """Cloud uploads allocate a distinct key for every save, including races."""
+
+    @staticmethod
+    def _recording_storage(
+        options: dict[str, Any],
+        *,
+        barrier: threading.Barrier | None = None,
+    ) -> Any:
+        """Real allocation and save path with the provider connection faked."""
+        pytest.importorskip("storages.backends.s3")
+        from quickscale_modules_storage._backends import UniqueKeyS3Storage
+
+        class RecordingStorage(UniqueKeyS3Storage):
+            def __init__(self, **settings: Any) -> None:
+                super().__init__(**settings)
+                self.payloads: dict[str, bytes] = {}
+                self.lock = threading.Lock()
+                self.barrier = barrier
+
+            def exists(self, name: str) -> bool:
+                with self.lock:
+                    return name in self.payloads
+
+            def _save(self, name: str, content: Any) -> str:
+                if self.barrier is not None:
+                    self.barrier.wait(timeout=10)
+                with self.lock:
+                    self.payloads[name] = content.read()
+                return name
+
+        return RecordingStorage(**options)
+
+    def test_same_filename_uploads_get_distinct_keys(self) -> None:
+        """Every save carries a different token, even when no key exists yet."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        assert spec.settings["STORAGES"]["default"]["BACKEND"] == (
+            "quickscale_modules_storage._backends.UniqueKeyS3Storage"
+        )
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        first = storage.save("listings/images/shared.jpg", ContentFile(b"first"))
+        second = storage.save("listings/images/shared.jpg", ContentFile(b"second"))
+
+        assert first != second
+        assert storage.payloads == {first: b"first", second: b"second"}
+        assert options["file_overwrite"] is False
+
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "listings/images/shared.jpg",
+            "listings/images/x." + ("a" * 75) + ".jpg",
+        ],
+        ids=["plain", "multi-dot"],
+    )
+    def test_concurrent_same_filename_uploads_keep_both_payloads(
+        self, filename: str
+    ) -> None:
+        """Two writers that both see a free key still get distinct keys."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(
+            options,
+            barrier=threading.Barrier(2),
+        )
+        results: list[str] = []
+        errors: list[BaseException] = []
+        results_lock = threading.Lock()
+
+        def upload(payload: bytes) -> None:
+            try:
+                name = storage.save(
+                    filename,
+                    ContentFile(payload),
+                    max_length=100,
+                )
+            except BaseException as error:  # pragma: no cover - failure path
+                with results_lock:
+                    errors.append(error)
+                return
+            with results_lock:
+                results.append(name)
+
+        threads = [
+            threading.Thread(target=upload, args=(b"org-a",)),
+            threading.Thread(target=upload, args=(b"org-b",)),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert errors == []
+        assert len(results) == 2
+        assert len(set(results)) == 2
+        assert all(len(name) <= 100 for name in results)
+        assert set(storage.payloads) == set(results)
+        assert sorted(storage.payloads.values()) == [b"org-a", b"org-b"]
+
+    def test_constrained_max_length_still_allocates_a_token(self) -> None:
+        """A short field limit keeps its contract and still gets a unique key."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        first = storage.save("a.jpg", ContentFile(b"first"), max_length=10)
+        second = storage.save("a.jpg", ContentFile(b"second"), max_length=10)
+
+        assert len(first) <= 10
+        assert len(second) <= 10
+        assert first.endswith(".jpg")
+        assert second.endswith(".jpg")
+        assert first != second
+        assert storage.payloads == {first: b"first", second: b"second"}
+
+    def test_long_path_within_max_length_still_saves(self) -> None:
+        """An oversized original name is trimmed instead of raising."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        oversized = "d/" + ("a" * 95) + ".jpg"
+        saved = storage.save(oversized, ContentFile(b"payload"), max_length=100)
+
+        assert len(saved) <= 100
+        assert saved.endswith(".jpg")
+        assert storage.payloads == {saved: b"payload"}
+
+    def test_below_token_floor_keeps_stock_allocation(self) -> None:
+        """A field with no token space preserves Django's stock behavior."""
+        pytest.importorskip("storages.backends.s3")
+        from django.core.files.base import ContentFile
+
+        spec = _storage_manifest_adapter({"backend": "s3", "bucket_name": "bucket"})
+        options = spec.settings["STORAGES"]["default"]["OPTIONS"]
+        storage = self._recording_storage(options)
+
+        saved = storage.save("a.b", ContentFile(b"payload"), max_length=4)
+
+        assert saved == "a.b"
+        assert storage.payloads == {saved: b"payload"}
