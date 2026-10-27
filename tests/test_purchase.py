@@ -550,6 +550,220 @@ def test_create_checkout_session_retries_preparing_reservation_idempotently(
 
 
 @pytest.mark.django_db
+def test_create_checkout_session_reuses_an_open_reservation_on_repeat(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A repeated POST returns the still-payable session instead of creating another."""
+    plan = _create_one_time_plan(slug="checkout-reuse-open")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+
+    first_url = create_checkout_session(
+        user,
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+    fake_client.checkout_sessions["cs_test_123"] = {
+        "id": "cs_test_123",
+        "status": "open",
+        "url": first_url,
+        "expires_at": int((timezone.now() + timedelta(hours=1)).timestamp()),
+    }
+
+    second_url = create_checkout_session(
+        user,
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+
+    assert second_url == first_url
+    assert len(fake_client.created_checkout_payloads) == 1
+    assert fake_client.retrieved_checkout_session_ids == ["cs_test_123"]
+    assert PurchaseCheckout.all_objects.filter(organization=organization).count() == 1
+
+
+@pytest.mark.django_db
+def test_create_checkout_session_replaces_an_expired_open_reservation(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A provider-expired session is closed locally before the replacement is created."""
+    plan = _create_one_time_plan(slug="checkout-reuse-expired")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+    create_checkout_session(
+        user,
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+    fake_client.checkout_sessions["cs_test_123"] = {
+        "id": "cs_test_123",
+        "status": "expired",
+    }
+    provider_create = fake_client.create_checkout_session
+    replacement_url = "https://checkout.stripe.test/session/replacement"
+
+    def create_replacement(**kwargs: Any) -> dict[str, Any]:
+        provider_create(**kwargs)
+        return {"id": "cs_test_replacement", "url": replacement_url}
+
+    fake_client.create_checkout_session = create_replacement  # type: ignore[method-assign]
+
+    second_url = create_checkout_session(
+        user,
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+
+    reservations = list(
+        PurchaseCheckout.all_objects.filter(organization=organization).order_by("pk")
+    )
+    assert second_url == replacement_url
+    assert [reservation.status for reservation in reservations] == [
+        PurchaseCheckout.Status.EXPIRED,
+        PurchaseCheckout.Status.OPEN,
+    ]
+    assert reservations[1].stripe_checkout_session_id == "cs_test_replacement"
+
+
+@pytest.mark.django_db
+def test_create_checkout_session_refuses_a_completed_open_reservation(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A completed provider session may still be syncing its credit; no replacement."""
+    plan = _create_one_time_plan(slug="checkout-reuse-complete")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+    create_checkout_session(
+        user,
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+    fake_client.checkout_sessions["cs_test_123"] = {
+        "id": "cs_test_123",
+        "status": "complete",
+    }
+
+    with pytest.raises(BillingValidationError, match="credit synchronization"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    assert len(fake_client.created_checkout_payloads) == 1
+    assert PurchaseCheckout.all_objects.filter(organization=organization).count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("provider_session", "message"),
+    [
+        (
+            {"id": "cs_test_123", "status": "open"},
+            "did not return a reusable hosted URL",
+        ),
+        ({"id": "cs_test_123"}, "unsupported or blank status"),
+        (
+            {
+                "id": "cs_test_123",
+                "url": "https://checkout.stripe.test/session/unknown",
+            },
+            "unsupported or blank status",
+        ),
+    ],
+)
+def test_create_checkout_session_refuses_an_unusable_open_provider_state(
+    user,
+    organization,
+    org_context,
+    provider_session: dict[str, Any],
+    message: str,
+) -> None:
+    """An open reservation whose provider state cannot be reused fails closed."""
+    plan = _create_one_time_plan(slug="checkout-reuse-unusable")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+    create_checkout_session(
+        user,
+        plan=plan,
+        success_url="https://app.example.com/billing/purchase/success",
+        cancel_url="https://app.example.com/billing/purchase/cancel",
+        organization=organization,
+        stripe_client=fake_client,
+    )
+    fake_client.checkout_sessions["cs_test_123"] = provider_session
+
+    with pytest.raises(BillingError, match=message):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    assert len(fake_client.created_checkout_payloads) == 1
+    assert PurchaseCheckout.all_objects.filter(organization=organization).count() == 1
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("event_type", "expected_status", "expected_balance"),
     [

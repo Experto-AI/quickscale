@@ -22,6 +22,7 @@ __all__ = [
     "BillingWebhookError",
     "BillingWebhookSignatureError",
     "InsufficientCreditsError",
+    "OrgFeatureUnavailableError",
     "OrgSelectionRequiredError",
 ]
 
@@ -80,6 +81,18 @@ class BillingSubscriptionAnomalyError(BillingError):
 
     status_code = 400
     default_code = "subscription_anomaly"
+
+
+class OrgFeatureUnavailableError(BillingError):
+    """Raised when the organization's plan does not grant a gated feature.
+
+    The request is well formed; the organization has no active subscription or
+    its plan does not list the feature, so the answer is ``402`` with the
+    stable ``feature_not_available`` code.
+    """
+
+    status_code = 402
+    default_code = "feature_not_available"
 
 
 class OrgSelectionRequiredError(BillingError):

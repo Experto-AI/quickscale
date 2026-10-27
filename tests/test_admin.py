@@ -302,3 +302,24 @@ class TestBillingAdminTenantScopedQueryset:
             request,
             subscription,
         )
+
+
+@pytest.mark.django_db
+class TestTenantAdminOrganizationFilter:
+    """Every billing tenant admin exposes the organization column and filter."""
+
+    @pytest.mark.parametrize(
+        "admin_class",
+        [
+            CreditBalanceAdmin,
+            CreditTransactionAdmin,
+            SubscriptionAdmin,
+            PurchaseCheckoutAdmin,
+        ],
+    )
+    def test_tenant_admin_exposes_the_organization_column_and_filter(
+        self,
+        admin_class: type,
+    ) -> None:
+        assert "organization" in admin_class.list_display
+        assert "organization" in admin_class.list_filter

@@ -31,6 +31,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
 )
+from quickscale_modules_orgs.current_org import org_scope
 import quickscale_modules_billing._locks as _locks
 
 
@@ -45,57 +46,63 @@ def credit_user(
     stripe_reference_data: Mapping[str, Any] | None = None,
     organization: Any,
 ) -> CreditTransaction:
-    """Credit an organization's balance for a Stripe-backed business object."""
+    """Credit an organization's balance for a Stripe-backed business object.
+
+    The service enters the organization's tenant scope itself, so a shell,
+    management-command or worker caller works under FORCE RLS without an
+    ambient request context.
+    """
     if amount <= 0:
         raise BillingValidationError("Credit amount must be greater than zero.")
 
     normalized_reference_data = _normalize_mapping(stripe_reference_data or {})
-    try:
-        with transaction.atomic():
-            _locks._lock_organization_for_billing_mutation(organization)
-            balance, _ = _get_or_create_credit_balance(organization=organization)
-            existing_transaction = _find_existing_credit_transaction(
-                user=user,
-                organization=organization,
-                transaction_type=transaction_type,
-                stripe_event_id=stripe_event_id,
-                stripe_object_id=stripe_object_id,
-                stripe_reference_data=normalized_reference_data,
-            )
-            if existing_transaction is not None:
-                return existing_transaction
+    with org_scope(organization):
+        try:
+            with transaction.atomic():
+                _locks._lock_organization_for_billing_mutation(organization)
+                balance, _ = _get_or_create_credit_balance(organization=organization)
+                existing_transaction = _find_existing_credit_transaction(
+                    user=user,
+                    organization=organization,
+                    transaction_type=transaction_type,
+                    stripe_event_id=stripe_event_id,
+                    stripe_object_id=stripe_object_id,
+                    stripe_reference_data=normalized_reference_data,
+                )
+                if existing_transaction is not None:
+                    return existing_transaction
 
-            updated_balance = _apply_locked_credit_balance_delta(
-                balance=balance,
-                delta=amount,
-            )
-            transaction_row = CreditTransaction.all_objects.create(
-                user=user,
-                organization=organization,
-                amount=amount,
-                transaction_type=transaction_type,
-                stripe_event_id=stripe_event_id,
-                stripe_object_id=stripe_object_id,
-                stripe_reference_data=normalized_reference_data,
-                description=description,
-                balance_after=updated_balance,
-            )
-            return transaction_row
-    except IntegrityError:
-        # A concurrent request beat us to inserting this transaction.
-        # The DB constraint prevents duplicates; the savepoint has been
-        # rolled back (including the balance delta), so re-fetch the row
-        # that was committed by the other request.
-        with transaction.atomic():
-            _locks._lock_organization_for_billing_mutation(organization)
-            existing = CreditTransaction.all_objects.filter(
-                transaction_type=transaction_type,
-                stripe_event_id=stripe_event_id,
-                organization=organization,
-            ).first()
-        if existing is not None:
-            return existing
-        raise
+                updated_balance = _apply_locked_credit_balance_delta(
+                    balance=balance,
+                    delta=amount,
+                )
+                transaction_row = CreditTransaction.all_objects.create(
+                    user=user,
+                    organization=organization,
+                    amount=amount,
+                    transaction_type=transaction_type,
+                    stripe_event_id=stripe_event_id,
+                    stripe_object_id=stripe_object_id,
+                    stripe_reference_data=normalized_reference_data,
+                    description=description,
+                    balance_after=updated_balance,
+                )
+                return transaction_row
+        except IntegrityError:
+            # A concurrent request beat us to inserting this transaction.
+            # The DB constraint prevents duplicates; the savepoint has been
+            # rolled back (including the balance delta), so re-fetch the row
+            # that was committed by the other request.
+            with transaction.atomic():
+                _locks._lock_organization_for_billing_mutation(organization)
+                existing = CreditTransaction.all_objects.filter(
+                    transaction_type=transaction_type,
+                    stripe_event_id=stripe_event_id,
+                    organization=organization,
+                ).first()
+            if existing is not None:
+                return existing
+            raise
 
 
 def debit_user(
@@ -104,29 +111,82 @@ def debit_user(
     amount: int,
     description: str = "",
     organization: Any,
+    reference: str = "",
 ) -> CreditTransaction:
-    """Debit credits from an organization and record the usage transaction."""
+    """Debit credits from an organization and record the usage transaction.
+
+    Pass a caller-owned ``reference`` to make the debit idempotent: a retry
+    with the same reference returns the original transaction instead of
+    debiting again. The service enters the organization's tenant scope itself,
+    so a shell, management-command or worker caller works under FORCE RLS
+    without an ambient request context.
+    """
     if amount <= 0:
         raise BillingValidationError("Debit amount must be greater than zero.")
 
-    with transaction.atomic():
-        _locks._lock_organization_for_billing_mutation(organization)
-        balance = _get_locked_credit_balance(organization=organization)
-        if balance is None or int(balance.balance) < amount:
-            raise InsufficientCreditsError("Organization does not have enough credits.")
+    normalized_reference = str(reference or "").strip()
+    with org_scope(organization):
+        try:
+            with transaction.atomic():
+                _locks._lock_organization_for_billing_mutation(organization)
+                if normalized_reference:
+                    existing_transaction = _find_existing_debit_transaction(
+                        organization=organization,
+                        reference=normalized_reference,
+                    )
+                    if existing_transaction is not None:
+                        return existing_transaction
 
-        updated_balance = _apply_locked_credit_balance_delta(
-            balance=balance,
-            delta=-amount,
-        )
-        return CreditTransaction.all_objects.create(
-            user=user,
+                balance = _get_locked_credit_balance(organization=organization)
+                if balance is None or int(balance.balance) < amount:
+                    raise InsufficientCreditsError(
+                        "Organization does not have enough credits."
+                    )
+
+                updated_balance = _apply_locked_credit_balance_delta(
+                    balance=balance,
+                    delta=-amount,
+                )
+                return CreditTransaction.all_objects.create(
+                    user=user,
+                    organization=organization,
+                    amount=-amount,
+                    transaction_type=CreditTransaction.TransactionType.USAGE,
+                    description=description,
+                    reference=normalized_reference,
+                    balance_after=updated_balance,
+                )
+        except IntegrityError:
+            if not normalized_reference:
+                raise
+            # A concurrent retry inserted this reference first. The savepoint
+            # rolled back the balance delta, so return the committed row.
+            with transaction.atomic():
+                _locks._lock_organization_for_billing_mutation(organization)
+                existing = _find_existing_debit_transaction(
+                    organization=organization,
+                    reference=normalized_reference,
+                )
+            if existing is not None:
+                return existing
+            raise
+
+
+def _find_existing_debit_transaction(
+    *,
+    organization: Any,
+    reference: str,
+) -> CreditTransaction | None:
+    """Return the usage transaction already recorded for a debit reference."""
+    return (
+        CreditTransaction.all_objects.select_for_update()
+        .filter(
             organization=organization,
-            amount=-amount,
+            reference=reference,
             transaction_type=CreditTransaction.TransactionType.USAGE,
-            description=description,
-            balance_after=updated_balance,
         )
+        .first()
+    )
 
 
 def _get_or_create_credit_balance(
