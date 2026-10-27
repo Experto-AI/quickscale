@@ -152,14 +152,19 @@ config:
 ```
 
 Optional sections: `managed_files`, `ci_env`, `operations`, `throttle_scopes`,
-`frontend_resources`, `derivation`, and `contract_vintage`. `frontend_resources`
+`frontend_resources`, `project_blocks`, `derivation`, and `contract_vintage`.
+`frontend_resources`
 declares the module's theme resource contract — `paths` maps a resource name to
 a module-relative API subpath (a `{parameter}` segment renders a typed builder),
 and `payload_types` maps a response type name either to its TypeScript
 field/type pairs (optional `?` fields, arrays, declared-type references and
 `| null` are accepted) or to a union expression — which the managed
 `frontend/src/quickscaleSeam.hooks.ts` renders for user-owned pages (Module
-Conventions rule 31).
+Conventions rule 31). `project_blocks` declares the module's generated-project
+Make targets and test environment, CI environment/steps/jobs, and Compose credential
+pass-through; `apply` renders each into the marker-paired managed region of the
+user-owned `Makefile`, `.github/workflows/ci.yml`, and `docker-compose.yml`
+([generated_file_ownership.md](generated_file_ownership.md#managed-module-regions-in-user-owned-root-files)).
 
 ---
 

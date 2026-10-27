@@ -123,6 +123,7 @@ from scripts.module_conventions.rules_settings import (
     rule_1_settings_names,
     rule_3_settings_reads,
     rule_12_manifest_options,
+    rule_30_settings_composition,
     rule_42_settings_snapshots,
     rule_43_optional_senders,
 )
@@ -184,6 +185,7 @@ __all__ = [
     "rule_3_settings_reads",
     "rule_42_settings_snapshots",
     "rule_43_optional_senders",
+    "rule_30_settings_composition",
     "rule_44_role_checks",
     "rule_45_stub_exemptions",
     "rule_47_redaction",

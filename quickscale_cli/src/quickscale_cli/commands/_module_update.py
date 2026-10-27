@@ -46,6 +46,10 @@ import quickscale_cli.commands._module_embed as _module_embed
 import quickscale_cli.commands._module_update_guard as _module_update_guard
 import quickscale_cli.commands._module_update_journal as _module_update_journal
 import quickscale_core.project_state_hashes as _project_state_hashes
+from quickscale_core.generator.project_blocks import (
+    managed_region_paths,
+    strip_managed_region_content,
+)
 import quickscale_cli.commands._module_update_seal as _module_update_seal
 import quickscale_cli.utils.module_provenance as _module_provenance
 
@@ -493,6 +497,24 @@ def _restore_module_from_baseline(
     return status.returncode == 0 and not status.stdout.strip()
 
 
+def _region_only_difference(
+    project_path: Path, journal: Any, relative_path: str
+) -> bool:
+    """Return whether *relative_path* differs only inside managed regions."""
+    baseline = _module_update_io._read_commit_path(
+        project_path, journal.pre_update_head, relative_path
+    )
+    if baseline is None:
+        return False
+    current_path = project_path / relative_path
+    if not current_path.is_file():
+        return False
+    current = current_path.read_text(encoding="utf-8")
+    return strip_managed_region_content(current) == strip_managed_region_content(
+        baseline
+    )
+
+
 def _journal_dirty_paths(
     project_path: Path, journal: Any, package: str | None
 ) -> list[str]:
@@ -536,6 +558,7 @@ def _journal_dirty_paths(
             "Cannot inspect the working tree while resuming the interrupted "
             "update; fix the repository state and retry."
         )
+    region_paths = set(managed_region_paths())
     dirty: list[str] = []
     for line in status.stdout.splitlines():
         if not line.strip():
@@ -547,6 +570,10 @@ def _journal_dirty_paths(
         if any(
             path == prefix or path.startswith(prefix + "/")
             for prefix in allowed_prefixes
+        ):
+            continue
+        if path in region_paths and _region_only_difference(
+            project_path, journal, path
         ):
             continue
         dirty.append(path)

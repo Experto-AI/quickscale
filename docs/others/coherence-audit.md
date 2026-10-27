@@ -111,30 +111,30 @@ coverage:
 items:
   - id: generated-module-branches
     kind: rule-violation
-    status: open
-    verification: confirmed
+    status: resolved
+    verification: fixed
     aspect: L
     cost: [tax, ambiguity]
     population: generator-templates
     members_affected: [core-admin-templates, core-ci-makefile, core-compose, notifications]
     rule_ref: "module_conventions rule 37; module_architecture §Module Wiring Authority"
-    check: {kind: structural, state: proposed, model: contract-based}
+    check: {kind: structural, state: enforced, model: contract-based}
     handoff: [arch]
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-26"
   - id: notifications-anymail-wiring-split
     kind: rule-violation
-    status: open
-    verification: confirmed
+    status: resolved
+    verification: fixed
     aspect: B
     cost: [tax]
     population: modules
     members_affected: [notifications]
     rule_ref: "module_conventions rule 30; module_architecture §Module Wiring Authority"
-    check: {kind: structural, state: proposed, model: contract-based}
+    check: {kind: structural, state: enforced, model: contract-based}
     handoff: [arch]
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-26"
   - id: billing-feature-gate
     kind: rule-violation
     status: open
@@ -268,22 +268,22 @@ items:
     last_verified: "2026-10-24"
 gaps:
   - {id: 21, rule: 17, state: closed, last_verified: "2026-10-25"}
-  - {id: 22, rule: 37, state: open, last_verified: "2026-10-24"}
+  - {id: 22, rule: 37, state: closed, last_verified: "2026-10-26"}
   - {id: 23, rule: 19, state: open, last_verified: "2026-10-24"}
   - {id: 25, rule: 9, state: open, last_verified: "2026-10-24"}
-  - {id: 26, rule: 30, state: open, last_verified: "2026-10-24"}
+  - {id: 26, rule: 30, state: closed, last_verified: "2026-10-26"}
   - {id: 28, rule: 11, state: open, last_verified: "2026-10-24"}
   - {id: 29, rule: 23, state: open, last_verified: "2026-10-24"}
 ```
 
 ## Summary table
 
-Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **6** (22, 23, 25, 26, 28, and 29; prior 21 closed 2026-10-25). Cost classes overlap; the unique confirmed-item total is 11: defect 1 · collision 0 · ambiguity 6 · tax 7.
+Current confirmed open items: **9**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **4** (23, 25, 28, and 29; prior 21 closed 2026-10-25; prior 22 and 26 closed 2026-10-26 by SA320 (c)). Cost classes overlap; the unique confirmed-item total is 9: defect 1 · collision 0 · ambiguity 5 · tax 5.
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
-| `generated-module-branches` | rule-violation | L / generator-templates | tax, ambiguity | 4 template groups / all generated projects | open | confirmed · high |
-| `notifications-anymail-wiring-split` | rule-violation | B / modules | tax | 1/12 modules | open | confirmed · high |
+| `generated-module-branches` | rule-violation | L / generator-templates | tax, ambiguity | 4 template groups / all generated projects | resolved 2026-10-26 | fixed · high |
+| `notifications-anymail-wiring-split` | rule-violation | B / modules | tax | 1/12 modules | resolved 2026-10-26 | fixed · high |
 | `billing-feature-gate` | rule-violation | H / modules | ambiguity | 1/12 modules | open (regressed) | confirmed · medium-high |
 | `billing-admin-org-filter` | drift | E / tenant-models | tax | 4/20 admin classes | open | confirmed · high |
 | `forms-tenant-isolation-evidence` | drift | M / tenant-isolation-suites | tax | 1/6 suites | open | confirmed · high |
@@ -295,7 +295,7 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 | `orgs-invitation-notification-failure` | drift | F / modules | defect, ambiguity | 1/2 senders | open | confirmed · medium-high |
 | `core-cli-module-knowledge` | drift | C / modules | tax | 6/12 modules | accepted | confirmed · high |
 
-**Leading item.** `generated-module-branches` leads because it binds every module change and every live generated project to hand edits in core or user-owned generated files; its cost scales with module count × projects, and it is a direct breach of the declared module-wiring authority rather than a local naming preference.
+**Leading item.** `billing-feature-gate` now leads: `generated-module-branches` and `notifications-anymail-wiring-split` closed on 2026-10-26 when the core templates moved onto module declarations and rules 37/30 began enforcing the clauses. The closed items remain in the tables as the audit’s record.
 
 ## Aspect sections
 
@@ -325,8 +325,8 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 |---|---|---|---|---|
 | Layer-respecting imports | 12/12 | no module imports a higher layer; same-layer direction acyclic | `quickscale_modules/*/src/**/*.py`; layer table `module_conventions.md:153-172` | present |
 | Declared requirements cover imports | 12/12 | `required_modules` covers every imported first-party module | `*/module.yml`; import scan | present |
-| Core/CLI module-specific vocabulary | 6/12 modules named | `contracts/module_options.py`, `manifest/social_manifest.py`, generator settings | `contracts/module_options.py:17-105`; `manifest/social_manifest.py` (512 lines); generator `settings/base.py.j2:231-254` | accepted exception + open generator item |
-| Core generator functional module branches | backups, orgs, notifications, credential modules | admin shortcut, CI/Makefile command, compose names, ANYMAIL settings | §L table | divergent |
+| Core/CLI module-specific vocabulary | 6/12 modules named | `contracts/module_options.py`, `manifest/social_manifest.py` | `contracts/module_options.py:17-105`; `manifest/social_manifest.py` (512 lines) | accepted exception |
+| Core generator functional module branches | backups, orgs, notifications, credential modules | admin shortcut, CI/Makefile command, compose names, ANYMAIL settings | §L table; managed `project_blocks` regions; `quickscale_admin` tag; notifications adapter | resolved 2026-10-26 |
 | Private-name imports across modules | 0 shipped source | only public surfaces / capabilities | import scan; harness rule 4 | present |
 
 **Already consistent (keep):** no shipped module source imports another module’s private name; layer direction is one-way; `required_modules` includes every imported module. Docstring examples in orgs name higher-layer modules (`quickscale_forms_seed_presets`, `quickscale_crm_*`) but are not runtime references and the harness excludes docstrings.
@@ -419,7 +419,7 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 | Bundled manifests | 12/12 | identical to source | `cmp` | present |
 | One `0001_initial` per model-bearing module | 10/10 | auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social | `*/migrations/` | present |
 | Module file names | 12/12 | only allowed names or private `_<name>.py` | harness rule 28 | present |
-| Module-specific functional branches in generator templates | 4 groups | admin index/app_index backups; CI/Makefile orgs; compose credential names; notifications ANYMAIL | `templates/admin/index.html.j2:6-11`; `templates/admin/app_index.html.j2:5-16`; `ci.yml.j2:105,115,124`; `Makefile.j2:5,50,67,70`; `docker-compose.yml.j2:107-114`; `settings/base.py.j2:231-254` | divergent |
+| Module-specific functional branches in generator templates | 4 groups | admin index/app_index backups; CI/Makefile orgs; compose credential names; notifications ANYMAIL | managed `project_blocks` regions; `quickscale_admin` tag; notifications adapter | resolved 2026-10-26 |
 | Allowed generator exceptions | 404 diagnostics; theme module surfaces; seam tables; `.env.example` catalog | rule 37/41 exceptions | `404.html.j2:111-131`; `runtime/seam.py`; `apply/steps/env_sync.py` | present |
 
 **Already consistent (keep):** 12/12 module layouts, versions, pyprojects, bundled manifests, and migration freeze. `quickscale_modules/*/` contains no placeholder directory without `module.yml`. The four contract vintages all carry ids.
@@ -473,7 +473,7 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 | Seam-generated module flags/paths | all shipped modules except orgs | generated from `MODULE_CATALOG`/seam tables; orgs reports mode separately | `runtime/seam.py:60-270`; `frontend.md:262-284` | present |
 | Module-declared SPA routes | blog, crm, listings | `spa_routes` in manifests, rendered by `apply` | `*/module.yml`; rule 41 | present |
 | Host-rendered reservations | orgs `/orgs*`; forms `/forms*`; social `/social*` | stated rule 41 exceptions | `runtime/urls.py:63-111`; `frontend.md` | present |
-| Module-specific admin/CI branches in generated templates | see L | not theme-owned; see item 1 | generator templates | divergent |
+| Module-specific admin/CI branches in generated templates | see L | managed `project_blocks` regions; `quickscale_admin` tag; notifications adapter | generator templates | resolved 2026-10-26 |
 
 **Already consistent (keep):** no module ships TSX; the theme owns presentation; the seam and validator keys are generated from the shipped set; the 404 hint’s auth/billing path tests are diagnostics allowed by rule 41. The theme TSX was not read line by line; this is partial coverage, not a clean sweep.
 
@@ -521,7 +521,7 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 
 ### 1. `generated-module-branches` — module behaviour lives in core’s generated templates
 
-- **ID / kind / status:** `generated-module-branches` · `rule-violation` · `open`.
+- **ID / kind / status:** `generated-module-branches` · `rule-violation` · `resolved` (2026-10-26, SA320 (c)).
 - **Aspect / population / context:** L (secondary C, O) · `generator-templates` · all generated projects; 4 functional template groups.
 - **Table / evidence:** §L.1 rows 7–8.
   - backups admin shortcut in `templates/admin/index.html.j2:6-11` and `templates/admin/app_index.html.j2:5-16` (also duplicated under `templates/common/templates/admin/`): `app_label == "quickscale_backups"` and literal `/admin/quickscale_backups/backuppolicy/ops/create/`.
@@ -533,21 +533,23 @@ Current confirmed open items: **11**. Prior accepted: **1** (`core-cli-module-kn
 - **Declared rule:** rule 37 (`module_conventions.md:760-798`) says code outside modules, **including generator templates**, computes the module set from discovery; `module_architecture.md:293-330` forbids per-module wiring blocks in core. The allowed exceptions do not include functional admin/CI/compose branches. The `.env.example` catalog exception covers only that catalog.
 - **Options:** (a) declare generic manifest sections (for example `admin_entrypoints`, `ci_commands`) and render them; (b) move the admin shortcut into the backups module’s own change-list template and the CI command into a managed block; (c) record each branch as an approved explicit exception with a reason and revisit trigger.
 - **Recommended rule:** *coherence proposal 1* — Generator templates outside the listed presentation/diagnostic exceptions contain no per-module branch or module-prefixed constant. Module-specific admin/CI/compose behavior is declared by the module (manifest or module-owned template) or emitted from a managed generic block; core never names the module.
-- **Enforcement:** proposed extension of rule 37’s template scan to single-name conditions/constants (current `_template_module_literals` counts only enumerations, `_identity_module_lists.py:134-164`); control cases reject `{% if app_label == "quickscale_backups" %}` and accept the derived module set. Evidence state: `proposed`; harness inspected, not run.
+- **Enforcement (2026-10-26):** rule 37’s template scan now reads each Jinja tag for a quoted module name and each template for a module-prefixed token (`_identity_module_lists.py`); control cases reject a single-name branch or prefixed constant and accept the derived module set. Evidence state: `enforced`.
 - **Migration / acceptance:** remove or declare the four groups; regenerate managed output; add a contract-vintage step for existing projects if a managed block replaces U1/U3 content; rollback by reverting the templates. Acceptance: a new module adds an admin/CI contribution through its own declaration with no core diff. Responsibility: core/generator owner plus module owners; existing roles only.
+- **Resolution (2026-10-26, SA320 (c)):** the admin templates render a module-owned shortcut through the generic `quickscale_admin` tag, the Makefile/CI/Compose branches are marker-paired managed regions rendered from the module declarations, and rule 37 now catches a single-name template branch or module-prefixed constant with its fixture controls. Acceptance: a new module adds the contribution through its own declaration with no core diff.
 - **Confidence / hand-off:** high · arch (`generated-file-ownership-unmodeled` is the structural root; this is a narrower instance not in that finding’s theme-only evidence).
 
 ### 2. `notifications-anymail-wiring-split` — one module’s vendor settings live in two homes
 
-- **ID / kind / status:** `notifications-anymail-wiring-split` · `rule-violation` · `open`.
+- **ID / kind / status:** `notifications-anymail-wiring-split` · `rule-violation` · `resolved` (2026-10-26, SA320 (c)).
 - **Aspect / population / context:** B (secondary C) · `modules` · notifications; 1/12 modules.
 - **Table / evidence:** §A/B.1 and §L.1. Notifications’ adapter sets `EMAIL_BACKEND` (`notifications/adapter.py:132-135`), but the `ANYMAIL` map is composed in the generated base template from `QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR`, `..._WEBHOOK_SECRET_ENV_VAR`, and `..._RESEND_DOMAIN` (`settings/base.py.j2:231-254`). The manifest declares neither `ANYMAIL` nor a derived setting for it (`notifications/module.yml:153-163`).
 - **Difference and cost:** **tax.** A module settings contract has two homes; a rename or a provider change requires a core edit and does not reach an existing user-owned `settings/base.py`. The adapter can compute the map from resolved options; the current split hides that.
 - **Declared rule:** rule 30 (`module_conventions.md:636-648`) — a module’s wiring writes its own settings; `module_architecture.md:293-330` — no per-module wiring in core. `settings/base.py` is user-owned (`generated_file_ownership.md:159-164`).
 - **Options:** (a) notifications adapter contributes `ANYMAIL` from resolved options; (b) manifest-derived nested setting; (c) a managed settings block.
 - **Recommended rule:** *coherence proposal 2* — Every setting a module needs, including nested vendor settings, is written by that module’s adapter/manifest; core templates carry only generic composition.
-- **Enforcement:** proposed rule 30 check that core templates do not read `QUICKSCALE_<MODULE>_*` or set a vendor block for one module; control case accepts a generic settings composition. Evidence state: `proposed`.
+- **Enforcement (2026-10-26):** rule 30 reads every core generator template outside the theme tree and rejects a `QUICKSCALE_<MODULE>_*` token (`_settings_core_templates.py`); control case accepts the generic `MODULE_SETTINGS`/`compose_rest_framework(...)` composition. Evidence state: `enforced`.
 - **Migration / acceptance:** move the block to notifications; regenerate managed settings; existing projects adopt through a contract vintage or manual step; rollback by restoring the block. Acceptance: changing a notifications env-var option changes only module-owned output. Responsibility: notifications owner.
+- **Resolution (2026-10-26, SA320 (c)):** the notifications adapter writes `ANYMAIL` from its resolved options, the generated base settings template carries only the generic `MODULE_SETTINGS` application, and rule 30 now rejects a core template that reads `QUICKSCALE_<MODULE>_*` with its fixture controls. Acceptance: changing a notifications env-var option changes only module-owned output.
 - **Confidence / hand-off:** high · arch.
 
 ### 4. `billing-feature-gate` (reopened) — published gate returns an unshaped 402
@@ -709,13 +711,13 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 **Gap 21 (prior, closed 2026-10-25) — rule 17’s computed-operation hole.** `--json` is never required; `--trigger` is checked only when present; the destructive duty keys on the operation name (`_package_commands.py`). `quickscale_backups_pin` called `ADAPTER_FUNCTIONS[operation]` and the DR bridge called `ADAPTER_FUNCTIONS.get(function_name)`, so a computed destructive operation could escape the `--dry-run` duty. The detector now treats a computed adapter dispatch — an adapter-registry subscript with a non-literal key, and a name bound from `ADAPTER_FUNCTIONS.get(...)` and later called — as destructive by construction; both live commands declare `--dry-run` and honor it by reporting the intended call without writing. Control cases pass: a fixture computed `prune` without `--dry-run` fails and the same fixture with the flag passes.
 
-**Gap 22 — rule 37’s template scan sees enumerations, not single-name branches.** `_template_module_literals` counts a bracket/pipeline list only when at least two module names are present (`_identity_module_lists.py:134-164`); `_module_list_violations` applies the branch/constant scan to Python only (`:249-290`). The admin `{% if app_label == "quickscale_backups" %}`, the CI/Makefile `selected_modules ... "orgs"` condition, and the compose credential names are single-name references and pass. Control: a fixture template with a single module branch must fail; the derived discovery template must pass. State `observed-in-source`; linked item 1.
+**Gap 22 (closed 2026-10-26) — rule 37’s template scan sees enumerations, not single-name branches.** `_template_module_literals` still counts a bracket/pipeline list, and the scan now also reads each Jinja tag for a quoted module name and each template's `QUICKSCALE_<MODULE>_*`, `quickscale_modules_<module>`, `quickscale_<module>_*`, and `modules/<module>/` tokens (`_identity_module_lists.py`). The theme's declared module surface and the generated isolation test's dormant runtime gate are the recorded exceptions. Controls: a fixture template with a single module branch or prefixed constant fails; the derived discovery template and non-module core tokens pass. State `closed`; linked item 1.
 
 **Gap 23 — rule 19 accepts a public-read mixin by name only.** `PUBLIC_READ_MIXIN_SUFFIX` and `_is_sanctioned_guard_name` accept any `*PublicReadMixin` (`_routes_authorization.py:31-62`); there is no check that it subclasses `PublicSystemOrgReadMixin` or primes context. Control: an empty mixin should fail; the blog/listings mixin should pass. State `observed-in-source`; linked item 10.
 
 **Gap 25 — rule 9 does not scan published gate decorators.** The harness scans module views and module-owned helpers; `require_org_feature` is a decorator returning `HttpResponse`, not a view, so the bare 402 is invisible. Control: a decorator that returns a shaped 402 passes; the current one fails. State `observed-in-source`; linked item 4.
 
-**Gap 26 — rule 30 checks module adapters, not core templates.** The notifications `ANYMAIL` block is written in `settings/base.py.j2`, outside the adapter/manifest the harness reads. Control: a core template that reads `QUICKSCALE_<MODULE>_*` fails; a generic composition passes. State `observed-in-source`; linked items 1–2.
+**Gap 26 (closed 2026-10-26) — rule 30 checks module adapters, not core templates.** `rule_30_settings_composition` reads every core generator template outside the theme tree and reports a `QUICKSCALE_<MODULE>_*` token; the notifications adapter now writes `ANYMAIL` and the generated base settings carries only the generic `MODULE_SETTINGS` application. Control: a core template that reads a module setting fails; the generic `MODULE_SETTINGS`/`compose_rest_framework(...)` composition passes. State `closed`; linked items 1–2.
 
 **Gap 28 — rule 11 checks file presence, not isolation evidence.** It does not require every tenant table in the RLS boundary, a regular-member view test, or a restricted default role in `tests/settings.py`. Control: a one-table/one-operator-path suite fails; the all-table/restricted suite passes. State `observed-in-source`; linked items 6–7.
 
@@ -741,8 +743,8 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 **To the architectural audit (structural roots).**
 
-- `generated-module-branches` — linked to `generated-file-ownership-unmodeled`; this pass adds the non-theme generated files (admin index, CI/Makefile, compose, base settings) that the arch finding’s theme-only evidence does not enumerate.
-- `notifications-anymail-wiring-split` — linked to the module-wiring-authority root; module settings split across core and module.
+- `generated-module-branches` — linked to `generated-file-ownership-unmodeled`; this pass adds the non-theme generated files (admin index, CI/Makefile, compose, base settings) that the arch finding’s theme-only evidence does not enumerate. Resolved 2026-10-26; retained as the hand-off record.
+- `notifications-anymail-wiring-split` — linked to the module-wiring-authority root; module settings split across core and module. Resolved 2026-10-26.
 - `core-cli-module-knowledge` — prior accepted, already on the watchlist.
 
 **Companion lead dispositions.**
@@ -755,7 +757,7 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 **Catalogue:** no new aspect letter. The pass used A–V; the only cross-cutting addition is a generated-output-authority clause under L/O, captured as proposal 1. No new aspect is warranted without a population that the current catalogue cannot express.
 
-**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Open choices the current contract does not settle for the author: (a) whether the admin/CI/compose hook is core-declared or module-declared (item 1); (b) where nested vendor settings live (item 2); (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) how a sender’s post-commit failure is handled (item 15); (e) whether the new module’s test settings default restricted (item 7) and which tables the RLS proof covers (item 6). Each is a forced decision, not a copy-source choice.
+**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) how a sender’s post-commit failure is handled (item 15); (e) whether the new module’s test settings default restricted (item 7) and which tables the RLS proof covers (item 6). Each is a forced decision, not a copy-source choice.
 
 **Residual work and limits.**
 
@@ -814,6 +816,8 @@ These are paste-ready proposals. Proposals 3, 9, 12, and 14 are adopted and reta
 
 - 2026-10-24 — `generated-module-branches`: new, open.
 - 2026-10-24 — `notifications-anymail-wiring-split`: new, open.
+- 2026-10-26 — `generated-module-branches`: **resolved** by SA320 (c); rule 37 enforces the clause.
+- 2026-10-26 — `notifications-anymail-wiring-split`: **resolved** by SA320 (c); rule 30 enforces the clause.
 - 2026-10-24 — `billing-feature-gate`: new, open; reopens `unauthenticated-status-code` for this decorator.
 - 2026-10-24 — `billing-admin-org-filter`: new, open.
 - 2026-10-24 — `forms-tenant-isolation-evidence`: new, open.

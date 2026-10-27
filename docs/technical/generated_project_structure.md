@@ -62,6 +62,11 @@ Notes:
 - `Makefile` is always generated at the project root and is the local entrypoint for setup, lint, format, test, check, and ci workflows.
 - `scripts/lint.sh` is generated alongside the root `Makefile` and backs the shared `make lint` and `make check` workflows.
 - Frontend-specific Makefile targets run only when `frontend/package.json` exists.
+- The root `Makefile`, `.github/workflows/ci.yml`, and `docker-compose.yml` carry marker-paired
+  managed regions rendered from each installed module's `project_blocks` declaration. The user
+  owns the lines outside the markers; `quickscale apply`, `quickscale update`, and
+  `quickscale remove` refresh the regions, so a module's make targets, CI environment/steps/jobs, and Compose
+  credential pass-through change with no core edit.
 
 ### Generated Project with Embedded Modules
 

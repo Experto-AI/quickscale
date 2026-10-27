@@ -1210,6 +1210,74 @@ def test_module_list_template_control() -> None:
     )
 
 
+def test_single_name_template_branch_and_constant_control() -> None:
+    """A single module name in a core template fails rule 37 (SA320 (c))."""
+    corpus = _corpus(_golden_module("alpha"), _golden_module("beta"))
+    branch = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/admin.html.j2": (
+                '{% if app_label == "alpha" %}x{% endif %}\n'
+            )
+        },
+    )
+    assert any(
+        "branches on module name 'alpha' in a template" in violation
+        for violation in checker.rule_37_module_lists(branch)
+    )
+    membership = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/workflow.yml.j2": (
+                '{% if selected_modules is none or "beta" in selected_modules %}x{% endif %}\n'
+            )
+        },
+    )
+    assert any(
+        "branches on module name 'beta' in a template" in violation
+        for violation in checker.rule_37_module_lists(membership)
+    )
+    constant = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/settings/base.py.j2": (
+                'SECRET = globals().get("QUICKSCALE_ALPHA_WEBHOOK_SECRET")\n'
+            )
+        },
+    )
+    assert any(
+        "declares module-prefixed template constant QUICKSCALE_ALPHA_WEBHOOK_SECRET" in violation
+        for violation in checker.rule_37_module_lists(constant)
+    )
+    # Derived discovery and non-module core tokens are the passing controls.
+    derived = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/admin.html.j2": (
+                "{% for module in installed_modules %}{{ module }}{% endfor %}\n"
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(derived) == []
+    envelope = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/config.j2": ("QUICKSCALE_FRONTEND_ORIGIN=example\n")
+        },
+    )
+    assert checker.rule_37_module_lists(envelope) == []
+    # The theme's declared module surface is the recorded exception.
+    theme = replace(
+        corpus,
+        core_files={
+            "generator/templates/themes/showcase_react/templates/index.html.j2": (
+                "QUICKSCALE_FRONTEND_ORIGIN\n"
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(theme) == []
+
+
 def test_tests_file_set_control() -> None:
     module = _golden_module()
     disallowed = replace(module, tests={**module.tests, "helpers.py": "VALUE = 1\n"})

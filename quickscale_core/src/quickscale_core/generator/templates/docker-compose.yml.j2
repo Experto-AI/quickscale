@@ -102,16 +102,8 @@ services:
       # over env_file, so a skip value left in .env can never reach a serving
       # process.
       - QUICKSCALE_SKIP_MODULE_CHECKS=
-      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - QUICKSCALE_BILLING_WEBHOOK_SECRET=${QUICKSCALE_BILLING_WEBHOOK_SECRET:-}
-      - RESEND_API_KEY=${RESEND_API_KEY:-}
-      - QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=${QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET:-}
-      - POSTHOG_API_KEY=${POSTHOG_API_KEY:-}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID=${QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID:-}
-      - QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY=${QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY:-}
+      # QuickScale module environment (managed)
+{{ module_compose_environment | default("") | indent(6, true) }}      # End QuickScale module environment
     depends_on:
       db:
         condition: service_healthy

@@ -61,8 +61,8 @@ ALLOWED_HOSTS = config(
 #
 # ``quickscale_core.runtime.settings.ClientIdentityMiddleware`` validates these
 # settings and normalizes X-Forwarded-For before every request consumer. The
-# live ``quickscale_modules_orgs.current_org.get_client_ip`` resolver and DRF's
-# ``NUM_PROXIES`` path therefore observe the same fail-closed forwarding state.
+# tenant module's live client-IP resolver and DRF's ``NUM_PROXIES`` path
+# therefore observe the same fail-closed forwarding state.
 
 USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR", default=False, cast=bool)
 TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=0, cast=int)
@@ -124,6 +124,9 @@ TEMPLATES = [
             # carry one tag call each instead of a generated line per module.
             "libraries": {
                 "quickscale_seam": "quickscale_core.runtime.seam_tags",
+                # Rule 37: the user-owned admin templates name no module; each
+                # module's own shortcut template renders through this tag.
+                "quickscale_admin": "quickscale_core.runtime.admin_tags",
             },
         },
     },
@@ -227,31 +230,6 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Apply managed module settings after base defaults so module-provided overrides
 # (e.g. storage backend, MEDIA_URL) are not clobbered by the template defaults.
 globals().update(MODULE_SETTINGS)
-
-if globals().get("EMAIL_BACKEND") == "anymail.backends.resend.EmailBackend":
-    _notifications_resend_api_key_env_var = str(
-        globals().get("QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR", "")
-    ).strip()
-    _notifications_webhook_secret_env_var = str(
-        globals().get("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR", "")
-    ).strip()
-    _notifications_resend_domain = str(
-        globals().get("QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN", "")
-    ).strip()
-
-    ANYMAIL = dict(globals().get("ANYMAIL", {}))
-    if _notifications_resend_api_key_env_var:
-        ANYMAIL["RESEND_API_KEY"] = config(
-            _notifications_resend_api_key_env_var,
-            default="",
-        )
-    if _notifications_webhook_secret_env_var:
-        ANYMAIL["WEBHOOK_SECRET"] = config(
-            _notifications_webhook_secret_env_var,
-            default="",
-        )
-    if _notifications_resend_domain:
-        ANYMAIL["RESEND_SENDER_DOMAIN"] = _notifications_resend_domain
 
 
 # DRF composition — the fail-closed defaults (the one QuickScale error handler,

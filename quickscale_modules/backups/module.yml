@@ -117,6 +117,13 @@ config:
 
   immutable: {}
 
+# Generated-project blocks: the credential variable names the Compose
+# backend service passes through from the host environment.
+project_blocks:
+  compose_env:
+    - remote_access_key_id_env_var
+    - remote_secret_access_key_env_var
+
 contract_vintage:
   id: sa282-backups-pg18-tooling
   minimum: "0.87.0"

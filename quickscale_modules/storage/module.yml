@@ -94,6 +94,13 @@ config:
 
 required_modules: []
 
+# Generated-project blocks: the credential variable names the Compose
+# backend service passes through from the host environment.
+project_blocks:
+  compose_env:
+    - access_key_id_env_var
+    - secret_access_key_env_var
+
 dependencies:
   - django-storages
   - boto3

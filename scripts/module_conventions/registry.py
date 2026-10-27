@@ -68,6 +68,7 @@ from scripts.module_conventions.rules_settings import (
     rule_1_settings_names,
     rule_3_settings_reads,
     rule_12_manifest_options,
+    rule_30_settings_composition,
     rule_42_settings_snapshots,
     rule_43_optional_senders,
 )
@@ -113,6 +114,11 @@ RULES: tuple[Rule, ...] = (
     Rule(26, "inbound webhooks", rule_26_webhooks),
     Rule(28, "module file names", rule_28_file_names),
     Rule(29, "test names", rule_29_test_names),
+    Rule(
+        30,
+        "settings written by module wiring",
+        rule_30_settings_composition,
+    ),
     Rule(31, "the theme seam", rule_31_theme_seam),
     Rule(32, "throttles", rule_32_throttles),
     Rule(
@@ -143,7 +149,6 @@ RULES: tuple[Rule, ...] = (
 OPEN_RULES: tuple[tuple[int, str], ...] = (
     (21, "SA216 (rule 21 is a review rule; each module's write-effect rollback test)"),
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),
-    (30, "SA215 (enforced in apply itself, core collect_wiring)"),
 )
 
 

@@ -648,7 +648,7 @@ also carry no release stamp (`v0.80.0` or `0.80.0`); `__version__` is an identit
   `INSTALLED_APPS` and `MIDDLEWARE` in sorted module-name order (`_sort_module_items`), because
   that order is fixed by the module set and no module selects it; the composition offers no
   `before`/`after` override.
-
+- ✅ Core generator templates carry no module's setting (the theme is rule 31's surface): a template that reads `QUICKSCALE_<MODULE>_*` fails the harness, and the generic `MODULE_SETTINGS` application is its passing control.
 **31. The theme seam.**
 - ✅ The seam's producer is the versioned runtime library: the theme's `index.html.j2` and its two
   public social pages render `window.__QUICKSCALE__.modules`, `modulePaths`,
@@ -798,6 +798,7 @@ also carry no release stamp (`v0.80.0` or `0.80.0`); `__version__` is an identit
 - ✅ `module-extension.md`'s authoring checklist states each core edit a new module needs.
 - ❌ A per-module constant, default, equality, membership, or `.get()`/subscript branch on a
   module name in core or the CLI outside the listed exceptions.
+- ❌ A single-name module branch or module-prefixed constant in a generator template; the module declares it in `project_blocks`, its own template, or a managed region, except rule 31's theme surface and the generated isolation test gate.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
   test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producers
   (`runtime/seam._SEAM_MODULE_PATHS` and `runtime/seam._SEAM_MODULE_API_PATHS`, and the runtime
@@ -806,7 +807,6 @@ also carry no release stamp (`v0.80.0` or `0.80.0`); `__version__` is an identit
   `.env.example` managed-block catalog (`apply/steps/env_sync.ENV_EXAMPLE_MODULE_SPECS`), whose
   per-module prose and block order are presentation data pinned by the env-example conformance
   suite.
-
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
 Management commands heading every command the module ships and every flag those commands declare;
 the test checks all three, besides the headings. The Extending section answers the five standard

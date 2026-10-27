@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 import click
 
 from quickscale_cli.cli_help import QuickScaleCommand
+from quickscale_core.generator.project_blocks import managed_region_paths
 from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
     generate_yaml,
@@ -310,6 +311,10 @@ def _record_mutation_snapshots(
             for index, relative in enumerate(
                 _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
             )
+        ),
+        *(
+            (f"module-region-{index}", project_path / relative)
+            for index, relative in enumerate(managed_region_paths())
         ),
     ]
 

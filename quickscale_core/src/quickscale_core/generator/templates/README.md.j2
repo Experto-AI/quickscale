@@ -132,13 +132,8 @@ make test
 # Run backend tests only
 make test-backend
 
-{% if selected_modules is none or "orgs" in selected_modules %}
-# Run the two-organization isolation suite as the restricted runtime role.
-# RUNTIME_DATABASE_URL must point at a NOSUPERUSER/NOBYPASSRLS test role with
-# CREATEDB (pytest creates its test database); the generated CI provisions one.
-make test-tenant-isolation
-{% endif %}
-# Direct pytest runs use the test-only BYPASSRLS allowance the Makefile sets.
+# Module-declared targets (for example a tenant-isolation suite) appear in `make help`.
+# Direct pytest runs need the same test-only allowance the Makefile applies.
 # Run backend tests with coverage
 QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run pytest --cov={{ package_name }} --cov-report=html
 

@@ -1,18 +1,9 @@
 {% raw -%}
 {% extends "admin/index.html" %}
+{% load quickscale_admin %}
 
 {% block content %}
-{% for app in app_list %}
-{% if app.app_label == "quickscale_backups" %}
-<div class="app-list">
-    <ul class="object-tools">
-        <li>
-            <a href="/admin/quickscale_backups/backuppolicy/" class="button">Open backup ops</a>
-        </li>
-    </ul>
-</div>
-{% endif %}
-{% endfor %}
+{% for app in app_list %}{% module_admin_shortcut app.app_label "index" %}{% endfor %}
 {{ block.super }}
 {% endblock %}
 {% endraw -%}

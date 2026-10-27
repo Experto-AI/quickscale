@@ -1712,3 +1712,77 @@ def test_seed_local_environment_fills_dotenv_only_when_present(tmp_path) -> None
         .read_text()
         .endswith("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=whsec_x\n")
     )
+
+
+def test_apply_refreshes_module_project_regions(tmp_path: Path) -> None:
+    """Apply writes each module's declared blocks into the managed regions (SA320)."""
+    project = tmp_path / "myapp"
+    _write_minimal_project(
+        project,
+        modules={
+            "orgs": {"enabled": True},
+            "billing": {"enabled": True},
+            "notifications": {"enabled": True},
+        },
+    )
+    _write_complete_embedded_inventory(project)
+
+    from quickscale_core.generator.project_blocks import (
+        CI_JOBS_REGION_TITLE,
+        CI_STEPS_REGION_TITLE,
+        CI_TEST_ENV_REGION_TITLE,
+        CI_WORKFLOW_RELATIVE_PATH,
+        COMPOSE_REGION_TITLE,
+        COMPOSE_RELATIVE_PATH,
+        MAKEFILE_RELATIVE_PATH,
+        MAKE_REGION_TITLE,
+    )
+
+    (project / MAKEFILE_RELATIVE_PATH).write_text(
+        f".DEFAULT_GOAL := help\n# QuickScale {MAKE_REGION_TITLE} (managed)\n"
+        f"# End QuickScale {MAKE_REGION_TITLE}\n"
+    )
+    workflow = project / CI_WORKFLOW_RELATIVE_PATH
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(
+        "jobs:\n  test:\n    steps:\n"
+        "      env:\n"
+        f"        # QuickScale {CI_TEST_ENV_REGION_TITLE} (managed)\n"
+        f"        # End QuickScale {CI_TEST_ENV_REGION_TITLE}\n"
+        f"    # QuickScale {CI_STEPS_REGION_TITLE} (managed)\n"
+        f"    # End QuickScale {CI_STEPS_REGION_TITLE}\n"
+        f"  # QuickScale {CI_JOBS_REGION_TITLE} (managed)\n"
+        f"  # End QuickScale {CI_JOBS_REGION_TITLE}\n"
+    )
+    (project / COMPOSE_RELATIVE_PATH).write_text(
+        "services:\n  backend:\n    environment:\n"
+        f"      # QuickScale {COMPOSE_REGION_TITLE} (managed)\n"
+        f"      # End QuickScale {COMPOSE_REGION_TITLE}\n"
+    )
+
+    selected = _with_required_modules("orgs", "billing", "notifications")
+    success, message = regenerate_managed_wiring(project, module_names=selected)
+    assert success, f"regenerate_managed_wiring failed: {message}"
+
+    makefile = (project / MAKEFILE_RELATIVE_PATH).read_text()
+    assert "check-tenant-isolation:" in makefile
+    workflow_text = workflow.read_text()
+    assert "tenant-isolation:" in workflow_text
+    assert "quickscale_orgs_check_tenant_isolation" in workflow_text
+    assert 'QUICKSCALE_ALLOW_BYPASSRLS: "1"' in workflow_text
+    compose = (project / COMPOSE_RELATIVE_PATH).read_text()
+    assert "- STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" in compose
+    assert "- RESEND_API_KEY=${RESEND_API_KEY:-}" in compose
+
+    # A second pass over the same module set is byte-idempotent.
+    before = {
+        path: (project / path).read_text()
+        for path in (
+            MAKEFILE_RELATIVE_PATH,
+            CI_WORKFLOW_RELATIVE_PATH,
+            COMPOSE_RELATIVE_PATH,
+        )
+    }
+    success, message = regenerate_managed_wiring(project, module_names=selected)
+    assert success, f"regenerate_managed_wiring failed: {message}"
+    assert before == {path: (project / path).read_text() for path in before}

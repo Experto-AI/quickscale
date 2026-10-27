@@ -9,7 +9,10 @@ MODULE_INSTALLED_APPS: list[str] = ['anymail', 'rest_framework', 'quickscale_mod
 
 MODULE_MIDDLEWARE: list[str] = []
 
-MODULE_SETTINGS: dict[str, object] = {'DEFAULT_FROM_EMAIL': 'ops@example.com',
+MODULE_SETTINGS: dict[str, object] = {'ANYMAIL': {'RESEND_API_KEY': os.environ.get("OPS_RESEND_API_KEY", ""),
+             'RESEND_SENDER_DOMAIN': 'mg.example.com',
+             'WEBHOOK_SECRET': os.environ.get("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "")},
+ 'DEFAULT_FROM_EMAIL': 'ops@example.com',
  'EMAIL_BACKEND': 'anymail.backends.resend.EmailBackend',
  'QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS': ['quickscale',
                                            'transactional',

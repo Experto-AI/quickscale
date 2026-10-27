@@ -43,11 +43,10 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA311, SA314, SA315, SA320, SA321, SA323, SA324 | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA311, SA314, SA315, SA321, SA323, SA324 | Required |
 | SA311 | Close the S2 tenant-boundary defects in CRM, orgs, storage and forms | 2 | — | Required |
 | SA314 | Make billing credits, Checkout and gates idempotent and tenant-correct | 2 | — | Required |
 | SA315 | Close orgs and auth lifecycle defects | 2 | SA311 | Required |
-| SA320 | Deliver module resource contracts through managed hooks | 1 | — | Required |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Required |
 | SA323 | Harden module upload, form, export and notification paths | 2 | SA311 | Required |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | SA311 | Required |
@@ -56,7 +55,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA320 (c) ─► SA321
+Track 1: SA321
 Track 2: SA311 ─► SA314 (a → b) ─► SA315 (a, b) ─► SA323 ─► SA324 (a, b)
          ─► SA191d (re-proof → production → retire, operator-gated)
 Track 3: [SA191d (production)] SA277
@@ -81,7 +80,7 @@ live in the project-owned extension as `0002+` migrations.
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | SA320 (c) | yes | yes | yes: SA320, SA321 |
+| 1 | SA321 | yes | yes | yes: SA321 |
 | 2 | SA311 | yes | yes | yes: SA311, SA314, SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
@@ -121,19 +120,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 1 — generated project
 
-- [ ] **SA320 — Deliver module resource contracts to user-owned pages through managed hooks.**
-
-  Closes arch `generated-file-ownership-unmodeled` (options 1 + 2) and coherence
-  `generated-module-branches` and `notifications-anymail-wiring-split` (proposals 1–2, gaps 22 and
-  26).
-
-  **Slices:**
-  - [x] (b) Move the remaining theme pages' module paths and types onto the generated
-    hooks; the closed-world check passes over the full theme (Tier 2-full).
-  - [ ] (c) Move the per-module branches in core templates (admin index, CI/Makefile, Compose,
-    base settings, the notifications `ANYMAIL` block) into module-declared manifest blocks or a
-    managed generic block; the rule 37 scan catches single-name branches and the rule 30 scan reads
-    core templates, each with its fixture controls (Tier 2-full).
+- [x] **SA320 — Deliver module resource contracts to user-owned pages through managed hooks.**
 
 - [ ] **SA321 — Make the generated production deployment contract an artifact.**
 

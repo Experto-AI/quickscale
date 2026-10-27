@@ -227,6 +227,60 @@ class FrontendResources:
     payload_types: dict[str, dict[str, str] | str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class MakeTarget:
+    """One generated-project ``make`` target a module declares.
+
+    The generated ``Makefile`` carries a managed region in which every
+    installed module's targets render under their declared name and help
+    text, so a module release changes no user-owned ``Makefile`` line and a
+    new module adds a target with no core edit.
+
+    Attributes:
+        name: The make target name (``check-tenant-isolation``).  A name
+            colliding with a core target or another module's target fails
+            at load or generation.
+        help: The one-line help text rendered after ``##``.
+        recipe: Ordered shell lines, each rendered with a leading tab; a
+            line is one shell invocation.
+    """
+
+    name: str
+    help: str
+    recipe: tuple[str, ...]
+
+
+@dataclass
+class ProjectBlocks:
+    """A module's generated-project blocks outside its Django package.
+
+    Populated from the top-level ``project_blocks`` section.  Each field is a
+    contribution the generated project's user-owned root files carry inside
+    one managed region, so a module owns the behavior and core names no
+    module:
+
+    * ``ci_steps`` renders inside the test job's ``steps`` in
+      ``.github/workflows/ci.yml``;
+    * ``ci_jobs`` renders inside the workflow's ``jobs`` mapping;
+    * ``make_targets`` and ``make_test_env`` render inside the generated
+      ``Makefile``;
+    * ``compose_env`` names options whose resolved environment-variable names
+      pass through the backend service environment in ``docker-compose.yml``.
+
+    Text blocks may carry the project-context tokens
+    ``{package_name}``, ``{postgres_version}``,
+    ``{postgres_patch_version}``, ``{python_patch_version}``, and
+    ``{django_ci_version}``; an unknown token fails generation.
+    """
+
+    ci_steps: str | None = None
+    ci_jobs: str | None = None
+    make_targets: tuple[MakeTarget, ...] = ()
+    make_test_env: dict[str, str] = field(default_factory=dict)
+    compose_env: tuple[str, ...] = ()
+    ci_test_env: dict[str, str] = field(default_factory=dict)
+
+
 @dataclass
 class ModuleManifest:
     """Complete module manifest from module.yml"""
@@ -251,6 +305,12 @@ class ModuleManifest:
 
     The generated project's managed ``quickscaleSeam.hooks.ts`` renders it;
     see :class:`FrontendResources`."""
+
+    project_blocks: ProjectBlocks | None = None
+    """The module's declared generated-project blocks, or ``None`` when absent.
+
+    The generated Makefile, CI workflow, and Compose file carry one managed
+    region per block; see :class:`ProjectBlocks`."""
 
     ci_env: dict[str, str] = field(default_factory=dict)
     """Non-live CI environment placeholders keyed by declaring option name.

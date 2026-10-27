@@ -59,6 +59,7 @@ from quickscale_core.manifest.loader_options import (
     _validate_validation_block,
 )
 from quickscale_core.manifest.loader_frontend import _parse_frontend_resources
+from quickscale_core.manifest.loader_project_blocks import _parse_project_blocks
 from quickscale_core.manifest.loader_sections import (
     _parse_ci_environment,
     _parse_contract_vintage,
@@ -78,9 +79,11 @@ from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
     ContractVintage,
+    MakeTarget,
     ManagedFileDeclaration,
     ModuleManifest,
     ModuleOperations,
+    ProjectBlocks,
     ProjectContractStep,
     ProjectContractVintage,
 )
@@ -254,6 +257,7 @@ _TOP_LEVEL_MANIFEST_KEYS = frozenset(
         "dependencies",
         "managed_files",
         "ci_env",
+        "project_blocks",
         "frontend_resources",
         "operations",
         "throttle_scopes",
@@ -401,6 +405,11 @@ def load_manifest(
     # Parse frontend resource declarations (additive; None when absent)
     frontend_resources = _parse_frontend_resources(data, module_name)
 
+    # Parse generated-project block declarations (additive; None when absent)
+    project_blocks = _parse_project_blocks(
+        data, module_name, {**mutable_options, **immutable_options}
+    )
+
     # Parse operations declarations (additive; None when absent)
     operations = _parse_operations(
         data, module_name, {**mutable_options, **immutable_options}
@@ -434,6 +443,7 @@ def load_manifest(
         dependencies=dependencies,
         managed_files=managed_files,
         ci_env=ci_env,
+        project_blocks=project_blocks,
         frontend_resources=frontend_resources,
         operations=operations,
         throttle_scopes=throttle_scopes,
@@ -541,6 +551,7 @@ __all__ = [
     "ConfigOption",
     "ContractVintage",
     "MANAGED_FILE_ROOT_PREFIX",
+    "MakeTarget",
     "ManagedFileDeclaration",
     "ManifestError",
     "ModuleManifest",
@@ -550,6 +561,7 @@ __all__ = [
     "OPTION_TYPE_LABELS",
     "PROJECT_CONTRACT_DECLARATION_PATH",
     "Path",
+    "ProjectBlocks",
     "ProjectContractStep",
     "ProjectContractVintage",
     "_DERIVATION_LIST_FIELDS",
@@ -575,6 +587,7 @@ __all__ = [
     "_parse_frontend_resources",
     "_parse_managed_files",
     "_parse_operations",
+    "_parse_project_blocks",
     "_parse_project_contract_vintage",
     "_parse_required_modules",
     "_parse_retired_options",

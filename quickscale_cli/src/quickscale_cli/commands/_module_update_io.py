@@ -16,6 +16,11 @@ import click
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 
 import quickscale_core.project_state_hashes as _project_state_hashes
+from quickscale_core.generator.project_blocks import (
+    ProjectBlockRegionError,
+    managed_region_paths,
+    restore_managed_region_content,
+)
 import quickscale_core.utils.git_errors as _git_errors
 import quickscale_core.utils.poetry_env as _poetry_env
 import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
@@ -103,6 +108,10 @@ def _record_update_mutation_snapshots(
         ("state-yml", project_path / ".quickscale" / "state.yml"),
         ("pyproject-toml", project_path / "pyproject.toml"),
         ("poetry-lock", project_path / "poetry.lock"),
+        *(
+            (f"module-region-{index}", project_path / relative)
+            for index, relative in enumerate(managed_region_paths())
+        ),
     ]
     return [
         _snapshot_update_path(path, backup_root, label)
@@ -210,6 +219,7 @@ def _regenerate_and_record_managed_wiring(
             project_path / relative
             for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
         ),
+        *(project_path / relative for relative in managed_region_paths()),
     )
     with TemporaryDirectory(prefix="quickscale-update-wiring-") as backup_dir:
         snapshots = [
@@ -317,6 +327,22 @@ def _path_in_commit(project_path: Path, commit: str, path: str) -> bool:
     return bool(result.stdout.strip())
 
 
+def _read_commit_path(
+    project_path: Path, commit: str, relative_path: str
+) -> str | None:
+    """Return one tracked file's content at *commit*, or None when absent."""
+    result = subprocess.run(  # noqa: S603, S607 - fixed argv, PATH-resolved git
+        ["git", "show", f"{commit}:{relative_path}"],  # noqa: S607
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
 def _commit_exists(project_path: Path, commit: str) -> bool:
     """Return whether *commit* resolves to a commit in this repository."""
     result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
@@ -374,6 +400,7 @@ def _commit_module_update_set(
                     Path(relative)
                     for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
                 ),
+                *(Path(relative) for relative in managed_region_paths()),
             ]
         )
     for managed_path in managed_paths:
@@ -425,28 +452,10 @@ def _commit_module_update_set(
         )
 
 
-def _roll_back_partial_module_update(
-    project_path: Path,
-    pre_update_head: str,
-    updated_modules: list[str],
-    project_package: str | None = None,
-) -> bool:
-    """Restore module trees and tracking files from a pre-update commit.
-
-    The update flow uses this with an empty module list to restore the
-    transaction's tracking files (state, legacy config, pyproject, lock, and
-    managed wiring) to the journal's baseline before it resumes a set.
-    Passing module names also restores those trees and is used by focused
-    recovery tests; the restoration is committed when it stages changes.
-
-    Returns ``True`` when the pre-update content was restored (including the
-    case where nothing needed restoring), and ``False`` when the restoration
-    failed.  A caller that holds the update journal keeps it on ``False`` so
-    the next run can retry the recovery.
-    """
-    if not pre_update_head:
-        return True
-
+def _build_restore_paths(
+    updated_modules: list[str], project_package: str | None
+) -> list[str]:
+    """Return the module and tracking paths a rollback restores."""
     restore_paths = [f"modules/{name}" for name in updated_modules]
     if project_package:
         restore_paths.extend(
@@ -465,82 +474,172 @@ def _roll_back_partial_module_update(
             "poetry.lock",
         ]
     )
+    return restore_paths
 
-    try:
-        # A failed wiring regeneration can leave a managed file the pre-update
-        # commit does not track (the theme seam declaration):
-        # ``git rm --ignore-unmatch`` leaves an untracked file in the worktree,
-        # so clear the managed project paths first.  Paths the pre-update
-        # commit does track are restored by the checkout below.
-        for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS:
-            _remove_update_path(project_path / relative)
-        # A lockfile the pre-update commit does not track must disappear too;
-        # ``git rm --ignore-unmatch`` leaves an untracked file in place.
-        if not _path_in_commit(project_path, pre_update_head, "poetry.lock"):
-            _remove_update_path(project_path / "poetry.lock")
 
-        # Remove every path a successful pull or a failed wiring commit may
-        # have added or staged, then restore the pre-update content: a plain
-        # checkout keeps files that exist only in the newer commit, and a
-        # staged-but-uncommitted wiring change would otherwise ride into the
-        # rollback commit.
-        for path in restore_paths:
-            subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-                [  # noqa: S607 - PATH-resolved executable by design
-                    "git",
-                    "rm",
-                    "-r",
-                    "-f",
-                    "-q",
-                    "--ignore-unmatch",
-                    "--",
-                    path,
-                ],
-                cwd=project_path,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        restore_from_head = [
-            path
-            for path in restore_paths
-            if _path_in_commit(project_path, pre_update_head, path)
-        ]
-        if restore_from_head:
-            subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-                ["git", "checkout", pre_update_head, "--", *restore_from_head],  # noqa: S607 - PATH-resolved executable by design
-                cwd=project_path,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        cached_diff = subprocess.run(
-            ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-        )
-        if cached_diff.returncode == 0:
-            return True
-        if cached_diff.returncode != 1:
-            raise _git_errors.GitError(
-                "Failed to inspect staged changes before the rollback commit"
-            )
+def _prepare_region_restorations(
+    project_path: Path, pre_update_head: str
+) -> list[tuple[str, str]]:
+    """Return the region-bearing files whose managed bodies differ from baseline.
+
+    Outside-region content stays as the operator left it, committed or not.
+    Every region's marker structure is validated here, before the caller
+    mutates anything, so a malformed file fails the rollback cleanly.
+    """
+    updates: list[tuple[str, str]] = []
+    for relative in managed_region_paths():
+        baseline = _read_commit_path(project_path, pre_update_head, relative)
+        if baseline is None:
+            continue
+        current_path = project_path / relative
+        if current_path.is_file():
+            current = current_path.read_text(encoding="utf-8")
+            restored = restore_managed_region_content(current, baseline)
+            if restored != current:
+                updates.append((relative, restored))
+        else:
+            updates.append((relative, baseline))
+    return updates
+
+
+def _restore_non_region_paths(
+    project_path: Path,
+    pre_update_head: str,
+    restore_paths: list[str],
+) -> None:
+    """Restore module and tracking paths from the pre-update commit."""
+    # A failed wiring regeneration can leave a managed file the pre-update
+    # commit does not track (the theme seam declaration): ``git rm
+    # --ignore-unmatch`` leaves an untracked file in the worktree, so clear the
+    # managed project paths first.  Paths the pre-update commit does track are
+    # restored by the checkout below.
+    for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS:
+        _remove_update_path(project_path / relative)
+    # A lockfile the pre-update commit does not track must disappear too;
+    # ``git rm --ignore-unmatch`` leaves an untracked file in place.
+    if not _path_in_commit(project_path, pre_update_head, "poetry.lock"):
+        _remove_update_path(project_path / "poetry.lock")
+
+    # Remove every path a successful pull or a failed wiring commit may have
+    # added or staged, then restore the pre-update content: a plain checkout
+    # keeps files that exist only in the newer commit, and a
+    # staged-but-uncommitted wiring change would otherwise ride into the
+    # rollback commit.
+    for path in restore_paths:
         subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-            ["git", "commit", "-m", "chore: roll back partial module update"],  # noqa: S607 - PATH-resolved executable by design
+            [  # noqa: S607 - PATH-resolved executable by design
+                "git",
+                "rm",
+                "-r",
+                "-f",
+                "-q",
+                "--ignore-unmatch",
+                "--",
+                path,
+            ],
             cwd=project_path,
             check=True,
             capture_output=True,
             text=True,
         )
-    except (subprocess.CalledProcessError, _git_errors.GitError) as error:
+    restore_from_head = [
+        path
+        for path in restore_paths
+        if _path_in_commit(project_path, pre_update_head, path)
+    ]
+    if restore_from_head:
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "checkout", pre_update_head, "--", *restore_from_head],  # noqa: S607 - PATH-resolved executable by design
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+def _write_and_stage_region_restorations(
+    project_path: Path, region_updates: list[tuple[str, str]]
+) -> None:
+    """Write the restored region bodies and stage them for the rollback commit."""
+    for relative, content in region_updates:
+        target = project_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    if region_updates:
+        subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "add", "--", *[relative for relative, _ in region_updates]],  # noqa: S607 - PATH-resolved executable by design
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+def _commit_rollback_changes(project_path: Path) -> None:
+    """Commit the staged rollback changes, or no-op when nothing is staged."""
+    cached_diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],  # noqa: S607 - PATH-resolved executable by design
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+    )
+    if cached_diff.returncode == 0:
+        return
+    if cached_diff.returncode != 1:
+        raise _git_errors.GitError(
+            "Failed to inspect staged changes before the rollback commit"
+        )
+    subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        ["git", "commit", "-m", "chore: roll back partial module update"],  # noqa: S607 - PATH-resolved executable by design
+        cwd=project_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _roll_back_partial_module_update(
+    project_path: Path,
+    pre_update_head: str,
+    updated_modules: list[str],
+    project_package: str | None = None,
+) -> bool:
+    """Restore module trees and tracking files from a pre-update commit.
+
+    The update flow uses this with an empty module list to restore the
+    transaction's tracking files (state, legacy config, pyproject, lock, and
+    managed wiring) to the journal's baseline before it resumes a set.
+    Passing module names also restores those trees and is used by focused
+    recovery tests; the restoration is committed when it stages changes.
+    Region-bearing files keep their content outside the managed markers, so
+    an operator edit made between the interruption and the retry survives.
+
+    Returns ``True`` when the pre-update content was restored (including the
+    case where nothing needed restoring), and ``False`` when the restoration
+    failed.  A caller that holds the update journal keeps it on ``False`` so
+    the next run can retry the recovery.
+    """
+    if not pre_update_head:
+        return True
+
+    restore_paths = _build_restore_paths(updated_modules, project_package)
+    try:
+        region_updates = _prepare_region_restorations(project_path, pre_update_head)
+        _restore_non_region_paths(project_path, pre_update_head, restore_paths)
+        _write_and_stage_region_restorations(project_path, region_updates)
+        _commit_rollback_changes(project_path)
+    except (
+        subprocess.CalledProcessError,
+        _git_errors.GitError,
+        ProjectBlockRegionError,
+    ) as error:
         click.secho(
             "⚠️  Failed to roll back the modules updated before the failure; "
             "reconcile the module set before serving.",
             fg="yellow",
             err=True,
         )
-        detail = getattr(error, "stderr", "")
+        detail = getattr(error, "stderr", "") or str(error)
         if detail:
             click.echo(detail.strip(), err=True)
         return False

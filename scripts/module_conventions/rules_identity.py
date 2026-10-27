@@ -304,6 +304,40 @@ RULE_37_ALLOWED_CONSTANTS: dict[tuple[str, str, str], str] = {
 }
 
 
+#: Rule 37's recorded template exceptions, each with the reason the rule
+#: accepts it.  A branch quotes a discovered module name in a Jinja tag; a
+#: constant is a module-prefixed token (setting, package, helper, or path)
+#: anywhere in the template text.  Keys are
+#: (tree, relative path, module name).
+RULE_37_ALLOWED_TEMPLATE_BRANCHES: dict[tuple[str, str, str], str] = {}
+
+RULE_37_ALLOWED_TEMPLATE_CONSTANTS: dict[tuple[str, str, str], str] = {
+    ("core", "generator/templates/tests/test_tenant_isolation.py.j2", "orgs"): (
+        "the generated two-organization isolation test's dormant runtime gate "
+        "imports the orgs module to skip when it is not installed (test "
+        "scaffolding, not application wiring)"
+    ),
+    ("core", "generator/templates/themes/showcase_react/templates/base.html.j2", "social"): (
+        "the theme's declared module surface (rule 31)"
+    ),
+    (
+        "core",
+        "generator/templates/themes/showcase_react/templates/index.html.j2",
+        "orgs",
+    ): "the theme's declared module surface (rule 31)",
+    (
+        "core",
+        "generator/templates/themes/showcase_react/templates/social/embeds.html.j2",
+        "social",
+    ): "the theme's declared module surface (rule 31)",
+    (
+        "core",
+        "generator/templates/themes/showcase_react/templates/social/link_tree.html.j2",
+        "social",
+    ): "the theme's declared module surface (rule 31)",
+}
+
+
 def rule_28_file_names(corpus: Corpus) -> list[str]:
     """
     Rule 28: a package holds only its allowed public and private files.
@@ -363,6 +397,8 @@ def rule_37_module_lists(corpus: Corpus) -> list[str]:
                     RULE_37_ALLOWED_LITERALS,
                     RULE_37_ALLOWED_BRANCHES,
                     RULE_37_ALLOWED_CONSTANTS,
+                    RULE_37_ALLOWED_TEMPLATE_BRANCHES,
+                    RULE_37_ALLOWED_TEMPLATE_CONSTANTS,
                 )
             )
     return violations

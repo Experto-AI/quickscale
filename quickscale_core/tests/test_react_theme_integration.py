@@ -1479,8 +1479,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "Storage & CDN" in settings_page
         assert "No admin config surface" in settings_page
 
-    def test_react_theme_generates_backups_app_index_override(self, tmp_path):
-        """Generated projects should expose a backup action on the admin app index."""
+    def test_react_theme_generates_generic_admin_app_index_region(self, tmp_path):
+        """The app index renders any module-owned shortcut through the generic tag."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_backups_app_index"
         generator.generate("react_backups_app_index", output_path)
@@ -1489,16 +1489,13 @@ class TestReactThemeModuleActivationMatrix:
             output_path / "templates" / "admin" / "app_index.html"
         ).read_text()
 
-        assert (
-            'action="/admin/quickscale_backups/backuppolicy/ops/create/"'
-            in app_index_template
-        )
-        assert "Create backup now" in app_index_template
-        assert "/admin/quickscale_backups/backuppolicy/" in app_index_template
-        assert 'app_label == "quickscale_backups"' in app_index_template
+        assert "{% load quickscale_admin %}" in app_index_template
+        assert '{% module_admin_shortcut app_label "app_index" %}' in app_index_template
+        assert "quickscale_backups" not in app_index_template
+        assert "Create backup now" not in app_index_template
 
-    def test_react_theme_generates_backups_admin_index_override(self, tmp_path):
-        """Generated projects should expose backup actions on the admin root index."""
+    def test_react_theme_generates_generic_admin_index_region(self, tmp_path):
+        """The admin root index renders each module-owned shortcut generically."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_backups_admin_index"
         generator.generate("react_backups_admin_index", output_path)
@@ -1507,9 +1504,12 @@ class TestReactThemeModuleActivationMatrix:
             output_path / "templates" / "admin" / "index.html"
         ).read_text()
 
-        assert "Create backup now" not in admin_index_template
-        assert "Open backup ops" in admin_index_template
-        assert 'app.app_label == "quickscale_backups"' in admin_index_template
+        assert "{% load quickscale_admin %}" in admin_index_template
+        assert (
+            '{% module_admin_shortcut app.app_label "index" %}' in admin_index_template
+        )
+        assert "quickscale_backups" not in admin_index_template
+        assert "Open backup ops" not in admin_index_template
 
     def test_react_theme_reserves_public_social_pages(self, tmp_path):
         """Generated React projects should reserve /social routes ahead of the SPA catch-all."""

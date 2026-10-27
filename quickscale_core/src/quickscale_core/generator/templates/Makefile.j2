@@ -2,7 +2,10 @@
 
 FRONTEND_PACKAGE := frontend/package.json
 
-.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci{% if selected_modules is none or "orgs" in selected_modules %} check-tenant-isolation test-tenant-isolation{% endif %}
+# QuickScale module make targets (managed)
+{{ module_make | default("") }}# End QuickScale module make targets
+
+.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci $(QUICKSCALE_MODULE_PHONY)
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -47,7 +50,7 @@ format: ## Format backend code and frontend sources when frontend exists
 test: test-backend test-frontend ## Run backend tests and frontend tests when frontend exists
 
 test-backend: ## Run backend tests
-	{% if selected_modules is none or "orgs" in selected_modules %}QUICKSCALE_ALLOW_BYPASSRLS=1 {% endif %}poetry run pytest
+	$(QUICKSCALE_TEST_ENV) poetry run pytest
 
 test-frontend: ## Run frontend tests when frontend exists
 	@if [ -f "$(FRONTEND_PACKAGE)" ]; then \
@@ -63,12 +66,3 @@ test-frontend: ## Run frontend tests when frontend exists
 check: lint test ## Run the standard local quality checks
 
 ci: check ## Alias for check
-
-{% if selected_modules is none or "orgs" in selected_modules %}
-check-tenant-isolation: ## Run tenant isolation conformance check
-	RUNTIME_DATABASE_URL='' QUICKSCALE_PRIVILEGED_COMMAND=migrate poetry run python manage.py migrate
-	QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --json
-
-test-tenant-isolation: ## Run the two-organization isolation test (needs a CREATEDB runtime role)
-	QUICKSCALE_REQUIRE_TENANT_ISOLATION=1 poetry run pytest tests/test_tenant_isolation.py -m tenant_isolation -o addopts=
-{% endif %}

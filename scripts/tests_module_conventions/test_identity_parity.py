@@ -346,6 +346,10 @@ EXACT_FINDINGS = (
             "alpha, beta, gamma",
             "rule 37: core/generator/templates/project_name/sample.j2:1 literal "
             "<template literal> lists 2 module names: alpha, beta",
+            "rule 37: core/generator/templates/project_name/sample.j2:1 branches on "
+            "module name 'alpha' in a template",
+            "rule 37: core/generator/templates/project_name/sample.j2:1 branches on "
+            "module name 'beta' in a template",
             "rule 37: cli/commands/select.py:2 branches on module name 'alpha': "
             "module_name == 'alpha'",
             "rule 37: cli/commands/const.py:1 declares module-prefixed constant ALPHA_STATE",

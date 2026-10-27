@@ -83,6 +83,23 @@ def test_context() -> dict[str, object]:
         "quickscale_core_pin": QUICKSCALE_CORE_PIN,
         **runtime_db_template_context("testproject"),
         "selected_modules": None,
+        **_module_block_context(None),
+    }
+
+
+def _module_block_context(selected_modules: object) -> dict[str, object]:
+    """Return the managed project-block content for a module selection."""
+    from quickscale_core.generator.project_blocks import (
+        render_project_block_content,
+    )
+
+    blocks = render_project_block_content(selected_modules, package_name="testproject")
+    return {
+        "module_make": blocks.make,
+        "module_ci_test_env": blocks.ci_test_env,
+        "module_ci_steps": blocks.ci_steps,
+        "module_ci_jobs": blocks.ci_jobs,
+        "module_compose_environment": blocks.compose_environment,
     }
 
 
@@ -92,7 +109,8 @@ def _render_template(
     context: dict[str, str],
 ) -> str:
     """Render a template with the shared sample context."""
-    return jinja_env.get_template(template_name).render(context)
+    merged = {**context, **_module_block_context(context.get("selected_modules"))}
+    return jinja_env.get_template(template_name).render(merged)
 
 
 def _extract_env_value(rendered_env: str, key: str) -> str:
@@ -1395,19 +1413,16 @@ class TestProductionReadyFeatures:
         assert '"django.core.files.storage.FileSystemStorage"' not in output
         assert "STORAGES = {" not in output
 
-    def test_base_settings_build_anymail_from_notifications_env_var_names(
+    def test_base_settings_leave_anymail_to_the_notifications_module(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Base settings should derive Resend Anymail config from env-var names."""
+        """Base settings apply generic module settings; the module owns ANYMAIL."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
 
-        assert (
-            'if globals().get("EMAIL_BACKEND") '
-            '== "anymail.backends.resend.EmailBackend":' in output
-        )
-        assert "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR" in output
-        assert 'ANYMAIL["RESEND_API_KEY"]' in output
+        assert "globals().update(MODULE_SETTINGS)" in output
+        assert "ANYMAIL" not in output
+        assert "QUICKSCALE_NOTIFICATIONS_" not in output
 
     def test_base_settings_allow_unmanaged_email_backend_when_notifications_disabled(
         self,
@@ -3400,41 +3415,45 @@ class TestDevOpsTemplateRendering:
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
         """CI workflow should include a check_tenant_isolation step when orgs is selected or required (SA1.5)."""
-        template = jinja_env.get_template("github/workflows/ci.yml.j2")
-
         # Default (selected_modules=None) — legacy behavior: render the step
-        output = template.render(test_context)
+        output = _render_template(jinja_env, "github/workflows/ci.yml.j2", test_context)
         assert "quickscale_orgs_check_tenant_isolation" in output
         assert "DATABASE_URL: postgres://postgres@localhost/postgres" in output
         assert "migrate" in output
         assert "QUICKSCALE_ALLOW_BYPASSRLS" in output
 
         # With orgs explicitly selected — step present
-        output_with_orgs = template.render(
-            {**test_context, "selected_modules": ["orgs"]}
+        output_with_orgs = _render_template(
+            jinja_env,
+            "github/workflows/ci.yml.j2",
+            {**test_context, "selected_modules": ["orgs"]},
         )
         assert "quickscale_orgs_check_tenant_isolation" in output_with_orgs
         assert "QUICKSCALE_ALLOW_BYPASSRLS" in output_with_orgs
         assert "migrate" in output_with_orgs
 
         # Without orgs selected — step absent
-        output_without_orgs = template.render(
-            {**test_context, "selected_modules": ["auth"]}
+        output_without_orgs = _render_template(
+            jinja_env,
+            "github/workflows/ci.yml.j2",
+            {**test_context, "selected_modules": ["auth"]},
         )
         assert "quickscale_orgs_check_tenant_isolation" not in output_without_orgs
 
         # Empty selected_modules — step absent (CR-SA15-002: [] must not render dead orgs-only entrypoints)
-        output_empty = template.render({**test_context, "selected_modules": []})
+        output_empty = _render_template(
+            jinja_env,
+            "github/workflows/ci.yml.j2",
+            {**test_context, "selected_modules": []},
+        )
         assert "quickscale_orgs_check_tenant_isolation" not in output_empty
 
     def test_makefile_contains_check_tenant_isolation_target(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
         """Makefile should include a check-tenant-isolation target when orgs is selected or required (SA1.5)."""
-        template = jinja_env.get_template("Makefile.j2")
-
         # Default (selected_modules=None) — legacy behavior: render target
-        output = template.render(test_context)
+        output = _render_template(jinja_env, "Makefile.j2", test_context)
         assert "check-tenant-isolation:" in output
         assert "quickscale_orgs_check_tenant_isolation" in output
         assert "--postgres-only" in output
@@ -3446,8 +3465,8 @@ class TestDevOpsTemplateRendering:
         )
 
         # With orgs explicitly selected — target present
-        output_with_orgs = template.render(
-            {**test_context, "selected_modules": ["orgs"]}
+        output_with_orgs = _render_template(
+            jinja_env, "Makefile.j2", {**test_context, "selected_modules": ["orgs"]}
         )
         assert "check-tenant-isolation:" in output_with_orgs
         assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output_with_orgs
@@ -3457,13 +3476,15 @@ class TestDevOpsTemplateRendering:
         )
 
         # Without orgs selected — target absent
-        output_without_orgs = template.render(
-            {**test_context, "selected_modules": ["auth"]}
+        output_without_orgs = _render_template(
+            jinja_env, "Makefile.j2", {**test_context, "selected_modules": ["auth"]}
         )
         assert "check-tenant-isolation:" not in output_without_orgs
 
         # Empty selected_modules — target absent (CR-SA15-002: [] must not render dead orgs-only entrypoints)
-        output_empty = template.render({**test_context, "selected_modules": []})
+        output_empty = _render_template(
+            jinja_env, "Makefile.j2", {**test_context, "selected_modules": []}
+        )
         assert "check-tenant-isolation:" not in output_empty
 
     def test_ci_workflow_caller_parity_exercises_classification_contract(
@@ -3498,8 +3519,10 @@ class TestDevOpsTemplateRendering:
         )
 
         # With orgs explicitly selected — same contract.
-        output_with_orgs = template.render(
-            {**test_context, "selected_modules": ["orgs"]}
+        output_with_orgs = _render_template(
+            jinja_env,
+            "github/workflows/ci.yml.j2",
+            {**test_context, "selected_modules": ["orgs"]},
         )
         assert "quickscale_orgs_check_tenant_isolation" in output_with_orgs
         assert "--postgres-only" in output_with_orgs

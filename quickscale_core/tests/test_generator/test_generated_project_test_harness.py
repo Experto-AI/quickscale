@@ -40,6 +40,20 @@ def _render(template_name: str, **overrides: object) -> str:
         "selected_modules": None,
     }
     context.update(overrides)
+    from quickscale_core.generator.project_blocks import render_project_block_content
+
+    blocks = render_project_block_content(
+        context.get("selected_modules"), package_name="testproject"
+    )
+    context.update(
+        {
+            "module_make": blocks.make,
+            "module_ci_test_env": blocks.ci_test_env,
+            "module_ci_steps": blocks.ci_steps,
+            "module_ci_jobs": blocks.ci_jobs,
+            "module_compose_environment": blocks.compose_environment,
+        }
+    )
     return environment.get_template(template_name).render(context)
 
 
@@ -59,11 +73,14 @@ def test_makefile_test_target_allows_the_test_database_role() -> None:
     """A project with orgs needs the BYPASSRLS test escape hatch on `make test`."""
     output = _render("Makefile.j2", selected_modules=["auth", "orgs"])
 
-    assert "QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run pytest" in output
+    assert "QUICKSCALE_TEST_ENV := QUICKSCALE_ALLOW_BYPASSRLS=1" in output
+    assert "$(QUICKSCALE_TEST_ENV) poetry run pytest" in output
 
     output_without_orgs = _render("Makefile.j2", selected_modules=["auth"])
 
-    assert "QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run pytest" not in output_without_orgs
+    assert "QUICKSCALE_ALLOW_BYPASSRLS" not in output_without_orgs
+    # The generic recipe still runs; the managed variable expands to nothing.
+    assert "$(QUICKSCALE_TEST_ENV) poetry run pytest" in output_without_orgs
 
 
 def test_tenant_isolation_target_migration_uses_the_privileged_command() -> None:
@@ -88,6 +105,7 @@ def test_ci_test_and_migration_steps_allow_the_test_database_role() -> None:
     output = _render("github/workflows/ci.yml.j2", selected_modules=["auth", "orgs"])
 
     test_step = _ci_step(output, "Run tests with coverage", "Upload coverage")
+    assert "pytest --cov=testproject" in test_step
     assert 'QUICKSCALE_ALLOW_BYPASSRLS: "1"' in test_step
 
     migration_step = _ci_step(output, "Run migrations", "Run tenant isolation")
@@ -99,7 +117,6 @@ def test_ci_test_and_migration_steps_allow_the_test_database_role() -> None:
     test_step_without_orgs = _ci_step(
         output_without_orgs, "Run tests with coverage", "Upload coverage"
     )
-
     assert "QUICKSCALE_ALLOW_BYPASSRLS" not in test_step_without_orgs
     assert "Run migrations" not in output_without_orgs
 

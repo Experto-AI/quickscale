@@ -110,6 +110,15 @@ ci_env:
   secret_key_env_var: sk_test_ci
   webhook_secret_env_var: whsec_test_ci
 
+# Generated-project blocks: the credential variable names the Compose
+# backend service passes through from the host environment. The names resolve
+# from the project's configured options, so a renamed *_env_var follows.
+project_blocks:
+  compose_env:
+    - publishable_key_env_var
+    - secret_key_env_var
+    - webhook_secret_env_var
+
 # Frontend resource contract consumed by the managed theme hook
 # (frontend/src/quickscaleSeam.hooks.ts). Paths are module-relative API
 # subpaths appended to the module's moduleApiPaths base; the payload types are

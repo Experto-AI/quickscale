@@ -921,3 +921,164 @@ def test_commit_module_update_set_stages_files(
         text=True,
     ).stdout.strip()
     assert status == ""
+
+
+def test_commit_module_update_set_stages_module_regions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A region-changing update commits the user-owned root files it refreshed."""
+    (tmp_path / "myapp" / "settings").mkdir(parents=True)
+    (tmp_path / "myapp" / "settings" / "modules.py").write_text("# managed\n")
+    (tmp_path / "myapp" / "urls_modules.py").write_text("# managed urls\n")
+    (tmp_path / ".quickscale").mkdir()
+    (tmp_path / ".quickscale" / "state.yml").write_text("modules: {}\n")
+    region_files = {
+        "Makefile": "# base\n",
+        ".github/workflows/ci.yml": "jobs: {}\n",
+        "docker-compose.yml": "services: {}\n",
+    }
+    for relative, content in region_files.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    for command in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.name", "Test User"],
+        ["git", "config", "user.email", "test@example.invalid"],
+        ["git", "add", "-A"],
+        ["git", "commit", "-qm", "baseline"],
+    ):
+        subprocess.run(command, cwd=tmp_path, check=True, capture_output=True)
+    monkeypatch.chdir(tmp_path)
+
+    for relative in region_files:
+        (tmp_path / relative).write_text(f"# refreshed {relative}\n")
+    _commit_module_update_set([], "myapp")
+
+    committed = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    for relative in region_files:
+        assert relative in committed
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert status == ""
+
+
+def test_journal_dirty_paths_allows_only_region_changes(
+    tmp_path: Path,
+) -> None:
+    """A resumed update accepts its own region edits, never operator content."""
+    from types import SimpleNamespace
+
+    from quickscale_cli.commands._module_update import _journal_dirty_paths
+
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        "USER_LINE := keep-me\n"
+        "# QuickScale module make targets (managed)\n"
+        "QUICKSCALE_MODULE_PHONY := old\n"
+        "# End QuickScale module make targets\n"
+        "USER_TAIL := keep-me-too\n"
+    )
+    for command in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.name", "Test User"],
+        ["git", "config", "user.email", "test@example.invalid"],
+        ["git", "add", "-A"],
+        ["git", "commit", "-qm", "baseline"],
+    ):
+        subprocess.run(command, cwd=tmp_path, check=True, capture_output=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    journal = SimpleNamespace(
+        targets=[SimpleNamespace(name="auth")], pre_update_head=head
+    )
+
+    makefile.write_text(
+        "USER_LINE := keep-me\n"
+        "# QuickScale module make targets (managed)\n"
+        "QUICKSCALE_MODULE_PHONY := new\n"
+        "# End QuickScale module make targets\n"
+        "USER_TAIL := keep-me-too\n"
+    )
+    assert _journal_dirty_paths(tmp_path, journal, "myapp") == []
+
+    makefile.write_text(
+        "USER_LINE := changed-by-operator\n"
+        "# QuickScale module make targets (managed)\n"
+        "QUICKSCALE_MODULE_PHONY := new\n"
+        "# End QuickScale module make targets\n"
+        "USER_TAIL := keep-me-too\n"
+    )
+    assert _journal_dirty_paths(tmp_path, journal, "myapp") == ["Makefile"]
+
+
+def test_recovery_preserves_committed_outside_region_edit(tmp_path: Path) -> None:
+    """Commit-then-resume keeps operator content outside a managed region."""
+    from types import SimpleNamespace
+
+    from quickscale_cli.commands._module_update import _journal_dirty_paths
+    from quickscale_cli.commands._module_update_io import (
+        _roll_back_partial_module_update,
+    )
+
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        "USER_LINE := original\n"
+        "# QuickScale module make targets (managed)\n"
+        "QUICKSCALE_MODULE_PHONY := old\n"
+        "# End QuickScale module make targets\n"
+    )
+    for command in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.name", "Test User"],
+        ["git", "config", "user.email", "test@example.invalid"],
+        ["git", "add", "-A"],
+        ["git", "commit", "-qm", "baseline"],
+    ):
+        subprocess.run(command, cwd=tmp_path, check=True, capture_output=True)
+    baseline = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    journal = SimpleNamespace(
+        targets=[SimpleNamespace(name="auth")], pre_update_head=baseline
+    )
+
+    makefile.write_text(
+        "USER_LINE := committed-operator-edit\n"
+        "# QuickScale module make targets (managed)\n"
+        "QUICKSCALE_MODULE_PHONY := new\n"
+        "# End QuickScale module make targets\n"
+    )
+    for command in (
+        ["git", "add", "-A"],
+        ["git", "commit", "-qm", "operator edit"],
+    ):
+        subprocess.run(command, cwd=tmp_path, check=True, capture_output=True)
+    assert _journal_dirty_paths(tmp_path, journal, "myapp") == []
+
+    assert _roll_back_partial_module_update(tmp_path, baseline, [], "myapp")
+    restored = makefile.read_text()
+    assert "USER_LINE := committed-operator-edit" in restored
+    assert "QUICKSCALE_MODULE_PHONY := old" in restored
+    assert "QUICKSCALE_MODULE_PHONY := new" not in restored

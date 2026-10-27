@@ -123,15 +123,36 @@ def _notifications_post_hook(
     projection: the ``QUICKSCALE_NOTIFICATIONS_*`` settings (each secret
     included, through the generic ``_ENV_VAR`` boundary) and the
     ``DEFAULT_FROM_EMAIL``/``SERVER_EMAIL`` aliases arrive already projected,
-    so this hook only contributes the runtime-selected backend.  Rule 1 (D3):
-    the email settings stay in place while the module is off, so the settings
-    surface does not change with the switch; delivery is refused at the
-    runtime service boundary instead.
+    so this hook contributes the runtime-selected backend and, while live
+    Resend delivery is active, the ``ANYMAIL`` map that backend reads.  Rule 1
+    (D3): the email settings stay in place while the module is off, so the
+    settings surface does not change with the switch; delivery is refused at
+    the runtime service boundary instead.
     """
     settings = dict(spec.settings)
     settings["EMAIL_BACKEND"] = (
         _runtime_email_backend(resolved) or NOTIFICATIONS_CONSOLE_EMAIL_BACKEND
     )
+    if settings["EMAIL_BACKEND"] == NOTIFICATIONS_LIVE_EMAIL_BACKEND:
+        # The vendor settings are the module's own contract: the generated
+        # base settings template carries only the generic MODULE_SETTINGS
+        # application, so a provider change or a renamed *_env_var option
+        # changes only this module.  The secret settings already carry the
+        # deferred ``__QS_ENV__`` references the renderer resolves through the
+        # process environment, so ANYMAIL reuses them instead of reading the
+        # variables a second way.
+        anymail: dict[str, object] = {}
+        resend_api_key = settings.get("QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY")
+        if resend_api_key:
+            anymail["RESEND_API_KEY"] = resend_api_key
+        webhook_secret = settings.get("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET")
+        if webhook_secret:
+            anymail["WEBHOOK_SECRET"] = webhook_secret
+        resend_domain = str(resolved.resend_domain).strip()
+        if resend_domain:
+            anymail["RESEND_SENDER_DOMAIN"] = resend_domain
+        if anymail:
+            settings["ANYMAIL"] = anymail
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,

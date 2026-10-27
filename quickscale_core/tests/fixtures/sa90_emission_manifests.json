@@ -99,7 +99,8 @@
       }
     },
     "sa320": "Regenerated 2026-10-24 \u2014 the generated theme gains the managed frontend/src/quickscaleSeam.hooks.ts rendered from each active manifest's frontend_resources declaration; CrmPage.tsx imports CRM_RESOURCE_PATHS and CrmStats from it instead of declaring the five subpaths and the response interface, and the managed seam path list gains the hook file (SA320). All three variants gain 1 path (frontend/src/quickscaleSeam.hooks.ts) and change 1 hash (frontend/src/pages/CrmPage.tsx). All unrelated paths, hashes, and modes remain authoritative.",
-    "sa320b": "Regenerated 2026-10-26 \u2014 the remaining theme module payload types and resource paths move onto the managed frontend/src/quickscaleSeam.hooks.ts (SA320 slice b): the manifest frontend_resources grammar gains parameterized paths rendered as typed builders and optional/nullable/array/reference/union type forms; orgs, billing, social and forms declare their contracts; the org, form and social hooks import the generated types and builders, and the social client no longer carries a fallback endpoint literal. 10 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgs.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/quickscaleSeam.hooks.ts, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/useApiErrors.test.ts, frontend/src/test/useOrgs.test.tsx. All unrelated paths, hashes, and modes remain authoritative."
+    "sa320b": "Regenerated 2026-10-26 \u2014 the remaining theme module payload types and resource paths move onto the managed frontend/src/quickscaleSeam.hooks.ts (SA320 slice b): the manifest frontend_resources grammar gains parameterized paths rendered as typed builders and optional/nullable/array/reference/union type forms; orgs, billing, social and forms declare their contracts; the org, form and social hooks import the generated types and builders, and the social client no longer carries a fallback endpoint literal. 10 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgs.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/quickscaleSeam.hooks.ts, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/useApiErrors.test.ts, frontend/src/test/useOrgs.test.tsx. All unrelated paths, hashes, and modes remain authoritative.",
+    "sa320c": "Regenerated 2026-10-26 \u2014 module-specific generated-project blocks move into module-declared managed regions (SA320 slice c): the Makefile, CI workflow, and docker-compose backend environment carry marker-paired regions rendered from each module declaration, the admin templates render a module-owned shortcut through a generic runtime tag, the notifications adapter writes ANYMAIL instead of the base settings template, and the generated admin templates name no module. All three variants re-hashed for the changed paths (Makefile, .github/workflows/ci.yml, docker-compose.yml, templates/admin/index.html, templates/admin/app_index.html, testproject/settings/base.py, README.md). All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
@@ -124,7 +125,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "25ec287982ed6c56e9dc469ced91ac91790196fd398df25b5edfc71dcce32668"
+      "sha256": "a414f4879345123df13d2ed5724d4889c975eb894b44dd193ba0a2adb53555a4"
     },
     ".gitignore": {
       "mode": "644",
@@ -140,7 +141,7 @@
     },
     "Makefile": {
       "mode": "644",
-      "sha256": "acd535197910929067e3b61af891615c3ec6aff11a57ef9c5cb9fb3f195c807a"
+      "sha256": "55ad5c7444889f49ebeb938dc870970b54fe8b8b2416e029af67fe9586aaf4e3"
     },
     "OPERATIONS.md": {
       "mode": "644",
@@ -148,7 +149,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "c19e6542c5946bbfa0036f82ce511de93fcedb4cca3b05b307224178c2b507f1"
+      "sha256": "3ba49ce757cf48425cbc0bc4a4981df225a56e3f140793bab6fa259512a4b6f6"
     },
     "db/init.sql": {
       "mode": "644",
@@ -156,7 +157,7 @@
     },
     "docker-compose.yml": {
       "mode": "644",
-      "sha256": "a92725d8c978b14f802accfd5e8e590ebede1a4ca7ddace9dac5f22a922c3072"
+      "sha256": "e98ee07a2b6b21261bcead065bb4483b60eaf24b473bd9b4357790acabfce7b6"
     },
     "frontend/.prettierignore": {
       "mode": "644",
@@ -592,11 +593,11 @@
     },
     "templates/admin/app_index.html": {
       "mode": "644",
-      "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
+      "sha256": "413c9990a9026d137ad2e6d99f7e0c1886aa41117447628ef84f59c4d9b90687"
     },
     "templates/admin/index.html": {
       "mode": "644",
-      "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
+      "sha256": "f74d34533396897802891e3f36eb40bc9d36dc24fbd284fe3c00794d0c5c3221"
     },
     "templates/base.html": {
       "mode": "644",
@@ -632,7 +633,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "54e96d58db90ac7eaee72a2f0bfb2dbc46b58fe7aab1a0ae834b4a916df48403"
+      "sha256": "45b827ad7564ba83c9607151423db668776a92d74efb0a0178bb0451f45a7f1d"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -702,7 +703,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "9b60c85a990c50ca12b62afd3e61e266cb958ce15e08675d220460678467fdc0"
+      "sha256": "594ee804a694216a37e54284dfcec55c3ecfc735b35326dc510f2d65f3c4555c"
     },
     ".gitignore": {
       "mode": "644",
@@ -718,7 +719,7 @@
     },
     "Makefile": {
       "mode": "644",
-      "sha256": "b4d6d439a9ebcac915fb114dc21fc0d5b53239c2ed5a3da6c61b3a145bb739fc"
+      "sha256": "3394db17925482ab014454ae7bedd6ff597c96dac66eeefe536642ed2a6e7abd"
     },
     "OPERATIONS.md": {
       "mode": "644",
@@ -726,7 +727,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "5d9059588ea811c5310e488ff8c4c652e3fd302251f6c6d2f785ef88b20c2b3a"
+      "sha256": "3ba49ce757cf48425cbc0bc4a4981df225a56e3f140793bab6fa259512a4b6f6"
     },
     "db/init.sql": {
       "mode": "644",
@@ -734,7 +735,7 @@
     },
     "docker-compose.yml": {
       "mode": "644",
-      "sha256": "a92725d8c978b14f802accfd5e8e590ebede1a4ca7ddace9dac5f22a922c3072"
+      "sha256": "614cc39c2e26e86d86ae6546f13d624b97508e9c39250eb0c74bb4a316c487f5"
     },
     "frontend/.prettierignore": {
       "mode": "644",
@@ -1170,11 +1171,11 @@
     },
     "templates/admin/app_index.html": {
       "mode": "644",
-      "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
+      "sha256": "413c9990a9026d137ad2e6d99f7e0c1886aa41117447628ef84f59c4d9b90687"
     },
     "templates/admin/index.html": {
       "mode": "644",
-      "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
+      "sha256": "f74d34533396897802891e3f36eb40bc9d36dc24fbd284fe3c00794d0c5c3221"
     },
     "templates/base.html": {
       "mode": "644",
@@ -1210,7 +1211,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "54e96d58db90ac7eaee72a2f0bfb2dbc46b58fe7aab1a0ae834b4a916df48403"
+      "sha256": "45b827ad7564ba83c9607151423db668776a92d74efb0a0178bb0451f45a7f1d"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1280,7 +1281,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "9b60c85a990c50ca12b62afd3e61e266cb958ce15e08675d220460678467fdc0"
+      "sha256": "594ee804a694216a37e54284dfcec55c3ecfc735b35326dc510f2d65f3c4555c"
     },
     ".gitignore": {
       "mode": "644",
@@ -1296,7 +1297,7 @@
     },
     "Makefile": {
       "mode": "644",
-      "sha256": "b4d6d439a9ebcac915fb114dc21fc0d5b53239c2ed5a3da6c61b3a145bb739fc"
+      "sha256": "3394db17925482ab014454ae7bedd6ff597c96dac66eeefe536642ed2a6e7abd"
     },
     "OPERATIONS.md": {
       "mode": "644",
@@ -1304,7 +1305,7 @@
     },
     "README.md": {
       "mode": "644",
-      "sha256": "5d9059588ea811c5310e488ff8c4c652e3fd302251f6c6d2f785ef88b20c2b3a"
+      "sha256": "3ba49ce757cf48425cbc0bc4a4981df225a56e3f140793bab6fa259512a4b6f6"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1312,7 +1313,7 @@
     },
     "docker-compose.yml": {
       "mode": "644",
-      "sha256": "a92725d8c978b14f802accfd5e8e590ebede1a4ca7ddace9dac5f22a922c3072"
+      "sha256": "614cc39c2e26e86d86ae6546f13d624b97508e9c39250eb0c74bb4a316c487f5"
     },
     "frontend/.prettierignore": {
       "mode": "644",
@@ -1748,11 +1749,11 @@
     },
     "templates/admin/app_index.html": {
       "mode": "644",
-      "sha256": "6b33490f6884c7725134393d0fcb77725f6a2ab2899f9e54d60da7960543e11b"
+      "sha256": "413c9990a9026d137ad2e6d99f7e0c1886aa41117447628ef84f59c4d9b90687"
     },
     "templates/admin/index.html": {
       "mode": "644",
-      "sha256": "d715d808a24bc5cb8eb3229df103cf90de3c5c9d394c25b62634cfb115db888c"
+      "sha256": "f74d34533396897802891e3f36eb40bc9d36dc24fbd284fe3c00794d0c5c3221"
     },
     "templates/base.html": {
       "mode": "644",
@@ -1788,7 +1789,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "54e96d58db90ac7eaee72a2f0bfb2dbc46b58fe7aab1a0ae834b4a916df48403"
+      "sha256": "45b827ad7564ba83c9607151423db668776a92d74efb0a0178bb0451f45a7f1d"
     },
     "testproject/settings/local.py": {
       "mode": "644",

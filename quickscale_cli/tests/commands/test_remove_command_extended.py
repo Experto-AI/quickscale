@@ -146,6 +146,31 @@ def _snapshot_path(path: Path) -> dict[str, tuple[str, bytes | None]]:
     return snapshot
 
 
+def _write_managed_regions(project_path: Path) -> None:
+    """Seed one stale module region in each user-owned root file."""
+    (project_path / "Makefile").write_text(
+        ".DEFAULT_GOAL := help\n"
+        "# QuickScale module make targets (managed)\n"
+        "QUICKSCALE_MODULE_PHONY := stale-target\n"
+        "# End QuickScale module make targets\n"
+    )
+    ci_path = project_path / ".github" / "workflows" / "ci.yml"
+    ci_path.parent.mkdir(parents=True)
+    ci_path.write_text(
+        "jobs:\n  test:\n    steps:\n"
+        "    # QuickScale module CI steps (managed)\n"
+        "    - name: stale\n"
+        "      run: true\n"
+        "    # End QuickScale module CI steps\n"
+    )
+    (project_path / "docker-compose.yml").write_text(
+        "services:\n  backend:\n    environment:\n"
+        "      # QuickScale module environment (managed)\n"
+        "      - STALE_KEY=${STALE_KEY:-}\n"
+        "      # End QuickScale module environment\n"
+    )
+
+
 class TestRemoveHelpers:
     def test_directory_not_exists(self, tmp_path: Path) -> None:
         success, message = _remove_module_directory(tmp_path, "auth")
@@ -350,10 +375,14 @@ class TestRemoveTransactionalFailures:
         """A post-save consolidated-state failure restores every mutation."""
         _write_valid_remove_project(tmp_path)
         _write_apply_recovery_state(tmp_path, ["auth", "blog"])
+        _write_managed_regions(tmp_path)
 
         package_dir = tmp_path / "myproject"
         snapshot_paths = {
             "module": tmp_path / "modules" / "auth",
+            "makefile": tmp_path / "Makefile",
+            "ci": tmp_path / ".github" / "workflows" / "ci.yml",
+            "compose": tmp_path / "docker-compose.yml",
             "quickscale": tmp_path / "quickscale.yml",
             "state": tmp_path / ".quickscale" / "state.yml",
             "apply_recovery": tmp_path / ".quickscale" / "apply-recovery.yml",

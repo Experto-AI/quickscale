@@ -128,6 +128,140 @@ frontend_resources:
       status: "'revoked'"
       invitation_id: string
 
+# Generated-project blocks. The generated Makefile and CI workflow
+# carry one managed region per block; orgs owns the tenant-isolation lane and
+# the test environment that lets its startup check run, so core names no
+# module and a module release changes only this declaration.
+project_blocks:
+  make_targets:
+    - name: check-tenant-isolation
+      help: "Run tenant isolation conformance check"
+      recipe:
+        - "RUNTIME_DATABASE_URL='' QUICKSCALE_PRIVILEGED_COMMAND=migrate poetry run python manage.py migrate"
+        - "QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --json"
+    - name: test-tenant-isolation
+      help: "Run the two-organization isolation test (needs a CREATEDB runtime role)"
+      recipe:
+        - "QUICKSCALE_REQUIRE_TENANT_ISOLATION=1 poetry run pytest tests/test_tenant_isolation.py -m tenant_isolation -o addopts="
+  make_test_env:
+    QUICKSCALE_ALLOW_BYPASSRLS: "1"
+  ci_test_env:
+    QUICKSCALE_ALLOW_BYPASSRLS: "1"
+  ci_steps: |
+    - name: Run migrations
+      run: poetry run python manage.py migrate --noinput
+      env:
+        DATABASE_URL: postgres://postgres@localhost/postgres
+        DJANGO_SETTINGS_MODULE: "{package_name}.settings.local"
+        QUICKSCALE_ALLOW_BYPASSRLS: "1"
+
+    - name: Run tenant isolation conformance check
+      run: poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --json
+      env:
+        DATABASE_URL: postgres://postgres@localhost/postgres
+        DJANGO_SETTINGS_MODULE: "{package_name}.settings.local"
+        QUICKSCALE_ALLOW_BYPASSRLS: "1"
+  ci_jobs: |
+    tenant-isolation:
+      # Two-organization isolation runs against a NOSUPERUSER/NOBYPASSRLS role.
+      # The role keeps CREATEDB only so pytest-django can create its own test
+      # database; the isolation test never connects with the superuser role.
+      runs-on: ubuntu-24.04
+      services:
+        postgres:
+          image: postgres:{postgres_patch_version}
+          env:
+            POSTGRES_HOST_AUTH_METHOD: trust
+          options: >-
+            --health-cmd pg_isready
+            --health-interval 10s
+            --health-timeout 5s
+            --health-retries 5
+          ports:
+            - 5432:5432
+      env:
+        DATABASE_URL: postgres://postgres@localhost/postgres
+        DJANGO_SETTINGS_MODULE: "{package_name}.settings.local"
+
+      steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Load module CI environment
+        run: cat .github/quickscale-ci-env >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "{python_patch_version}"
+
+      - name: Install PostgreSQL {postgres_version} client tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl
+          distro_codename="$(
+            . /etc/os-release
+            echo "$VERSION_CODENAME"
+          )"
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-{postgres_version}
+          echo "/usr/lib/postgresql/{postgres_version}/bin" >> "$GITHUB_PATH"
+
+      - name: Verify PostgreSQL {postgres_version} client tooling
+        run: |
+          test -x /usr/lib/postgresql/{postgres_version}/bin/psql
+          test "$(command -v psql)" = "/usr/lib/postgresql/{postgres_version}/bin/psql"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Run migrations once
+        run: poetry run python manage.py migrate --noinput
+        env:
+          RUNTIME_DATABASE_URL: ""
+          QUICKSCALE_PRIVILEGED_COMMAND: migrate
+
+      - name: Create restricted runtime role
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'quickscale_test_runtime') THEN
+              CREATE ROLE quickscale_test_runtime LOGIN CREATEDB NOSUPERUSER NOBYPASSRLS NOCREATEROLE;
+            ELSE
+              ALTER ROLE quickscale_test_runtime LOGIN CREATEDB NOSUPERUSER NOBYPASSRLS NOCREATEROLE;
+            END IF;
+          END
+          $$;
+          GRANT CONNECT ON DATABASE postgres TO quickscale_test_runtime;
+          SQL
+
+      - name: Run two-organization isolation test
+        run: make test-tenant-isolation
+        env:
+          RUNTIME_DATABASE_URL: postgres://quickscale_test_runtime@localhost:5432/postgres
+
 contract_vintage:
   id: sa221-orgs-check-id
   minimum: "0.89.0"

@@ -149,6 +149,7 @@ RETAINED_CLOSED_TICKETS = {
     "SA316",
     "SA317",
     "SA318",
+    "SA320",
     "SA319",
     "SA322",
     "SA325",

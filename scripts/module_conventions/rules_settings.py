@@ -18,6 +18,9 @@ import re as re
 from collections.abc import Mapping
 from typing import Any as Any
 
+from scripts.module_conventions._settings_core_templates import (
+    rule_30_settings_composition,
+)
 from scripts.module_conventions._settings_manifest import (
     OPTION_TYPES,
     OPTION_VALIDATION_KEYS,
@@ -184,6 +187,7 @@ __all__ = (
     "_settings_snapshot_names",
     "rule_12_manifest_options",
     "rule_1_settings_names",
+    "rule_30_settings_composition",
     "rule_3_settings_reads",
     "rule_42_settings_snapshots",
     "rule_43_optional_senders",

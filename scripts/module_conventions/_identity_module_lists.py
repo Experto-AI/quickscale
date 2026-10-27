@@ -21,6 +21,18 @@ _TEMPLATE_QUOTED_NAME = re.compile(r"['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 
 _TEMPLATE_PIPE_GROUP = re.compile(r"\((?:\?:)?([A-Za-z0-9_|]+)\)")
 
+#: A Jinja statement or expression.  Rule 37's single-name branch scan reads
+#: only these tags, so prose and Django ``{% raw %}`` blocks never look like a
+#: module branch (SA320 (c)).
+_TEMPLATE_JINJA_TAG = re.compile(r"\{%(.*?)%\}|\{\{(.*?)\}\}", re.DOTALL)
+
+#: A module-prefixed token outside a Jinja tag: a setting, a flat helper name,
+#: a module package name, or a ``modules/<name>/`` path.  The detector maps
+#: each match to a discovered module before reporting it.
+_TEMPLATE_MODULE_TOKEN = re.compile(
+    r"(?:QUICKSCALE_[A-Z0-9_]+|quickscale_[a-z0-9_]+|modules/[a-z0-9_]+/)"
+)
+
 #: Rule 37's comparison operators that make a per-module branch: an equality,
 #: inequality, or membership test against one module's name.  A membership
 #: test names one module keyed into the configured set, so it is the same
@@ -164,6 +176,68 @@ def _template_module_literals(text: str, vocabulary: set[str]) -> list[tuple[int
     return found
 
 
+def _template_module_branches(text: str, vocabulary: set[str]) -> list[tuple[int, str]]:
+    """
+    Return module names a Jinja tag compares against or enumerates.
+
+    A quoted discovered module name inside a Jinja statement or expression is
+    a per-module branch (``{% if app_label == "quickscale_backups" %}``,
+    ``{% if "orgs" in selected_modules %}``).  Prose and Django template tags
+    inside ``{% raw %}`` blocks are not Jinja tags, so they do not match.
+    """
+    found: list[tuple[int, str]] = []
+    for match in _TEMPLATE_JINJA_TAG.finditer(text):
+        body = match.group(1) or match.group(2) or ""
+        names = sorted(
+            {
+                quoted.group(1)
+                for quoted in _TEMPLATE_QUOTED_NAME.finditer(body)
+                if quoted.group(1) in vocabulary
+            }
+        )
+        if not names:
+            continue
+        lineno = text.count("\n", 0, match.start()) + 1
+        found.extend((lineno, name) for name in names)
+    return found
+
+
+def _template_token_module(token: str, vocabulary: set[str]) -> str | None:
+    """Return the discovered module a prefixed template token names, if any."""
+    for name in vocabulary:
+        upper = name.upper()
+        if token == f"QUICKSCALE_{upper}" or token.startswith(f"QUICKSCALE_{upper}_"):
+            return name
+        if token == f"quickscale_modules_{name}" or token.startswith(f"quickscale_modules_{name}_"):
+            return name
+        if token == f"quickscale_{name}" or token.startswith(f"quickscale_{name}_"):
+            return name
+        if token.startswith(f"modules/{name}/"):
+            return name
+    return None
+
+
+def _template_module_constants(text: str, vocabulary: set[str]) -> list[tuple[int, str, str]]:
+    """
+    Return module-prefixed tokens found in a Jinja template's text.
+
+    The scan is deliberately token-shaped: a core template that reads
+    ``QUICKSCALE_NOTIFICATIONS_*``, names ``quickscale_modules_orgs``, or
+    points at ``modules/storage/`` carries per-module knowledge wherever the
+    literal lives.  Theme files that are rule 31's declared module surface
+    carry recorded exceptions in the rule module.
+    """
+    found: list[tuple[int, str, str]] = []
+    for match in _TEMPLATE_MODULE_TOKEN.finditer(text):
+        token = match.group(0)
+        module_name = _template_token_module(token, vocabulary)
+        if module_name is None:
+            continue
+        lineno = text.count("\n", 0, match.start()) + 1
+        found.append((lineno, module_name, token))
+    return found
+
+
 def _comparison_module_names(compare: ast.Compare, vocabulary: set[str]) -> list[str]:
     """Return the module names an equality, inequality, or membership test names."""
     names: list[str] = []
@@ -235,35 +309,14 @@ def _module_prefixed_constants(tree: ast.Module, vocabulary: set[str]) -> list[t
     return found
 
 
-def _module_list_violations(
+def _literal_violations(
     tree_name: str,
     rel: str,
-    text: str,
-    vocabulary: set[str],
-    allowed_literal_files: frozenset[tuple[str, str]],
+    found: list[tuple[int, str, list[str]]],
     allowed_literals: Mapping[tuple[str, str, str], str],
-    allowed_branches: Mapping[tuple[str, str, str], str],
-    allowed_constants: Mapping[tuple[str, str, str], str],
 ) -> list[str]:
-    """Return rule 37's findings for one corpus file, its exceptions applied."""
-    is_python = rel.endswith(".py")
-    is_template = (
-        tree_name == "core" and rel.startswith(GENERATOR_TEMPLATE_ROOT) and rel.endswith(".j2")
-    )
-    if not is_python and not is_template:
-        return []
-    if tree_name == "scripts" and is_python and rel.split("/")[-1].startswith("test_"):
-        return []
-    if is_python and (tree_name, rel) in allowed_literal_files:
-        return []
+    """Return the literal-list findings, the recorded exceptions applied."""
     violations: list[str] = []
-    if is_python:
-        parsed = _parse(text)
-        found = _module_literal_names(parsed, vocabulary) + _string_module_alternations(
-            parsed, vocabulary
-        )
-    else:
-        found = _template_module_literals(text, vocabulary)
     for lineno, symbol, names in found:
         if (tree_name, rel, symbol) in allowed_literals:
             continue
@@ -273,9 +326,56 @@ def _module_list_violations(
             f"rule 37: {tree_name}/{rel}:{lineno} literal {symbol} lists "
             f"{count} {label}: {', '.join(names)}"
         )
-    if not is_python or tree_name not in ("core", "cli"):
-        return violations
+    return violations
+
+
+def _template_branch_violations(
+    text: str,
+    vocabulary: set[str],
+    tree_name: str,
+    rel: str,
+    allowed: Mapping[tuple[str, str, str], str],
+) -> list[str]:
+    """Return the single-name branch findings, the recorded exceptions applied."""
+    return [
+        f"rule 37: {tree_name}/{rel}:{lineno} branches on module name {name!r} in a template"
+        for lineno, name in _template_module_branches(text, vocabulary)
+        if (tree_name, rel, name) not in allowed
+    ]
+
+
+def _template_constant_violations(
+    text: str,
+    vocabulary: set[str],
+    tree_name: str,
+    rel: str,
+    allowed: Mapping[tuple[str, str, str], str],
+) -> list[str]:
+    """Return the prefixed-constant findings, the recorded exceptions applied."""
+    violations: list[str] = []
+    seen_tokens: set[tuple[int, str]] = set()
+    for lineno, name, token in _template_module_constants(text, vocabulary):
+        if (tree_name, rel, name) in allowed or (lineno, token) in seen_tokens:
+            continue
+        seen_tokens.add((lineno, token))
+        violations.append(
+            f"rule 37: {tree_name}/{rel}:{lineno} declares module-prefixed "
+            f"template constant {token}"
+        )
+    return violations
+
+
+def _python_branch_violations(
+    text: str,
+    vocabulary: set[str],
+    tree_name: str,
+    rel: str,
+    allowed_branches: Mapping[tuple[str, str, str], str],
+    allowed_constants: Mapping[tuple[str, str, str], str],
+) -> list[str]:
+    """Return the Python branch and prefixed-constant findings."""
     tree = _parse(text)
+    violations: list[str] = []
     for lineno, expression, name in _module_name_branches(tree, vocabulary):
         if (tree_name, rel, name) in allowed_branches:
             continue
@@ -288,4 +388,54 @@ def _module_list_violations(
         violations.append(
             f"rule 37: {tree_name}/{rel}:{lineno} declares module-prefixed constant {constant}"
         )
+    return violations
+
+
+def _module_list_violations(
+    tree_name: str,
+    rel: str,
+    text: str,
+    vocabulary: set[str],
+    allowed_literal_files: frozenset[tuple[str, str]],
+    allowed_literals: Mapping[tuple[str, str, str], str],
+    allowed_branches: Mapping[tuple[str, str, str], str],
+    allowed_constants: Mapping[tuple[str, str, str], str],
+    allowed_template_branches: Mapping[tuple[str, str, str], str] | None = None,
+    allowed_template_constants: Mapping[tuple[str, str, str], str] | None = None,
+) -> list[str]:
+    """Return rule 37's findings for one corpus file, its exceptions applied."""
+    is_python = rel.endswith(".py")
+    is_template = (
+        tree_name == "core" and rel.startswith(GENERATOR_TEMPLATE_ROOT) and rel.endswith(".j2")
+    )
+    if not is_python and not is_template:
+        return []
+    if tree_name == "scripts" and is_python and rel.split("/")[-1].startswith("test_"):
+        return []
+    if is_python and (tree_name, rel) in allowed_literal_files:
+        return []
+    template_branches = allowed_template_branches or {}
+    template_constants = allowed_template_constants or {}
+    if is_python:
+        parsed = _parse(text)
+        found = _module_literal_names(parsed, vocabulary) + _string_module_alternations(
+            parsed, vocabulary
+        )
+    else:
+        found = _template_module_literals(text, vocabulary)
+    violations = _literal_violations(tree_name, rel, found, allowed_literals)
+    if is_template:
+        violations.extend(
+            _template_branch_violations(text, vocabulary, tree_name, rel, template_branches)
+        )
+        violations.extend(
+            _template_constant_violations(text, vocabulary, tree_name, rel, template_constants)
+        )
+    if not is_python or tree_name not in ("core", "cli"):
+        return violations
+    violations.extend(
+        _python_branch_violations(
+            text, vocabulary, tree_name, rel, allowed_branches, allowed_constants
+        )
+    )
     return violations

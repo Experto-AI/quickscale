@@ -59,6 +59,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Generated-project contract adoption is recorded.** Contract changes carry a step id and
     `quickscale apply --confirm-contract-adoption` records adoption; module updates regenerate the
     managed wiring and keep each applied migration's content identity.
+  - **Module-owned generated-project blocks.** The generated admin templates, Makefile, CI
+    workflow and Compose file name no module: admin shortcuts render from a module-owned template
+    through the generic `quickscale_admin` tag, Make/CI/Compose contributions render from each
+    manifest's `project_blocks` into marker-paired managed regions that `apply` and `update`
+    refresh, and the notifications adapter writes `ANYMAIL`; the module-convention gates fail a
+    core template that names a module's branch or setting.
   - **The contract gate watches runtime behavior and module-managed outputs.** A change to a public
     `quickscale_core.runtime` module requires a declared adoption step, and every file under
     `<package>/quickscale_managed/` is hash-tracked, so a local edit appears as managed-file drift

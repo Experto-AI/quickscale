@@ -12,6 +12,7 @@ import pytest
 from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.tests_module_conventions._support import (
+    _corpus,
     _golden_module,
     _violations,
     _with_files,
@@ -933,3 +934,49 @@ def test_media_path_pattern_admits_historical_outputs() -> None:
     assert not any(host_constrained.fullmatch(value) for value in historical_outputs)
     permissive = re.compile(r"^(?s:.*\S.*)$")
     assert all(permissive.fullmatch(value) for value in historical_outputs)
+
+
+def test_rule_30_core_template_settings_control() -> None:
+    """A core template reading a module setting fails rule 30 (SA320 (c))."""
+    corpus = _corpus(_golden_module())
+    leaked = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/settings/base.py.j2": (
+                'SECRET = globals().get("QUICKSCALE_DEMO_WEBHOOK_SECRET")\n'
+            )
+        },
+    )
+    violations = checker.rule_30_settings_composition(leaked)
+    assert any(
+        "core/generator/templates/project_name/settings/base.py.j2:1 core template "
+        "reads module setting QUICKSCALE_DEMO_WEBHOOK_SECRET (demo)" in violation
+        for violation in violations
+    )
+    # The generic composition is the passing control: it names no module.
+    generic = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/settings/base.py.j2": (
+                "globals().update(MODULE_SETTINGS)\n"
+                "REST_FRAMEWORK = compose_rest_framework(globals().get('REST_FRAMEWORK'))\n"
+            )
+        },
+    )
+    assert checker.rule_30_settings_composition(generic) == []
+    # The theme tree is rule 31's module surface, not core wiring.
+    theme = replace(
+        corpus,
+        core_files={
+            "generator/templates/themes/showcase_react/templates/index.html.j2": (
+                "QUICKSCALE_DEMO_ENABLED\n"
+            )
+        },
+    )
+    assert checker.rule_30_settings_composition(theme) == []
+    # A module setting named anywhere outside a generator template is not this
+    # rule's surface.
+    runtime = replace(
+        corpus, core_files={"runtime/settings.py": "QUICKSCALE_DEMO_ENABLED = True\n"}
+    )
+    assert checker.rule_30_settings_composition(runtime) == []

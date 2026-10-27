@@ -218,6 +218,33 @@ under the managed-file hash guard, so a local edit is reported as drift and a
 module release that changes its operations text changes only this managed
 file.
 
+### Managed module regions in user-owned root files
+
+``Makefile``, ``.github/workflows/ci.yml``, and ``docker-compose.yml`` stay
+user-owned, but each carries marker-paired managed regions rendered from the
+installed modules' manifest ``project_blocks`` declarations:
+
+- ``Makefile``: ``# QuickScale module make targets (managed)`` —
+  ``make_targets`` render their names, help text, and recipes, and
+  ``make_test_env`` renders ``QUICKSCALE_TEST_ENV``.  The generic
+  ``test-backend`` recipe reads that variable, so a module
+  that needs a test-only environment value adds it with no core edit.
+- ``.github/workflows/ci.yml``: ``# QuickScale module CI environment (managed)``
+  inside the test job's ``env``, ``# QuickScale module CI steps (managed)``
+  inside its ``steps``, and ``# QuickScale module CI jobs (managed)`` inside
+  ``jobs`` — a module declares its own test environment, steps, and jobs.
+- ``docker-compose.yml``: ``# QuickScale module environment (managed)``
+  inside the backend service's ``environment`` — each ``compose_env`` option
+  resolves to the environment-variable name the service passes through from
+  the host.
+
+``quickscale apply``, ``quickscale update``, and ``quickscale remove`` refresh
+every region from the same manifests, preserving the user-authored lines
+around them.  A project generated before the region contract has no markers;
+the recorded contract step documents the one-time adoption, and a sync leaves
+such a file untouched.  A file carrying only one marker of a pair fails
+explicitly instead of leaving a half-written region.
+
 ## Categories
 
 ### Category U1 — Project-level user-owned files (root-level generated config/docs)
@@ -240,6 +267,10 @@ file.
  placeholders on the next ``apply`` — a deliberate behavior change for existing projects,
  recorded with the credential-contract derivation.
 
+ **Managed module regions.** The same files also carry the regions described under
+ [Managed module regions in user-owned root files](#managed-module-regions-in-user-owned-root-files);
+ only the marker-paired region is managed, and the rest of each file remains the user's.
+
 ### Category U2 — Package ``__init__`` markers
 ``{package}/__init__.py``, ``{package}/settings/__init__.py``.
 Rationale: These remain recipient-owned package markers. The fresh-first path
@@ -260,6 +291,11 @@ Theme-specific template overrides (social) are
 user-owned once generated.  ``templates/components/navigation.html`` is not a
 copy target — ``showcase_react`` does not emit a
 ``templates/components/navigation.html`` template.
+
+ The admin index templates render a module-owned
+ ``templates/admin/<app_label>/quickscale_shortcut.html`` through the generic
+ ``quickscale_admin`` runtime tag, so the user-owned template itself names no
+ module and a module adds or changes its shortcut in its own package.
 
 ### Category U4 — Static assets
 ``frontend/public/favicon.svg``.

@@ -572,6 +572,16 @@ class ProjectGenerator:
             render_operations_page,
         )
 
+        # The generated project's user-owned root files carry module-declared
+        # managed regions (SA320); render the same content the CLI recomputes.
+        from quickscale_core.generator.project_blocks import (
+            render_project_block_content,
+        )
+
+        project_blocks = render_project_block_content(
+            self.selected_modules, package_name=package_name
+        )
+
         # Context for template rendering
         context = {
             "project_name": project_slug,
@@ -611,6 +621,13 @@ class ProjectGenerator:
             # Managed operations page (SA286): the module-owned operations
             # text the user-owned OPERATIONS.md links once.
             "operations_page": render_operations_page(self.selected_modules),
+            # Managed regions in the user-owned Makefile, CI workflow, and
+            # Compose file (SA320): each module's declared project blocks.
+            "module_make": project_blocks.make,
+            "module_ci_test_env": project_blocks.ci_test_env,
+            "module_ci_steps": project_blocks.ci_steps,
+            "module_ci_jobs": project_blocks.ci_jobs,
+            "module_compose_environment": project_blocks.compose_environment,
         }
 
         # Known executable files (emitted paths that should be executable)

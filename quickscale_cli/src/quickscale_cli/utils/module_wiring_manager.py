@@ -26,6 +26,11 @@ from quickscale_core.generator.operations_page import (
     OPERATIONS_PAGE_RELATIVE_PATH,
     render_operations_page,
 )
+from quickscale_core.generator.project_blocks import (
+    ProjectBlockContent,
+    render_project_block_content,
+    sync_project_block_regions,
+)
 from quickscale_core.manifest.entry_point import (
     MANAGED_ADAPTER_ORIGINS,
     MANIFEST_ADAPTER_REGISTRY,
@@ -357,6 +362,7 @@ def _write_wiring_files(
     *,
     ci_entries: Mapping[str, str],
     operations_page: str,
+    project_blocks: ProjectBlockContent,
 ) -> tuple[bool, str]:
     package_dir = project_path / package_name
     if not package_dir.exists():
@@ -368,6 +374,7 @@ def _write_wiring_files(
         _write_ci_environment(project_path, ci_entries)
         _seed_local_environment(project_path, ci_entries)
         _write_operations_page(project_path, operations_page)
+        sync_project_block_regions(project_path, project_blocks)
     except Exception as error:
         return False, f"Failed to write managed wiring files: {error}"
     return True, "Managed wiring files regenerated"
@@ -460,6 +467,7 @@ def regenerate_managed_wiring(
             {},
             ci_entries={},
             operations_page=render_operations_page([]),
+            project_blocks=render_project_block_content([], package_name=package_name),
         )
 
     prior_base_path: Path | None = None
@@ -493,6 +501,9 @@ def regenerate_managed_wiring(
             specs,
             ci_entries=ci_entries,
             operations_page=render_operations_page(specs.keys(), module_options),
+            project_blocks=render_project_block_content(
+                specs.keys(), module_options, package_name=package_name
+            ),
         )
     finally:
         _restore_modules_context(

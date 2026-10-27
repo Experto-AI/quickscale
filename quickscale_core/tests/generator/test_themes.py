@@ -787,10 +787,8 @@ class TestSharedAdminTemplates:
             "directory after consolidation."
         )
 
-    def test_admin_override_content_survives_consolidation(
-        self, tmp_path: Path
-    ) -> None:
-        """Generated admin templates should preserve the backup-ops behavior."""
+    def test_admin_override_is_module_owned(self, tmp_path: Path) -> None:
+        """Generated admin templates name no module; a module owns the block."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_admin_content"
         generator.generate("react_admin_content", output_path)
@@ -798,11 +796,11 @@ class TestSharedAdminTemplates:
         admin_index = (output_path / "templates" / "admin" / "index.html").read_text()
         app_index = (output_path / "templates" / "admin" / "app_index.html").read_text()
 
-        assert "Create backup now" not in admin_index
-        assert "Open backup ops" in admin_index
-        assert 'app.app_label == "quickscale_backups"' in admin_index
-        assert (
-            'action="/admin/quickscale_backups/backuppolicy/ops/create/"' in app_index
-        )
-        assert "Open backup ops" in app_index
-        assert 'app_label == "quickscale_backups"' in app_index
+        for template in (admin_index, app_index):
+            assert "module_admin_shortcut" in template
+            assert "quickscale_admin" in template
+            assert "quickscale_backups" not in template
+            assert "Open backup ops" not in template
+            assert "Create backup now" not in template
+        assert '{% module_admin_shortcut app.app_label "index" %}' in admin_index
+        assert '{% module_admin_shortcut app_label "app_index" %}' in app_index

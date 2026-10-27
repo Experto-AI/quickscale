@@ -114,6 +114,13 @@ ci_env:
   resend_api_key_env_var: re_test_ci
   webhook_secret_env_var: whsec_YWFhYWFhYWFhYWFhYWFhYQ==
 
+# Generated-project blocks: the credential variable names the Compose
+# backend service passes through from the host environment.
+project_blocks:
+  compose_env:
+    - resend_api_key_env_var
+    - webhook_secret_env_var
+
 required_modules: []
 
 dependencies:

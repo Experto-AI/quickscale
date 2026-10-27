@@ -153,11 +153,14 @@ files.
 - ❌ Raw credential values MUST NOT be persisted in `quickscale.yml`,
   `.quickscale/state.yml`, or `BackupArtifact` rows
 
-`quickscale apply` MAY update managed backend/runtime wiring, but does NOT rewrite
-user-owned Docker, Compose, CI, or E2E workflow files in already-generated
-projects. When the PostgreSQL 18 backups contract requires new image packages or
-runner tooling, existing generated projects adopt those changes manually; fresh
-generations pick them up from the updated templates.
+`quickscale apply` MAY update managed backend/runtime wiring and the
+marker-paired module regions a manifest's `project_blocks` declaration owns in
+`Makefile`, `.github/workflows/ci.yml`, and `docker-compose.yml`; it does NOT
+rewrite the user-owned content around those regions in already-generated
+projects ([generated_file_ownership.md](generated_file_ownership.md#managed-module-regions-in-user-owned-root-files)).
+When the PostgreSQL 18 backups contract requires new image packages or runner
+tooling outside a region, existing generated projects adopt those changes
+manually; fresh generations pick them up from the updated templates.
 
 Engine boundary: §[DR Engine Boundary Contract](decisions.md#disaster-recovery-engine-boundary-contract-f5--m10).
 
@@ -201,6 +204,11 @@ Engine boundary: §[DR Engine Boundary Contract](decisions.md#disaster-recovery-
   `frontend/src/quickscaleSeam.hooks.ts` renders them, and a user-owned page imports them instead
   of restating a subpath or response shape. The closed-world emission check rejects either shape in
   a user-owned file (Module Conventions rule 31)
+- ✅ A module that contributes to the generated project's user-owned root files declares it in
+  `project_blocks`: `make_targets` and `make_test_env` render into the `Makefile` region,
+  `ci_steps` and `ci_jobs` into the CI workflow's two regions, and `compose_env` names the
+  credential options whose resolved environment-variable names the Compose backend service passes
+  through. Core renders each region generically and names no module (Module Conventions rule 37)
 - ✅ Every `contract_vintage` carries an `sa<NNN>-<slug>` `id`, its identity in the one
   adopted-step namespace: the loader refuses a vintage without one, and the CLI satisfies a
   declared vintage only while the project records its id — adoption is the one mechanism

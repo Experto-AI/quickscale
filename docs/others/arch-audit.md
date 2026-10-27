@@ -152,7 +152,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 
 | Rank | ID | Title | Horizon | Conf. | Size | Rev. | Problem |
 |---|---|---|---|---|---|---|---|
-| 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. |
+| 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. **Resolved 2026-10-26 by SA320 (c).** |
 | 2 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
 
 ## Machine-readable index
@@ -162,7 +162,7 @@ schema: arch-audit/v11
 audited: 82ff3e7d141cf943ab900eaae5f214c0edfc9e07
 snapshot_basis: "82ff3e7d (v89), clean worktree, no uncommitted or untracked inputs read; only post-snapshot change is this deliverable"
 items:
-  - {id: generated-file-ownership-unmodeled, status: open, rank: 1,
+  - {id: generated-file-ownership-unmodeled, status: resolved, rank: 1,
      title: "Module contracts live in user-owned generated files",
      lenses: [III, V, VII, XIX], horizon: now, confidence: High, size: M,
      reversibility: two-way door, depends_on: [], amplifies: [],
@@ -254,8 +254,13 @@ items:
   generated `frontend/src/quickscaleSeam.hooks.ts` renders each active manifest's
   `frontend_resources`, the closed-world test rejects a declared resource subpath, builder path, or
   payload type in a user-owned file with the managed hook as its passing control, and the theme's
-  page hooks and the CRM page import it. The core-template module branches remain, so the finding
-  stays open for SA320 (c). SA153's roadmap line still owns the portal's managed-hook boundary.
+  page hooks and the CRM page import it. SA320 (c) then moved the core-template module branches:
+  the admin templates render a module-owned shortcut through the generic `quickscale_admin` tag,
+  the Makefile/CI/Compose contributions are marker-paired managed regions rendered from each
+  module's `project_blocks` declaration, and the notifications adapter writes `ANYMAIL` into the
+  managed settings. Rule 37 now rejects a single-name module branch or module-prefixed constant in
+  a generator template, and rule 30 rejects a core template that reads a module's setting. SA153's
+  roadmap line still owns the portal's managed-hook boundary.
 - **Why it compounds:** growth variable = **declared adoption steps × live projects**. Each module
   resource or payload change adds a step (steps are monotonic; the roadmap's stated target is
   "toward zero"); each live project must adopt every step by hand. Built on top: the contract-vintage
@@ -293,8 +298,8 @@ items:
   step and no user-owned diff; the page imports the regenerated hook. Source-checkable through the
   emission mapping. **First step:** delivered by SA320 (a) on 2026-10-24 — `CrmPage.tsx`'s section
   paths and `CrmStats` type now come from the generated `frontend/src/quickscaleSeam.hooks.ts`.
-  SA320 (b) delivered the remaining theme pages on 2026-10-26; the next step is SA320 (c) for the
-  per-module core-template branches.
+  SA320 (b) delivered the remaining theme pages on 2026-10-26, and SA320 (c) delivered the
+  per-module core-template branches the same day, closing the finding.
 - **Remaining delivery ownership:** SA277 (Track 3) owns the two-stage upgrade rule; it does not
   remove resource contracts from user-owned pages. SA153 (j, Track 1) owns the portal's
   managed-hook boundary. Completing either alone is not closure.
@@ -573,6 +578,13 @@ watchlist **6**.
   captured set (a version 1 snapshot warns and stays database-only), and holds a dedicated restore
   advisory lock; a PostgreSQL drill restores database, media and project schema, an aborted restore
   rolls back, and a SIGKILLed restore leaves the target database unchanged.
+- 2026-10-26 — `generated-file-ownership-unmodeled`: **resolved** by SA320 (c). The remaining
+  core-template module branches move onto module declarations: a generic admin tag plus the
+  backups-owned shortcut template, managed Makefile/CI/Compose regions rendered from each
+  manifest's `project_blocks`, and the notifications adapter's own `ANYMAIL`. Rule 37 catches a
+  single-name template branch or module-prefixed constant, and rule 30 reads the core templates;
+  both ship fixture controls. The generated-project contract step `sa320c-project-blocks` carries
+  the one-time adoption.
 - 2026-10-26 — `generated-file-ownership-unmodeled`: **still-open, slice (b) landed**. SA320 (b)
   moves the remaining theme pages onto the managed hook: orgs, billing, social and forms declare
   their resource paths (parameterized paths as typed builders) and payload types; the theme hooks
