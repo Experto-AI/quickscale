@@ -49,6 +49,7 @@ def test_default_delivery_is_console_safe() -> None:
         "notifications/",
         "quickscale_modules_notifications.urls",
     ) in spec.url_includes
+    assert "ANYMAIL" not in spec.settings
 
 
 def test_live_resend_delivery_sets_email_settings() -> None:
@@ -65,6 +66,13 @@ def test_live_resend_delivery_sets_email_settings() -> None:
     assert spec.settings["EMAIL_BACKEND"] == "anymail.backends.resend.EmailBackend"
     assert spec.settings["DEFAULT_FROM_EMAIL"] == "ops@example.com"
     assert spec.settings["SERVER_EMAIL"] == "ops@example.com"
+    # The vendor settings are the module's own contract, not the generated
+    # base settings template .
+    assert spec.settings["ANYMAIL"] == {
+        "RESEND_API_KEY": "__QS_ENV__:OPS_RESEND_API_KEY",
+        "WEBHOOK_SECRET": "__QS_ENV__:QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+        "RESEND_SENDER_DOMAIN": "mg.example.com",
+    }
 
 
 def test_disabled_notifications_retain_email_settings() -> None:
@@ -78,6 +86,7 @@ def test_disabled_notifications_retain_email_settings() -> None:
     )
     assert spec.settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
     assert spec.settings["SERVER_EMAIL"] == "noreply@example.com"
+    assert "ANYMAIL" not in spec.settings
 
 
 def test_adapter_projects_secret_settings_from_env_var_names() -> None:
@@ -204,3 +213,22 @@ def test_option_validation_guidance_defers_when_not_live_targeted() -> None:
         )
         is None
     )
+
+
+def test_live_anymail_follows_the_configured_env_var_names() -> None:
+    """A renamed secret variable reaches ANYMAIL without a core edit."""
+    spec = _notifications_manifest_adapter(
+        {
+            "sender_name": "Ops",
+            "sender_email": "ops@example.com",
+            "resend_domain": "mg.example.com",
+            "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+            "webhook_secret_env_var": "OPS_RESEND_WEBHOOK",
+        }
+    )
+
+    assert spec.settings["ANYMAIL"] == {
+        "RESEND_API_KEY": "__QS_ENV__:OPS_RESEND_API_KEY",
+        "WEBHOOK_SECRET": "__QS_ENV__:OPS_RESEND_WEBHOOK",
+        "RESEND_SENDER_DOMAIN": "mg.example.com",
+    }
