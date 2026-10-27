@@ -121,6 +121,28 @@ def test_saas_org_create_skips_the_reserved_api_slug(client, settings) -> None:
 
 
 @pytest.mark.django_db
+def test_saas_org_create_skips_the_reserved_new_slug(client, settings) -> None:
+    """An organization named "New" cannot shadow the /orgs/new/ create route."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="new-builder",
+        email="new-builder@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.post("/orgs/new/", {"name": "New"})
+
+    organization = Organization.objects.get(name="New")
+    assert response.status_code == 302
+    assert organization.slug == "new-2"
+    assert not Organization.objects.filter(slug="new").exists()
+    # The generated fallback slug reaches the organization's own dashboard.
+    dashboard_response = client.get(f"/orgs/{organization.slug}/")
+    assert dashboard_response.status_code == 200
+
+
+@pytest.mark.django_db
 def test_saas_org_create_truncates_overlong_slug_and_reserves_suffix_room(
     client, settings
 ) -> None:
@@ -1903,8 +1925,9 @@ def test_org_settings_requires_admin_and_updates_slug(client, settings) -> None:
 
 
 @pytest.mark.django_db
-def test_org_settings_rejects_the_reserved_api_slug(client, settings) -> None:
-    """Renaming an organization to the module's API slug is refused."""
+@pytest.mark.parametrize("reserved_slug", ["api", "new"])
+def test_org_settings_rejects_reserved_slugs(client, settings, reserved_slug) -> None:
+    """Renaming an organization to a module URL slug is refused."""
     settings.QUICKSCALE_ORGS_MODE = "saas"
     organization = Organization.objects.create(name="Beacon", slug="beacon")
     admin_user = get_user_model().objects.create_user(
@@ -1921,7 +1944,7 @@ def test_org_settings_rejects_the_reserved_api_slug(client, settings) -> None:
 
     response = client.post(
         f"/orgs/{organization.slug}/settings/",
-        {"name": "Beacon", "slug": "api"},
+        {"name": "Beacon", "slug": reserved_slug},
     )
 
     organization.refresh_from_db()
@@ -2291,7 +2314,8 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
             "role": OrgRole.ADMIN,
             "role_label": "Admin",
             "expires_at": invitation.expires_at.astimezone(timezone.UTC).isoformat(),
-        }
+        },
+        "notification_status": "queued",
     }
     assert len(captured_calls) == 1
     assert captured_calls[0]["template_key"] == "quickscale_orgs.invitation"

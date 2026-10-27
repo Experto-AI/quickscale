@@ -13,5 +13,6 @@ SYSTEM_ORG_SLUG = "__system__"
 SYSTEM_ORG_NAME = "System"
 
 # Slugs the module's own URL space owns: the JSON API lives at ``orgs/api/``
-# (Module Conventions rule 7), so no organization may take the ``api`` slug.
-RESERVED_ORG_SLUGS: frozenset[str] = frozenset({"api"})
+# (Module Conventions rule 7) and the create page at ``orgs/new/``, so no
+# organization may take either slug.
+RESERVED_ORG_SLUGS: frozenset[str] = frozenset({"api", "new"})

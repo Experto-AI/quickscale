@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -630,6 +631,178 @@ def test_cap_refused_attempts_do_not_spend_either_budget(
     assert [response.status_code for response in refused_html] == [400, 400]
     assert refused_api.status_code == 400
     assert invited.status_code == 302
+
+
+# ---------------------------------------------------------------------------
+# Post-commit send-failure policy (coherence proposal 15 / Q2 best-effort)
+# ---------------------------------------------------------------------------
+
+
+def _raise_notifications_error(**kwargs: object) -> object:
+    """Stand in for a sender the notifications runtime refuses."""
+    from quickscale_modules_notifications.services import NotificationDisabledError
+
+    del kwargs
+    raise NotificationDisabledError("notifications are disabled")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_html_invitation_send_failure_is_logged_and_surfaced(
+    client, settings, monkeypatch, caplog
+) -> None:
+    """A failed invitation email keeps the invitation and warns the inviter."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Best Effort", slug="best-effort")
+    admin = _admin(organization)
+    client.force_login(admin)
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: _raise_notifications_error,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="quickscale_modules_orgs.views"):
+        response = client.post(
+            f"/orgs/{organization.slug}/members/invite/",
+            {"email": "invitee@example.com", "role": OrgRole.MEMBER},
+            follow=True,
+        )
+
+    assert response.status_code == 200
+    assert "The invitation was saved, but the email could not be sent." in (
+        response.content.decode()
+    )
+    invitation = OrganizationInvitation.objects.get(organization=organization)
+    assert invitation.email == "invitee@example.com"
+    assert any(
+        "Failed to send the invitation email" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_api_invitation_send_failure_reports_a_delivery_status(
+    client, settings, monkeypatch, caplog
+) -> None:
+    """The JSON path answers 201 with a failed delivery status, never a 500."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(
+        name="Api Best Effort", slug="api-best-effort"
+    )
+    admin = _admin(organization)
+    client.force_login(admin)
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: _raise_notifications_error,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="quickscale_modules_orgs.views"):
+        response = client.post(
+            f"/orgs/api/{organization.slug}/members/invite/",
+            data=json.dumps({"email": "invitee@example.com", "role": OrgRole.MEMBER}),
+            content_type="application/json",
+        )
+
+    assert response.status_code == 201
+    assert response.json()["notification_status"] == "failed"
+    assert OrganizationInvitation.objects.filter(
+        organization=organization,
+        email="invitee@example.com",
+    ).exists()
+    assert any(
+        "Failed to send the invitation email" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_api_invitation_provider_failure_reports_failed_status(
+    client, settings, monkeypatch, caplog
+) -> None:
+    """A provider failure persisted by notifications is surfaced, not called queued."""
+    from quickscale_modules_notifications.models import NotificationMessage
+    from quickscale_modules_notifications.services import (
+        ensure_default_settings,
+        send_notification,
+    )
+
+    ensure_default_settings()
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(
+        name="Provider Failure", slug="provider-failure"
+    )
+    admin = _admin(organization)
+    client.force_login(admin)
+
+    def failing_mailer(mail: object) -> str:
+        del mail
+        raise RuntimeError("provider is down")
+
+    def provider_sender(**kwargs: Any) -> NotificationMessage:
+        return send_notification(**kwargs, mailer=failing_mailer)
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: provider_sender,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="quickscale_modules_orgs.views"):
+        response = client.post(
+            f"/orgs/api/{organization.slug}/members/invite/",
+            data=json.dumps({"email": "invitee@example.com", "role": OrgRole.MEMBER}),
+            content_type="application/json",
+        )
+
+    message = NotificationMessage.objects.get(template_key="quickscale_orgs.invitation")
+    assert response.status_code == 201
+    assert message.status == NotificationMessage.Status.FAILED
+    assert response.json()["notification_status"] == "failed"
+    assert OrganizationInvitation.objects.filter(
+        organization=organization,
+        email="invitee@example.com",
+    ).exists()
+    assert any(
+        "Failed to send the invitation email" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_invitation_send_programming_error_stays_visible(
+    client, settings, monkeypatch
+) -> None:
+    """Only notifications' own error is best-effort (rule 43)."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(
+        name="Broken Sender", slug="broken-sender"
+    )
+    admin = _admin(organization)
+    client.force_login(admin)
+
+    def broken_sender(**kwargs: object) -> object:
+        del kwargs
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: broken_sender,
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        client.post(
+            f"/orgs/{organization.slug}/members/invite/",
+            {"email": "invitee@example.com", "role": OrgRole.MEMBER},
+        )
+
+    assert OrganizationInvitation.objects.filter(
+        organization=organization,
+        email="invitee@example.com",
+    ).exists()
 
 
 # ---------------------------------------------------------------------------

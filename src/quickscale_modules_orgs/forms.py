@@ -72,7 +72,7 @@ def _normalize_unique_slug(
             "Enter a slug that contains at least one letter or number."
         )
     if normalized in RESERVED_ORG_SLUGS:
-        raise forms.ValidationError("This slug is reserved for the module's API.")
+        raise forms.ValidationError("This slug is reserved for the module's URL space.")
 
     queryset = Organization.objects.all()
     if exclude_org is not None and exclude_org.pk is not None:
