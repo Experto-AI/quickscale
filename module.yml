@@ -74,6 +74,12 @@ config:
 ci_env:
   posthog_api_key_env_var: ph_test_ci
 
+# Generated-project blocks: the credential variable name the Compose
+# backend service passes through from the host environment.
+project_blocks:
+  compose_env:
+    - posthog_api_key_env_var
+
 # Required first-party modules (bare names; rule 39): the overview page's
 # guard uses orgs' published role check.
 required_modules:
