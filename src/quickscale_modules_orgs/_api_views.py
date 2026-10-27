@@ -235,6 +235,11 @@ class OrgApiMemberRemoveView(OrgApiBaseView, MemberManagementContextMixin):
         except Http404 as error:
             raise NotFound("Member not found") from error
 
+        if not self.acting_user_can_manage_role(membership.role):
+            raise DRFValidationError(
+                {"non_field_errors": [OrganizationMembership.OWNER_MUTATION_MESSAGE]}
+            )
+
         if OrganizationMembership.is_last_owner_with_members(
             user=membership.user,
             organization=self.get_organization(),

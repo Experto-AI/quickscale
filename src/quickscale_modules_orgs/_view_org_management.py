@@ -35,7 +35,11 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     OrgRole,
 )
-from quickscale_modules_orgs.permissions import OrgRoleMixin, is_platform_operator
+from quickscale_modules_orgs.permissions import (
+    OrgRoleMixin,
+    is_platform_operator,
+    role_outranks_actor,
+)
 
 _MEMBERS_TEMPLATE_NAME = "quickscale_orgs/members.html"
 
@@ -117,6 +121,22 @@ class MemberManagementContextMixin(OrganizationContextMixin):
             )
         )
 
+    def acting_user_can_manage_role(self, target_role: OrgRole) -> bool:
+        """Return whether the acting user may change or remove *target_role*.
+
+        Member management is rank-bound: a caller cannot mutate a member whose
+        current role outranks theirs.  Platform operators bypass the check.
+        """
+        if is_platform_operator(self.request.user):
+            return True
+        acting_membership = self.get_acting_membership()
+        return not role_outranks_actor(
+            target_role=target_role,
+            actor_role=(
+                acting_membership.role if acting_membership is not None else None
+            ),
+        )
+
 
 def _membership_id_in_range(membership_id: int) -> bool:
     """Return whether *membership_id* fits the membership PK's integer field."""
@@ -186,6 +206,10 @@ class MemberListView(
         membership: OrganizationMembership,
     ) -> HttpResponse | None:
         """Apply the remove action, returning an error response on refusal."""
+        if not self.acting_user_can_manage_role(membership.role):
+            return self._render_member_error(
+                OrganizationMembership.OWNER_MUTATION_MESSAGE
+            )
         organization = self.get_organization()
         if OrganizationMembership.is_last_owner_with_members(
             user=membership.user,
