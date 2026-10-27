@@ -1,0 +1,23 @@
+{% if quickscale_admin_page == "app_index" %}
+<div class="app-list">
+    <ul class="object-tools">
+        <li>
+            <form action="{% url 'admin:quickscale_backups_backuppolicy_create' %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="button">Create backup now</button>
+            </form>
+        </li>
+        <li>
+            <a href="{% url 'admin:quickscale_backups_backuppolicy_changelist' %}" class="button">Open backup ops</a>
+        </li>
+    </ul>
+</div>
+{% elif quickscale_admin_page == "index" %}
+<div class="app-list">
+    <ul class="object-tools">
+        <li>
+            <a href="{% url 'admin:quickscale_backups_backuppolicy_changelist' %}" class="button">Open backup ops</a>
+        </li>
+    </ul>
+</div>
+{% endif %}
