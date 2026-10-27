@@ -242,17 +242,17 @@ items:
     last_verified: "2026-10-24"
   - id: orgs-invitation-notification-failure
     kind: drift
-    status: open
+    status: fixed
     verification: confirmed
     aspect: F
     cost: [defect, ambiguity]
     population: modules
     members_affected: [orgs]
-    rule_ref: "module_conventions rules 20, 21, 43; failure policy unsettled"
-    check: {kind: conformance, state: proposed, model: contract-based}
+    rule_ref: "module_conventions rules 20, 21, 43; decisions.md §Notifications Contract"
+    check: {kind: conformance, state: enforced, model: contract-based}
     handoff: [tech]
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-27"
   - id: core-cli-module-knowledge
     kind: drift
     status: accepted
@@ -278,7 +278,7 @@ gaps:
 
 ## Summary table
 
-Current confirmed open items: **7**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **3** (23, 28, and 29; prior 21 closed 2026-10-25, 22 and 26 closed 2026-10-26, 25 closed 2026-10-26). Cost classes overlap; the unique confirmed-item total is 7: defect 1 · collision 0 · ambiguity 4 · tax 4.
+Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **3** (23, 28, and 29; prior 21 closed 2026-10-25, 22 and 26 closed 2026-10-26, 25 closed 2026-10-26). Cost classes overlap; the unique confirmed-item total is 6: defect 0 · collision 0 · ambiguity 3 · tax 4.
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
@@ -292,7 +292,7 @@ Current confirmed open items: **7**. Prior accepted: **1** (`core-cli-module-kno
 | `public-read-marker-mixins` | rule-violation | E / modules | ambiguity | 2/4 public-read mixins | open | confirmed · high |
 | `listings-publish-org-fallback` | drift | D / modules | ambiguity | 1/2 publish services | open | confirmed · high on code, medium on reachability |
 | `stale-isolation-narratives` | drift | O / tenant-isolation-suites | tax | 2/6 suites | open | confirmed · high |
-| `orgs-invitation-notification-failure` | drift | F / modules | defect, ambiguity | 1/2 senders | open | confirmed · medium-high |
+| `orgs-invitation-notification-failure` | drift | F / modules | defect, ambiguity | 1/2 senders | fixed | fixed · high |
 | `core-cli-module-knowledge` | drift | C / modules | tax | 6/12 modules | accepted | confirmed · high |
 
 **Leading item.** `billing-feature-gate` now leads: `generated-module-branches` and `notifications-anymail-wiring-split` closed on 2026-10-26 when the core templates moved onto module declarations and rules 37/30 began enforcing the clauses. The closed items remain in the tables as the audit’s record.
@@ -486,11 +486,11 @@ Current confirmed open items: **7**. Prior accepted: **1** (`core-cli-module-kno
 | Sender | Effect timing | Failure handling | Result on failure | Evidence | State |
 |---|---|---|---|---|---|
 | forms submission notification | `transaction.on_commit` after the submission write | catches `NotificationsError`; logs warning; submission remains | non-fatal; submission status unchanged | `forms/_email.py:105-121` | present |
-| orgs invitation notification | `transaction.on_commit` after the invitation write | no catch; callback exception propagates after commit | 500 after the invitation row is committed | `orgs/views.py:174-193,306-325,409-424` | divergent |
+| orgs invitation notification | `transaction.on_commit` after the invitation write | catches `NotificationsError`; reads the dispatched message status; logs and surfaces | non-fatal; the invitation remains; status/warning reports the failure | `orgs/views.py:184-281,403-409,505-512` | present |
 | billing vendor checkout creation | before the local reservation write (exempt from rule 21) | provider error mapped to a billing error | local state not committed as paid | `billing/_checkout.py`; rule 21 | present |
 | social cache purge | `transaction.on_commit` after the model write | `delete_many`; no cross-module sender | cache invalidated after commit | `social/models.py:148-158` | present |
 
-**Already consistent (keep):** forms, billing, CRM’s stage seeding, social cache invalidation, and orgs’ invitation all schedule post-write effects with `transaction.on_commit`; the one divergence is the sender’s failure policy (item 15).
+**Already consistent (keep):** forms, billing, CRM’s stage seeding, social cache invalidation, and orgs’ invitation all schedule post-write effects with `transaction.on_commit`; every sender now follows one post-commit failure policy (item 15, fixed 2026-10-27).
 
 ### I/K/N/R/S/T/U/V — remaining aspects
 
@@ -502,7 +502,7 @@ Current confirmed open items: **7**. Prior accepted: **1** (`core-cli-module-kno
 | K observability | package-derived logger names; split files use the facade channel | 12/12; 5 split-file examples | `billing/services.py:89`; `_subscription_mutations.py:52`; `forms/_email.py:27`; `blog/_anonymization.py:26`; `notifications/_delivery.py:33` | present, sampled |
 | N tooling | module pyprojects share template; root mypy sections; CLI inert override | 12/12 pyprojects; 12/12 mypy sections; 1 inert CLI override | `*/pyproject.toml`; `mypy.ini`; `quickscale_cli/pyproject.toml` | partial: harness not run; inert override is a pending lead |
 | R compatibility | contract-vintage ids; migration freeze | 4/4 vintages; 10/10 model-bearing module `0001_initial` | `*/module.yml`; `scripts/migration_hashes.json` | present; no mixed-version exercise |
-| S asynchronous/delivery | webhook dedupe; on-commit effects | billing + notifications webhooks; 2 senders; social cache | §E/H.1, §F/S.1 | partial: item 15 is the one sender divergence |
+| S asynchronous/delivery | webhook dedupe; on-commit effects | billing + notifications webhooks; 2 senders; social cache | §E/H.1, §F/S.1 | partial: senders share one policy (item 15 fixed 2026-10-27); live delivery unassessed |
 | T runtime lifetime | no shared pool/worker policy in module code | 12/12 | module source scan | unknown: deployment capacity not inspected |
 | U build/release | versions/pyprojects aligned; no build run | 12/12 | `VERSION`; `*/pyproject.toml` | partial |
 | V data lifecycle | personal-data declarations and removal obligations | auth, orgs, billing, blog, crm, forms, notifications, backups | `*/apps.py`; `orgs/_personal_data.py` | partial: restore/retention not exercised |
@@ -667,16 +667,21 @@ Current confirmed open items: **7**. Prior accepted: **1** (`core-cli-module-kno
 
 ### 15. `orgs-invitation-notification-failure` — the invitation is committed, then a send failure escapes as 500
 
-- **ID / kind / status:** `orgs-invitation-notification-failure` · `drift` · `open`.
+- **ID / kind / status:** `orgs-invitation-notification-failure` · `drift` · `fixed`.
 - **Aspect / population / context:** F (secondary S, D) · `modules` · 2 notification senders; orgs.
 - **Table / evidence:** §F/S.1. Forms’ `_email.py:105-121` catches `NotificationsError` and logs a best-effort failure. Orgs’ `save_invitation_form` calls `sender(...)` inside `transaction.on_commit` without a catch (`orgs/views.py:174-193`); the outer `transaction.atomic()` in `form_valid`/the API view commits before the callback runs, so a `NotificationDisabledError`, `NotificationValidationError`, or `NotificationTemplateError` propagates after the invitation row is committed. The same callback is used by both HTML and JSON invitation flows (`views.py:306-325,409-424`).
 - **Difference and cost:** **defect / ambiguity.** A failed send leaves a saved invitation but returns 500; the caller cannot tell whether the invite exists, and a retry may hit the duplicate/pending guard. Forms treats the same class of failure as non-fatal; the two senders disagree on the contract.
 - **Declared rule:** rules 20, 21, and 43 (`module_conventions.md:524-542,899-909`); the failure policy is not settled.
 - **Options:** (a) catch `NotificationsError` after commit, log, and surface a warning/delivery status (forms’ model); (b) send before commit and roll back the invitation on failure (contradicts rule 21’s on-commit convention); (c) an outbox/delivery record with reconciliation.
 - **Recommended rule:** *coherence proposal 15* — A sender’s post-commit failure has one recorded policy: either a committed write remains and the failure is surfaced/logged, or the write is not committed until the send is accepted; no sender leaves an unhandled exception after commit.
-- **Enforcement:** proposed test that a failing sender leaves a coherent outcome (row + failure state or no row), plus a review of every `on_commit` sender. Evidence state: `proposed`.
+- **Enforcement:** tests cover a failing sender, a persisted provider failure, and a non-notifications error on the orgs invite paths, plus a review of every `on_commit` sender. Evidence state: `enforced`.
 - **Migration / acceptance:** choose the policy (Q2); update orgs; add a failure-injection test; no data migration unless an outbox is added. Acceptance: a forced sender failure does not produce a bare 500 with an unmarked committed invite. Responsibility: orgs/notifications owners.
 - **Confidence / hand-off:** medium-high (failure paths read; the exact supported policy is unknown) · tech.
+- **Resolution (2026-10-27, SA315 (a)):** the Q2 best-effort policy is recorded in
+  `decisions.md` §Notifications Contract. Orgs' post-commit sender catches only
+  `NotificationsError`, logs the failure, and surfaces it as `notification_status` on the JSON
+  response and a warning on the HTML members page; any other exception stays visible. Tests cover
+  both surfaces and the non-notifications error.
 
 ### Prior accepted item
 
@@ -746,7 +751,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **To the technical audit (live defects or live-defect risk).**
 
-- `orgs-invitation-notification-failure` — a committed invitation plus an unhandled post-commit sender error; source links in item 15.
+- `orgs-invitation-notification-failure` — a committed invitation plus an unhandled post-commit sender error; source links in item 15. Resolved 2026-10-27; retained as the hand-off record.
 - `listings-publish-org-fallback` — a supported service call can write public content into the System org.
 - Pending candidate `notifications-validation-status` — public `NotificationValidationError` has no `status_code`/`default_code`; no confirmed shipped API lets it escape except the orgs post-commit path. Not promoted without a reachable API trace.
 
@@ -766,7 +771,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Catalogue:** no new aspect letter. The pass used A–V; the only cross-cutting addition is a generated-output-authority clause under L/O, captured as proposal 1. No new aspect is warranted without a population that the current catalogue cannot express.
 
-**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) how a sender’s post-commit failure is handled (item 15); (e) whether the new module’s test settings default restricted (item 7) and which tables the RLS proof covers (item 6). Each is a forced decision, not a copy-source choice.
+**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) a sender’s post-commit failure follows item 15’s recorded best-effort policy; (e) whether the new module’s test settings default restricted (item 7) and which tables the RLS proof covers (item 6). Each is a forced decision, not a copy-source choice.
 
 **Residual work and limits.**
 
@@ -774,11 +779,11 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 - No repository test, harness, generator, build, linter, migration, or service was run. Every “present” in a test table is a source-inventory state, not a pass.
 - The 2026-10-16 41-item census is not itemized in the retained report; its last-known resolved status is not re-established. A future pass should recover that index and reconcile each ID.
 - Pending leads: `notifications-validation-status`; `backups/_settings.py` uses `build_policy_snapshot_from_settings()` rather than a `from_settings()` classmethod (rule 42 wording; possible accepted core-engine exception); `quickscale_cli/pyproject.toml` inert `[[tool.mypy.overrides]]`; `SeamModule.app_label` actually holds a package path; auth account-template nesting; leaf tenant admin org reassignment; `docker-compose.yml` ownership/regeneration. None passes §0 as a confirmed item on current evidence.
-- Deployment unknowns: whether invitation email failure is considered fatal, whether tenant suites are ever run directly under `postgres`, and whether any non-superuser staff account exists.
+- Deployment unknowns: whether tenant suites are ever run directly under `postgres`, and whether any non-superuser staff account exists.
 
 ## Questions that would change a rule
 
-2. **Q2 (`orgs-invitation-notification-failure`):** Is an invitation email failure fatal (do not keep the invitation unless the send is accepted), or best-effort (keep the invitation, record/surface the failure)?
+2. **Q2 (`orgs-invitation-notification-failure`) — answered 2026-10-27: best-effort.** The committed invitation stays, the failure is logged and surfaced, and no sender raises after commit (`decisions.md` §Notifications Contract).
 4. **Q4 (`tenant-suite-default-role`):** Is a direct `pytest` run under the default `postgres` role a supported workflow, or must every tenant suite default to the restricted role?
 5. **Q5 (consistent-by-design trigger):** May a leaf tenant admin row be reassigned to another organization? If not, listings/social should use the shared immutable-org admin behavior.
 
@@ -840,3 +845,4 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 - 2026-10-24 — gap 21: still open; gaps 22, 23, 25, 26, 28 and 29: new, open.
 - 2026-10-25 — gap 21: closed; the computed-operation detector, both fixture controls, and the two commands' `--dry-run` handling landed.
 - 2026-10-26 — `billing-feature-gate` and `billing-admin-org-filter`: fixed by SA314 (b); proposals 4 and 5 adopted, gap 25 closed with its gate controls.
+- 2026-10-27 — `orgs-invitation-notification-failure`: **resolved** by SA315 (a); the best-effort policy is recorded in decisions.md §Notifications Contract, the sender catches only `NotificationsError` and surfaces the failure on both invite surfaces, and tests cover the HTML and JSON outcomes plus a non-notifications error.

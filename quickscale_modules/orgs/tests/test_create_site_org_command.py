@@ -112,7 +112,7 @@ def test_create_site_org_refuses_overlength_name() -> None:
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("reserved_slug", ["api", SYSTEM_ORG_SLUG])
+@pytest.mark.parametrize("reserved_slug", ["api", "new", SYSTEM_ORG_SLUG])
 def test_create_site_org_refuses_reserved_slugs(reserved_slug: str) -> None:
     before = Organization.objects.filter(slug=reserved_slug).count()
 

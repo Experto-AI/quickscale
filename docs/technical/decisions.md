@@ -677,12 +677,12 @@ every verb; only a per-handler `method_decorator(csrf_exempt, name='<handler>')`
 - When `modules.notifications.resend_domain` is set, `quickscale apply` requires a non-placeholder sender email plus a valid `modules.notifications.resend_api_key_env_var` reference; apply fails hard instead of silently leaving live delivery on the console backend.
 - Runtime backend selection stays on Django's console email backend until live Resend delivery is fully configured. If the live Resend backend is active anyway and the placeholder sender or resolved API key is still missing, queued deliveries fail explicitly rather than degrading silently.
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
+- **Post-commit sender failure policy.** A sender whose database write commits keeps that write when the send fails: it catches only `NotificationsError`, logs the failure without recipient PII, and surfaces it (a delivery status and, on the HTML surface, a warning); any other exception stays visible. Orgs' invitation flow is the first adopter; the recorded policy is best-effort (Q2).
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
 
 **Provider choice.** Resend is the only first-class sender, delivered through Django Anymail
 on the standard Django email path, with app-owned templates and an app-owned dispatch record.
-Direct Resend API integration is rejected (weaker portability, more provider code). Fallbacks,
-in order, if inbound email becomes required or cost-at-scale dominates: Postmark, then Amazon SES.
+Direct Resend API integration is rejected (weaker portability, more provider code). Fallbacks, in order, if inbound email becomes required or cost-at-scale dominates: Postmark, then Amazon SES.
 
 ### Analytics Provider {#analytics-provider}
 

@@ -14,11 +14,13 @@ path keep resolving.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping as Mapping
 from datetime import UTC
 from typing import Any, cast
 
 from django.conf import settings as settings
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import connection as connection, transaction
@@ -100,9 +102,22 @@ from quickscale_modules_orgs.throttles import (
     OrgInviteThrottle,
 )
 
+logger = logging.getLogger(__name__)
+
 _UNSET = object()
 _ORG_INVITATION_TEMPLATE_KEY = "quickscale_orgs.invitation"
 _MEMBERS_TEMPLATE_NAME = "quickscale_orgs/members.html"
+_INVITATION_NOTIFICATION_QUEUED = "queued"
+_INVITATION_NOTIFICATION_FAILED = "failed"
+#: ``NotificationMessage.Status`` values that report a failed dispatch.
+#: Notifications persists a provider failure on the message and returns
+#: normally, so the returned status is the only synchronous signal.
+_INVITATION_NOTIFICATION_FAILED_STATUSES: frozenset[str] = frozenset(
+    {"failed", "partial"}
+)
+_INVITATION_NOTIFICATION_FAILED_MESSAGE = (
+    "The invitation was saved, but the email could not be sent."
+)
 
 
 def _load_invitation_notification_sender() -> Any | None:
@@ -162,6 +177,10 @@ class InvitationNotificationMixin:
 
     request: HttpRequest
 
+    #: Delivery state of the last scheduled invitation email: "queued" until
+    #: the post-commit sender reports a notifications failure ("failed").
+    invitation_notification_status: str = _INVITATION_NOTIFICATION_QUEUED
+
     def save_invitation_form(self, form: InviteForm) -> OrganizationInvitation | None:
         sender = _load_invitation_notification_sender()
         if sender is None:
@@ -182,13 +201,12 @@ class InvitationNotificationMixin:
                 # Rule 21: the invitation email is an effect of the write and
                 # runs only if that write commits.
                 transaction.on_commit(
-                    lambda: sender(
-                        template_key=_ORG_INVITATION_TEMPLATE_KEY,
+                    lambda: self._send_invitation_notification(
+                        sender=sender,
+                        invitation=invitation,
                         recipients=recipients,
-                        context=notification_context,
+                        notification_context=notification_context,
                         about_users=about_users,
-                        tags=["auth"],
-                        metadata={"workflow": "org-invitation"},
                     )
                 )
         except ValidationError as error:
@@ -199,7 +217,67 @@ class InvitationNotificationMixin:
                 form.add_error(None, error)
             return None
 
+        self.invitation_notification_status = _INVITATION_NOTIFICATION_QUEUED
         return invitation
+
+    def _send_invitation_notification(
+        self,
+        *,
+        sender: Any,
+        invitation: OrganizationInvitation,
+        recipients: list[str],
+        notification_context: dict[str, str],
+        about_users: list[Any],
+    ) -> None:
+        """Send the invitation after commit under the recorded failure policy.
+
+        Rule 21 keeps the email on the write's commit.  Coherence proposal 15
+        and the Q2 default make a notifications failure best-effort: the
+        committed invitation stays, the failure is logged and surfaced as a
+        delivery status, and no exception escapes after the commit.  Any other
+        error (rule 43) stays visible.
+
+        Notifications raises for a refused send and persists a provider
+        dispatch failure on the returned message without raising; both paths
+        are failures to surface.
+        """
+        from quickscale_modules_notifications.services import NotificationsError
+
+        try:
+            message = sender(
+                template_key=_ORG_INVITATION_TEMPLATE_KEY,
+                recipients=recipients,
+                context=notification_context,
+                about_users=about_users,
+                tags=["auth"],
+                metadata={"workflow": "org-invitation"},
+            )
+        except NotificationsError:
+            self._record_failed_invitation_notification(invitation, exc_info=True)
+            return
+
+        if getattr(message, "status", None) is not None and hasattr(
+            message, "refresh_from_db"
+        ):
+            # Notifications persists the provider outcome on its own row after
+            # dispatch; the returned instance predates that write.
+            message.refresh_from_db(fields=["status"])
+        if getattr(message, "status", None) in _INVITATION_NOTIFICATION_FAILED_STATUSES:
+            self._record_failed_invitation_notification(invitation)
+
+    def _record_failed_invitation_notification(
+        self,
+        invitation: OrganizationInvitation,
+        *,
+        exc_info: bool = False,
+    ) -> None:
+        """Mark the delivery failed and log it without recipient PII."""
+        self.invitation_notification_status = _INVITATION_NOTIFICATION_FAILED
+        logger.warning(
+            "Failed to send the invitation email for invitation %s",
+            invitation.pk,
+            exc_info=exc_info,
+        )
 
     def charge_invitation_throttles(self) -> bool:
         """Charge both invitation buckets, or neither (rule 32).
@@ -322,6 +400,12 @@ class InviteView(
                 content_type="text/plain",
             )
 
+        if self.invitation_notification_status == _INVITATION_NOTIFICATION_FAILED:
+            messages.warning(
+                self.request,
+                _INVITATION_NOTIFICATION_FAILED_MESSAGE,
+            )
+
         return self.get_members_redirect()
 
 
@@ -420,7 +504,10 @@ class OrgApiInviteView(
                 raise Throttled()
 
         return Response(
-            {"invitation": _view_serialization._serialize_invitation(invitation)},
+            {
+                "invitation": _view_serialization._serialize_invitation(invitation),
+                "notification_status": self.invitation_notification_status,
+            },
             status=201,
         )
 

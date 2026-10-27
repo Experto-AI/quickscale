@@ -67,6 +67,13 @@ reservation against Stripe and returns its still-payable hosted URL instead of c
 payable session; an expired session is closed locally before the replacement, and a completed one
 refuses replacement until its credit webhook is processed.
 
+**Fix record (2026-10-27).** SA315 (a) closes three findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`: `orgs-bulk-delete-leaves-zero-owners`,
+`orgs-admin-org-delete-blocked`, and `orgs-slug-new-shadows-route`. A `post_delete` receiver rolls
+back a bulk deletion that leaves members without an owner; a deletion whose origin is the
+organization row itself is exempt from the last-owner receiver, so the documented admin delete
+succeeds; and `new` joins `api` in `RESERVED_ORG_SLUGS`.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -334,24 +341,24 @@ items:
      anchors: [quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py,
                quickscale_modules/blog/src/quickscale_modules_blog/services.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: orgs-bulk-delete-leaves-zero-owners, status: open, severity: S3, category: II,
+  - {id: orgs-bulk-delete-leaves-zero-owners, status: fixed, severity: S3, category: II,
      title: "Bulk deletion of co-owners passes per-row checks and leaves the org ownerless", effort: Medium,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/receivers.py,
                quickscale_modules/orgs/src/quickscale_modules_orgs/models.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: orgs-admin-org-delete-blocked, status: open, severity: S4, category: II,
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-27}
+  - {id: orgs-admin-org-delete-blocked, status: fixed, severity: S4, category: II,
      title: "Admin deletion of an organization with a sole owner and other members is blocked",
      effort: Small, confidence: High, reality: generated-project,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/receivers.py,
                quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: orgs-slug-new-shadows-route, status: open, severity: S4, category: I,
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-27}
+  - {id: orgs-slug-new-shadows-route, status: fixed, severity: S4, category: I,
      title: "An org with slug new cannot reach its dashboard", effort: Trivial, confidence: High,
      reality: generated-project,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/_constants.py,
                quickscale_modules/orgs/src/quickscale_modules_orgs/urls.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-27}
   - {id: backups-validate-action-view-permission, status: fixed, severity: S4, category: III,
      title: "The Validate selected backups admin action lacks change permission", effort: Trivial,
      confidence: High, reality: generated-project,
@@ -1045,9 +1052,10 @@ reviewers.
   Checkout; webhook signature/raw body, price parity, RLS targets, and the current-subscription
   constraint verified. Metadata-key and ordering regressions run against a fake provider; the real
   test-mode subscription Checkout is credential-gated in `test_stripe_contract.py`.
-- **Orgs:** `orgs-admin-can-demote-owner` is fixed; `orgs-bulk-delete-leaves-zero-owners`, two S4s,
-  and four watchlist items remain; RLS predicate, purge atomicity, `TenantManager`, invitation
-  throttle, and content-route roles verified.
+- **Orgs:** `orgs-admin-can-demote-owner`, `orgs-bulk-delete-leaves-zero-owners`,
+  `orgs-admin-org-delete-blocked`, and `orgs-slug-new-shadows-route` are fixed; four watchlist items
+  remain; RLS predicate, purge atomicity, `TenantManager`, invitation throttle, and content-route
+  roles verified.
 - **Backups/DR:** five human-scale S3/S4s; checksum/migration identity, admin upload trusted
   match, and the environment gate verified. The RLS/runtime-role path was reproduced (resolved as
   SA313).
@@ -1368,3 +1376,9 @@ release.
 - 2026-10-26 — `billing-zero-credit-plan-webhook-loop`: **resolved** (SA314 (a): an `invoice.paid`
   for a zero-credit plan activates the subscription and skips the credit call, so the event is
   marked processed instead of retrying).
+- 2026-10-27 — `orgs-bulk-delete-leaves-zero-owners`, `orgs-admin-org-delete-blocked`,
+  `orgs-slug-new-shadows-route`: **resolved** (SA315 (a): a `post_delete` receiver rolls back a bulk
+  deletion that leaves members without an owner; a deletion whose origin is the organization row is
+  exempt from the last-owner receiver, so the admin instance and delete-selected paths both work;
+  `new` joins `api` in `RESERVED_ORG_SLUGS`; tests cover the bulk rollback, both admin delete paths,
+  and the reserved slug).

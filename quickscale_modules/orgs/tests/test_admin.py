@@ -1,6 +1,7 @@
 """Admin contract tests for the QuickScale organizations module."""
 
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import Client, RequestFactory
+from django.urls import reverse
 from django.utils import timezone
 
 from quickscale_modules_orgs.admin import (
@@ -160,6 +162,172 @@ def test_invitation_admin_form_save_revalidates_after_is_valid() -> None:
         "email": [OrganizationInvitation.DUPLICATE_ACTIVE_INVITATION_MESSAGE]
     }
     assert OrganizationInvitation.objects.count() == 1
+
+
+@pytest.fixture
+def test_tenant_model_tables() -> Iterator[None]:
+    """Give the test-only tenant models tables for the length of one test.
+
+    ``test_models`` registers ``ConcreteTenantResource`` and ``ForwardFKChild``
+    on the orgs app to exercise ``TenantManager``; deleting an ``Organization``
+    makes Django's collector traverse every reverse relation, so the collector
+    reaches those models even though the test creates no rows.  The surrogate
+    tables keep the deletion path usable and stay empty.
+    """
+    from django.apps import apps
+    from django.db import connection
+
+    models = []
+    for label in ("ConcreteTenantResource", "ForwardFKChild"):
+        try:
+            models.append(apps.get_model("quickscale_orgs", label))
+        except LookupError:
+            continue
+    if not models:
+        yield
+        return
+
+    with connection.schema_editor() as schema_editor:
+        for model in models:
+            schema_editor.create_model(model)
+    try:
+        yield
+    finally:
+        with connection.schema_editor() as schema_editor:
+            for model in reversed(models):
+                schema_editor.delete_model(model)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("delete_kind", ["instance", "queryset"])
+@pytest.mark.usefixtures("test_tenant_model_tables")
+def test_admin_deletes_an_organization_with_a_sole_owner_and_another_member(
+    admin_client: Client,
+    delete_kind: str,
+) -> None:
+    """The documented admin delete removes the org instead of blocking itself.
+
+    The cascaded membership rows belong to the organization being deleted, so
+    the last-owner receiver must exempt them.  Both admin deletion paths are
+    covered: the change form deletes one instance, and the delete-selected
+    action deletes through a queryset.
+    """
+    owner = get_user_model().objects.create_user(
+        username=f"org-delete-owner-{delete_kind}",
+        email=f"org-delete-owner-{delete_kind}@example.com",
+        password="secret123",
+    )
+    member = get_user_model().objects.create_user(
+        username=f"org-delete-member-{delete_kind}",
+        email=f"org-delete-member-{delete_kind}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Admin Delete {delete_kind}",
+        slug=f"admin-delete-{delete_kind}",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    if delete_kind == "instance":
+        response = admin_client.post(
+            reverse(
+                "admin:quickscale_orgs_organization_delete",
+                args=[organization.pk],
+            ),
+            {"post": "yes"},
+        )
+    else:
+        response = admin_client.post(
+            reverse("admin:quickscale_orgs_organization_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(organization.pk)],
+                "post": "yes",
+            },
+        )
+
+    assert response.status_code == 302
+    assert not Organization.objects.filter(pk=organization.pk).exists()
+    assert not OrganizationMembership.objects.filter(
+        organization_id=organization.pk
+    ).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_admin_bulk_delete_of_co_owners_is_refused_and_rolled_back(
+    admin_client: Client,
+) -> None:
+    """The admin's delete-selected action cannot strand an organization's members."""
+    first_owner = get_user_model().objects.create_user(
+        username="bulk-admin-first-owner",
+        email="bulk-admin-first-owner@example.com",
+        password="secret123",
+    )
+    second_owner = get_user_model().objects.create_user(
+        username="bulk-admin-second-owner",
+        email="bulk-admin-second-owner@example.com",
+        password="secret123",
+    )
+    member = get_user_model().objects.create_user(
+        username="bulk-admin-member",
+        email="bulk-admin-member@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Bulk Admin",
+        slug="bulk-admin",
+    )
+    first_membership = OrganizationMembership.objects.create(
+        user=first_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    second_membership = OrganizationMembership.objects.create(
+        user=second_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+
+    with pytest.raises(ValidationError):
+        admin_client.post(
+            reverse("admin:quickscale_orgs_organizationmembership_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [
+                    str(first_membership.pk),
+                    str(second_membership.pk),
+                ],
+                "post": "yes",
+            },
+        )
+
+    assert (
+        OrganizationMembership.objects.filter(
+            organization=organization,
+            role=OrgRole.OWNER,
+        ).count()
+        == 2
+    )
+    assert (
+        OrganizationMembership.objects.filter(
+            organization=organization,
+            role=OrgRole.MEMBER,
+        ).count()
+        == 1
+    )
 
 
 # ---------------------------------------------------------------------------

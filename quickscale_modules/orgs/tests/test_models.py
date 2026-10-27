@@ -151,6 +151,74 @@ def test_last_owner_cannot_be_removed_when_other_members_exist() -> None:
     assert OrganizationMembership.objects.filter(pk=owner_membership.pk).exists()
 
 
+@pytest.mark.django_db(transaction=True)
+def test_bulk_delete_of_co_owners_cannot_leave_the_org_ownerless() -> None:
+    """A bulk delete of every owner is rolled back by the post-delete backstop.
+
+    Django's collector sends all ``pre_delete`` signals before deleting
+    anything, so each co-owner's per-row check sees the others still present.
+    The ``post_delete`` receiver re-checks the organization after the
+    collector applied the deletion and rolls it back.
+    """
+
+    first_owner = _create_user(
+        username="bulk-first-owner",
+        email="bulk-first-owner@example.com",
+        password="secret123",
+    )
+    second_owner = _create_user(
+        username="bulk-second-owner",
+        email="bulk-second-owner@example.com",
+        password="secret123",
+    )
+    member = _create_user(
+        username="bulk-member",
+        email="bulk-member@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Bulk Org", slug="bulk-org")
+    OrganizationMembership.objects.create(
+        user=first_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=second_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        OrganizationMembership.objects.filter(
+            organization=organization,
+            role=OrgRole.OWNER,
+        ).delete()
+
+    assert exc_info.value.messages == [
+        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+    ]
+    # The collector was rolled back — both owners and the member survive.
+    assert (
+        OrganizationMembership.objects.filter(
+            organization=organization,
+            role=OrgRole.OWNER,
+        ).count()
+        == 2
+    )
+    assert (
+        OrganizationMembership.objects.filter(
+            organization=organization,
+            role=OrgRole.MEMBER,
+        ).count()
+        == 1
+    )
+
+
 @pytest.mark.django_db
 def test_last_owner_removal_allowed_when_sole_member() -> None:
     """Direct ORM deletes should allow removing the last owner when no
@@ -699,7 +767,16 @@ def test_api_slug_reserved_rejects_org() -> None:
     with pytest.raises(ValidationError) as exc_info:
         Organization.objects.create(name="Api", slug="api")
 
-    assert "reserved for the module's API" in str(exc_info.value)
+    assert "reserved for the module's URL space" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_new_slug_reserved_rejects_org() -> None:
+    """The create page owns /orgs/new/, so no organization takes that slug."""
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(name="New", slug="new")
+
+    assert "reserved for the module's URL space" in str(exc_info.value)
 
 
 @pytest.mark.django_db

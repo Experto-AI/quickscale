@@ -79,7 +79,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA321 | yes | yes | yes: SA321 |
-| 2 | SA315 (a) | yes | yes | yes: SA315, SA323, SA324 |
+| 2 | SA315 (b) | yes | yes | yes: SA315, SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -188,7 +188,7 @@ conformance check on `properties.PropertyAgent` and siblings.
   invitation stays, and the send failure is logged and surfaced, never a 500.
 
   **Slices:**
-  - [ ] (a) Orgs: bulk deletion cannot leave an organization ownerless; admin organization
+  - [x] (a) Orgs: bulk deletion cannot leave an organization ownerless; admin organization
     deletion passes the last-owner receiver; slug `new` is reserved; the invitation send-failure
     policy is recorded and tested (Tier 2-full).
   - [ ] (b) Auth: a profile email change goes through allauth's address flow, and a password reset

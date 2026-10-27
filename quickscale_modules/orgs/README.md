@@ -41,7 +41,11 @@ attempt refused by the role gate, validation, the pending cap, the duplicate gua
 throttle spends neither budget; a throttle refusal rolls the invitation back, so no invitation
 and no email result. The per-organization pending cap is enforced under the organization row
 lock, and the invitation email's sender-chosen text (organization and inviter names) is bounded
-by its stored fields and rendered escaped.
+by its stored fields and rendered escaped. A notification failure after the invitation commits — a
+refused send or a provider dispatch failure persisted on the notification message — is
+best-effort: the invitation stays, the failure is logged, the JSON response reports
+`"notification_status": "failed"`, and the HTML members page warns the inviter; any other sender
+error stays visible.
 
 In `solo` mode the module creates and serves each user's personal organization; the
 organization API and the leaf organization pages answer `404`. In `saas` mode organizations are
@@ -139,8 +143,9 @@ and `get_tenant_models()`. The module also installs the always-on RLS boot guard
 ## URLs
 
 The module's mount (`orgs/`) lives only in the manifest's `url_includes` wiring projection, and
-every route name is snake_case under the `quickscale_orgs` namespace. The `api` slug is reserved
-for the module's API: creating or renaming an organization to it is refused.
+every route name is snake_case under the `quickscale_orgs` namespace. The `api` and `new` slugs
+are reserved for the module's URL space: creating or renaming an organization to either is
+refused.
 
 | Route name | Path | Purpose |
 |------------|------|---------|
@@ -168,8 +173,8 @@ for the module's API: creating or renaming an organization to it is refused.
 
 - `quickscale_orgs_create_site_org` — create the site's organization once from `<slug> <name>`
   for a deploy step. A rerun with the same arguments is a no-op; the command fails when the
-  slug already exists under a different name or is reserved (`api`, `__system__`), and it runs
-  under the restricted runtime role.
+  slug already exists under a different name or is reserved (`api`, `new`, `__system__`), and it
+  runs under the restricted runtime role.
 - `quickscale_orgs_purge_organization` — purge an organization and all owned rows across all
   modules. Use `--organization-id <uuid>` for destructive execution and `--slug <slug>` for a
   non-destructive preflight; a destructive run also requires `--confirm <slug or uuid>` matching
