@@ -45,6 +45,28 @@ audit evidence and now carry `status: fixed`:
 the provider's current subscription under the organization's provider mutex before applying its
 status.
 
+**Fix record (2026-10-26).** SA311 closes four findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`: `crm-deal-owner-cross-tenant`,
+`media-s3-fixed-path-overwrite`, `orgs-admin-can-demote-owner`, and
+`forms-null-optional-field-500`. A deal owner must be a member of the request organization and a
+foreign owner's name is not serialized; a member mutation cannot target a role above the actor's;
+cloud uploads allocate a unique key per save (with provider overwrite disabled as a second guard);
+and a JSON `null` in an optional public form field is stored empty on both persistence branches.
+
+**Fix record (2026-10-26).** SA314 (a) closes four findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`: `billing-invoice-payment-failed-unscoped`,
+`billing-credit-services-missing-org-scope`, `billing-debit-not-idempotent`, and
+`billing-zero-credit-plan-webhook-loop`. A failed invoice applies only for subscription billing
+reasons that name a subscription; `credit_user` and `debit_user` enter the organization's tenant
+scope themselves; a debit's caller-owned `reference` is protected by a per-organization unique
+constraint; and a zero-credit plan activates without a ledger write.
+
+**Fix record (2026-10-26).** SA314 (b) closes `billing-checkout-double-submit`, recorded below and
+now carrying `status: fixed`: a repeated purchase Checkout request resolves the organization's open
+reservation against Stripe and returns its still-payable hosted URL instead of creating a second
+payable session; an expired session is closed locally before the replacement, and a completed one
+refuses replacement until its credit webhook is processed.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -181,20 +203,20 @@ items:
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_settings.py,
                quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout_steps.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: crm-deal-owner-cross-tenant, status: open, severity: S2, category: III,
+  - {id: crm-deal-owner-cross-tenant, status: fixed, severity: S2, category: III,
      title: "Deal owner accepts a foreign-tenant user id and the list serializes that user's name",
      effort: Small, confidence: High, reality: generated-project,
      anchors: [quickscale_modules/crm/src/quickscale_modules_crm/serializers.py,
                quickscale_modules/crm/src/quickscale_modules_crm/views.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: media-s3-fixed-path-overwrite, status: open, severity: S2, category: III,
+  - {id: media-s3-fixed-path-overwrite, status: fixed, severity: S2, category: III,
      title: "Fixed upload paths plus S3 overwrite replace another user's or tenant's media", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/storage/src/quickscale_modules_storage/adapter.py,
                quickscale_modules/listings/src/quickscale_modules_listings/models.py,
                quickscale_modules/blog/src/quickscale_modules_blog/models.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: orgs-admin-can-demote-owner, status: open, severity: S2, category: III,
+  - {id: orgs-admin-can-demote-owner, status: fixed, severity: S2, category: III,
      title: "An org ADMIN can demote or remove an OWNER through the member API", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/_view_org_management.py,
@@ -214,7 +236,7 @@ items:
      anchors: [quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2,
                quickscale_core/src/quickscale_core/generator/templates/pyproject.toml.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: forms-null-optional-field-500, status: open, severity: S2, category: I,
+  - {id: forms-null-optional-field-500, status: fixed, severity: S2, category: I,
      title: "A JSON null in an optional public form field raises IntegrityError and 500", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/serializers.py,
@@ -228,23 +250,23 @@ items:
                quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py,
                quickscale_modules/billing/src/quickscale_modules_billing/models.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-invoice-payment-failed-unscoped, status: open, severity: S3, category: IX,
+  - {id: billing-invoice-payment-failed-unscoped, status: fixed, severity: S3, category: IX,
      title: "invoice.payment_failed with no subscription id marks the customer's current subscription past due",
      effort: Trivial, confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-credit-services-missing-org-scope, status: open, severity: S3, category: III,
+  - {id: billing-credit-services-missing-org-scope, status: fixed, severity: S3, category: III,
      title: "credit_user/debit_user fail under FORCE RLS outside a request context", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_credits.py,
                quickscale_modules/billing/README.md],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-debit-not-idempotent, status: open, severity: S3, category: II,
+  - {id: billing-debit-not-idempotent, status: fixed, severity: S3, category: II,
      title: "A retried usage debit double-spends credits", effort: Medium, confidence: High,
      reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_credits.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-checkout-double-submit, status: open, severity: S3, category: II,
+  - {id: billing-checkout-double-submit, status: fixed, severity: S3, category: II,
      title: "A second purchase Checkout POST creates a second payable session", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_checkout.py],
@@ -364,7 +386,7 @@ items:
                quickscale_core/src/quickscale_core/generator/templates/.env.example.j2,
                quickscale_core/src/quickscale_core/generator/templates/.gitignore.j2],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: billing-zero-credit-plan-webhook-loop, status: open, severity: S4, category: I,
+  - {id: billing-zero-credit-plan-webhook-loop, status: fixed, severity: S4, category: I,
      title: "A zero-credit plan makes invoice.paid fail and retry forever", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py,
@@ -465,8 +487,7 @@ Rows record audit-time severity; current status is in the machine-readable index
 | `notifications-message-status-aggregate-race` | S4 | II | Concurrent sibling webhooks leave the aggregate stale | Trivial | Medium | carried |
 | `forms-retention-skips-null-ip-rows` | S4 | IX | Retention skips rows stored without an IP | Trivial | High | carried |
 
-Quick wins (Trivial effort, S2/S3): `forms-null-optional-field-500`,
-`billing-invoice-payment-failed-unscoped`, `backups-prune-no-keep-last`.
+No open Trivial-effort S2/S3 finding remains.
 
 ## Findings
 
@@ -985,23 +1006,16 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 
 ## Fix order and batching
 
-**Land first (S1/S2, independent):**
-
-1. `billing-subscription-checkout-metadata-key-too-long` — one-line rename, no dependency.
-2. `crm-deal-owner-cross-tenant` — serializer validation + read filter; independent.
-3. `media-s3-fixed-path-overwrite` — storage option + test; independent.
-4. `orgs-admin-can-demote-owner` — actor-rank check in form + API; independent.
-5. `forms-null-optional-field-500` — normalize/reject; independent.
-6. `billing-webhook-status-applied-out-of-order` — provider re-fetch or version column; needs a
-   migration if the version approach is chosen.
+**S1/S2 batch is closed.** The two billing findings are fixed by SA310, and
+`crm-deal-owner-cross-tenant`, `media-s3-fixed-path-overwrite`,
+`orgs-admin-can-demote-owner` and `forms-null-optional-field-500` are fixed by SA311 (see the
+machine-readable index above); no S1/S2 finding remains open.
 
 **Then (S3), in three batches:**
 
-- **Billing batch:** `billing-invoice-payment-failed-unscoped`,
-  `billing-credit-services-missing-org-scope`, `billing-debit-not-idempotent`,
-  `billing-checkout-double-submit`, `billing-zero-credit-plan-webhook-loop`. Land the webhook-ordering
-  fix first (same files/tests); the credit/idempotency changes touch `_credits.py` and need a
-  migration for the reference constraint.
+- **Billing batch is closed.** SA314 (a) fixed the failed-invoice, credit-scope,
+  debit-idempotency, and zero-credit findings, including the debit-reference migration; SA314 (b)
+  fixed the repeated purchase Checkout, and the webhook-ordering fix landed with SA310.
 - **Backups batch:** `backups-restore-drops-own-artifact-row`, `backups-prune-no-keep-last`,
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
@@ -1026,24 +1040,25 @@ reviewers.
   (`generated-compose-called-production-runs-debug`, `generated-redis-cache-missing-client`,
   `dockerignore-bakes-local-backups`, `generated-readme-examples-invalid`); otherwise read in full,
   secure defaults verified (secret guard, non-root, cookies/HSTS, conditional proxy trust).
-- **Billing:** findings 1 and 9 are fixed, five S3/S4 remain; webhook signature/raw body, price
-  parity, RLS targets, and the current-subscription constraint verified. Metadata-key and ordering
-  regressions run against a fake provider; the real test-mode subscription Checkout is
-  credential-gated in `test_stripe_contract.py`.
-- **Orgs:** findings `orgs-admin-can-demote-owner`, `orgs-bulk-delete-leaves-zero-owners`, two S4s,
-  and four watchlist items; RLS predicate, purge atomicity, `TenantManager`, invitation throttle, and
-  content-route roles verified.
+- **Billing:** findings 1 and 9 are fixed; SA314 (a) fixed the failed-invoice, credit-scope,
+  debit-idempotency, and zero-credit S3/S4 findings, and SA314 (b) fixed the repeated purchase
+  Checkout; webhook signature/raw body, price parity, RLS targets, and the current-subscription
+  constraint verified. Metadata-key and ordering regressions run against a fake provider; the real
+  test-mode subscription Checkout is credential-gated in `test_stripe_contract.py`.
+- **Orgs:** `orgs-admin-can-demote-owner` is fixed; `orgs-bulk-delete-leaves-zero-owners`, two S4s,
+  and four watchlist items remain; RLS predicate, purge atomicity, `TenantManager`, invitation
+  throttle, and content-route roles verified.
 - **Backups/DR:** five human-scale S3/S4s; checksum/migration identity, admin upload trusted
   match, and the environment gate verified. The RLS/runtime-role path was reproduced (resolved as
   SA313).
 - **Auth:** `auth-profile-email-change-desync` and `auth-deletion-logs-pii`; allauth config,
   account-deletion guard, session rotation, and email-verification default (watchlist) verified.
-- **CRM:** `crm-deal-owner-cross-tenant`; org-scoped reads, contact/stage/tag validation, bulk stage
-  filters, and CSV-free exports verified.
-- **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite`,
-  `media-image-decode-before-dimension-cap`, `forms-null-optional-field-500`, and three S4s;
-  extension-from-format, SVG exclusion, public/private media split, CSV formula neutralization, and
-  retention (prior S4) verified.
+- **CRM:** `crm-deal-owner-cross-tenant` is fixed; org-scoped reads, contact/stage/tag/owner
+  validation, bulk stage filters, and CSV-free exports verified.
+- **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite` and
+  `forms-null-optional-field-500` are fixed; `media-image-decode-before-dimension-cap` and three S4s
+  remain; extension-from-format, SVG exclusion, public/private media split, CSV formula
+  neutralization, and retention (prior S4) verified.
 - **CLI:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`; argv-list subprocess,
   advisory locks, theme preflight, and apply checkpoint/rollback verified.
 - **Core generator/DR:** the restore/prune/lock items and the fixed S4 README/ignore items;
@@ -1061,9 +1076,10 @@ reviewers.
 ## Clean sweeps and rejected candidates
 
 - **Billing:** purchase metadata key is 38 chars (within Stripe's limit); purchase/subscription
-  create/response-loss recovery and idempotency keys verified; Stripe signature over the raw body,
-  API-version gate, customer/subscription identity checks, price parity, and RLS on billing tables
-  verified. Refuted: “the purchase path has the same metadata-key defect” (38 chars).
+  create/response-loss recovery, idempotency keys, and the repeated-purchase reuse path verified;
+  Stripe signature over the raw body, API-version gate, customer/subscription identity checks,
+  price parity, and RLS on billing tables verified. Refuted: “the purchase path has the same
+  metadata-key defect” (38 chars).
 - **Orgs:** FORCE-RLS policy predicate and `TenantManager` fail-closed behavior verified; purge is
   atomic and tombstoned; invitation acceptance is token + normalized email; content routes require
   membership; single-row last-owner guards verified. Refuted: “non-superuser org users can reach
@@ -1111,15 +1127,16 @@ reviewers.
   lease serializes destructive runs.
 - **Billing webhooks reconcile with the provider** (SA310): subscription and invoice handlers
   retrieve the current subscription under the organization's provider mutex before applying its
-  status, so a late delivery cannot overwrite newer provider state. Remaining: a failed invoice
-  with no subscription id still resolves the customer's current subscription
-  (`billing-invoice-payment-failed-unscoped`, SA314).
-- **Media ownership/lifecycle is not modeled**: fixed upload paths, no org/user key segment, and no
-  generic cleanup on row/tenant deletion. The ticket is `media-s3-fixed-path-overwrite`; the
-  structural fix is a media-asset owner/key model.
-- **Org hierarchy authorization is per form/UI, not a shared policy**: admins and owners are checked
-  in several views/forms, and the UI hides actions the server does not enforce. The ticket is
-  `orgs-admin-can-demote-owner`.
+  status, so a late delivery cannot overwrite newer provider state. SA314 (a) also ignores failed
+  invoices outside the subscription billing reasons that name a subscription and activates a
+  zero-credit plan without a ledger write.
+- **Media ownership/lifecycle is still not modeled** (SA311 closes the overwrite vector): cloud
+  uploads never replace an existing key, but fixed upload paths carry no organization or user
+  segment and row/tenant deletion has no generic cleanup. The structural fix is a media-asset
+  owner/key model.
+- **Org hierarchy authorization has one rank rule but no single policy seam** (SA311):
+  `role_outranks_actor` guards member role changes and removals; other owner/admin checks stay per
+  view and form.
 - **The generator's Jinja environment disables autoescape for every template, including HTML**: it
   is safe only while every rendered value is validated; a future project-name/module field rendered
   into HTML would be an injection sink. No live injection found.
@@ -1136,11 +1153,14 @@ reviewers.
   real subscription Checkout when `STRIPE_TEST_SECRET_KEY` is set and enumerates every
   metadata-key constant against Stripe's 40-character limit; the late subscription and invoice
   replays live in `tests/test_subscriptions.py`, and the live case skips without credentials.
-- **No S3 overwrite test**: the storage tests use `FileSystemStorage`, which auto-renames; add a
-  fake S3 backend test asserting distinct keys, and a cross-org upload test.
+- **S3 overwrite coverage is fake-backend only**: `test_manifest_adapter.py` runs the module
+  backend's name allocator against a recording connection and proves two sequential and two
+  barrier-forced concurrent same-filename uploads get distinct keys; no live-bucket upload is
+  exercised.
 - **No image dimension-before-decode test**: add a compressed high-pixel fixture and assert
   rejection before `Image.load()`.
-- **No cross-org owner test**: add the CRM serializer test.
+- **CRM owner coverage is serializer- and view-level**: a foreign owner is a 400 on create and its
+  name is hidden from the list; a live membership-removal round trip is not exercised.
 - **Secret scanning is working-tree-only (fixed 2026-10-25)**: `check_secret_scanning.py` now runs
   `gitleaks dir` and `gitleaks git` over every commit reachable from `HEAD`, so a deleted credential
   stays visible. Value-level exemptions moved out of `gitleaks.toml` into
@@ -1314,3 +1334,37 @@ release.
   and invoice handlers retrieve the provider's current subscription under the organization's
   provider mutex and apply its status, so a late delivery cannot overwrite a newer provider
   status; tests replay a late update after deletion and a late failure after payment).
+
+- 2026-10-26 — `crm-deal-owner-cross-tenant`: **resolved** (SA311: `DealDetailSerializer` rejects
+  an owner with no membership in the request organization, and `DealListSerializer` returns an
+  empty `owner_name` for a foreign user; regression tests cover create rejection, same-org
+  acceptance, and the read filter).
+- 2026-10-26 — `media-s3-fixed-path-overwrite`: **resolved** (SA311: the generated settings use the
+  module-owned `quickscale_modules_storage._backends.UniqueKeyS3Storage`, which adds a random token
+  to the allocated key within the field's `max_length`; a field too short for the token keeps the
+  stock allocation. `file_overwrite: False` stays as a second guard. A fake-connection test
+  stores two same-filename uploads, and a barrier-forced concurrent pair, under distinct keys with
+  both payloads preserved; the storage README documents the custom-config equivalent).
+- 2026-10-26 — `orgs-admin-can-demote-owner`: **resolved** (SA311: `role_outranks_actor` refuses a
+  member mutation whose target role outranks the actor, wired through `RoleChangeForm.clean_role`
+  and both removal paths with platform operators exempt; HTML and JSON tests target an OWNER).
+- 2026-10-26 — `forms-null-optional-field-500`: **resolved** (SA311: `_create_field_values`
+  normalizes a JSON `null` to the empty string on both the accepted and honeypot persistence
+  branches; regression tests assert 201 and an empty stored value, never 500).
+- 2026-10-26 — `billing-invoice-payment-failed-unscoped`: **resolved** (SA314 (a): a failed invoice
+  applies only for `subscription_create` and `subscription_cycle` billing reasons that name a
+  subscription; a one-off or unrelated failed invoice is recorded and ignored).
+- 2026-10-26 — `billing-credit-services-missing-org-scope`: **resolved** (SA314 (a): `credit_user`
+  and `debit_user` enter the organization's tenant scope themselves and restore the prior scope;
+  a threaded no-context test exercises both services under the restricted role).
+- 2026-10-26 — `billing-debit-not-idempotent`: **resolved** (SA314 (a): `debit_user` accepts a
+  caller-owned `reference`, a partial unique constraint covers
+  `(organization, reference, transaction_type)`, and a retried debit returns the original row).
+- 2026-10-26 — `billing-checkout-double-submit`: **resolved** (SA314 (b): a repeated purchase
+  Checkout request reuses the organization's open reservation while Stripe reports its session
+  open, returns its hosted URL, closes an expired session before the replacement, and refuses to
+  replace a completed one until its credit webhook is processed; tests cover reuse, expiry,
+  completion, and an unclassifiable provider answer).
+- 2026-10-26 — `billing-zero-credit-plan-webhook-loop`: **resolved** (SA314 (a): an `invoice.paid`
+  for a zero-credit plan activates the subscription and skips the credit call, so the event is
+  marked processed instead of retrying).

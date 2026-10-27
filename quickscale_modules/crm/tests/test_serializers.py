@@ -1023,6 +1023,51 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         assert serializer.data["company_name"] == ""
         assert serializer.data["stage_name"] == ""
 
+    def test_deal_list_serializer_hides_foreign_org_owner_name(
+        self, org_a, org_b, org_a_admin, org_b_admin
+    ):
+        """DealListSerializer hides an owner with no membership in the active org."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-owner@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact_a,
+                amount=Decimal("1000.00"),
+                stage=stage_a,
+                owner=org_a_admin,
+                organization=org_a,
+            )
+
+        factory = APIRequestFactory()
+        request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        same_org = DealListSerializer(deal, context={"request": request})
+        assert same_org.data["owner_name"] == str(org_a_admin)
+
+        # The owner FK is not part of a composite tenant FK, so the defensive
+        # read path is probed with an in-memory foreign-org reassignment.
+        deal.owner = org_b_admin
+        foreign_org = DealListSerializer(deal, context={"request": request})
+        assert foreign_org.data["owner_name"] == ""
+
     def test_deal_detail_serializer_hides_foreign_org_related_objects(
         self, org_a, org_b, org_a_admin
     ):
@@ -1520,6 +1565,91 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         )
         assert not serializer.is_valid()
         assert "stage_id" in serializer.errors
+
+    def test_deal_create_rejects_foreign_org_owner(
+        self, org_a, org_b, org_a_admin, org_b_admin
+    ):
+        """DealDetailSerializer rejects an owner outside the active org."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Stage
+
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-owner-create@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        set_current_org_id(org_a.id)
+        serializer = DealDetailSerializer(
+            data={
+                "title": "Org-A Deal",
+                "contact_id": contact_a.id,
+                "amount": str(Decimal("1000.00")),
+                "stage_id": stage_a.id,
+                "owner": org_b_admin.id,
+            },
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "owner" in serializer.errors
+
+    def test_deal_create_accepts_same_org_owner(self, org_a, org_a_admin):
+        """DealDetailSerializer accepts an owner who belongs to the active org."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Stage
+
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-owner-same@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        set_current_org_id(org_a.id)
+        serializer = DealDetailSerializer(
+            data={
+                "title": "Org-A Deal",
+                "contact_id": contact_a.id,
+                "amount": str(Decimal("1000.00")),
+                "stage_id": stage_a.id,
+                "owner": org_a_admin.id,
+            },
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
 
     def test_deal_create_rejects_foreign_org_tags(self, org_a, org_b, org_a_admin):
         """DealDetailSerializer rejects foreign-org tag_ids on create."""

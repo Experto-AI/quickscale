@@ -40,6 +40,103 @@ ADMIN_BASE = "ModelAdmin"
 DJANGO_ADMIN_SITE_MODULE = "django.contrib.admin.site"
 ADMIN_REGISTER = "register"
 
+#: Rule 13's operator contract: a tenant-model admin shows the organization as
+#: a column and filters by it, whether the filter is the plain field or a
+#: module's organization-selector class.
+ORGANIZATION_ADMIN_COLUMN = "organization"
+ORGANIZATION_FILTER_SUFFIX = "OrganizationListFilter"
+
+
+def _literal_attribute_names(
+    class_node: ast.ClassDef, attribute: str
+) -> tuple[bool, set[str] | None]:
+    """
+    Return whether a class body declares *attribute*, and its literal names.
+
+    ``(False, None)`` means the class does not override the attribute, so an
+    inherited value applies.  ``(True, None)`` means it overrides the attribute
+    with a computed value; that fails closed because the detector cannot read
+    the organization contract from it.
+    """
+    for statement in class_node.body:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            targets = [statement.target]
+            value = statement.value
+        else:
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == attribute for target in targets):
+            continue
+        if not isinstance(value, (ast.List, ast.Tuple)):
+            return True, None
+        names: set[str] = set()
+        for element in value.elts:
+            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                names.add(element.value)
+            elif isinstance(element, ast.Name):
+                names.add(element.id)
+            elif isinstance(element, ast.Attribute):
+                names.add(element.attr)
+        return True, names
+    return False, None
+
+
+def _admin_attribute_names(
+    class_node: ast.ClassDef,
+    attribute: str,
+    class_nodes: Mapping[str, ast.ClassDef],
+    seen: set[str] | None = None,
+) -> set[str] | None:
+    """Return an admin's column/filter names, following module-local bases."""
+    declared, names = _literal_attribute_names(class_node, attribute)
+    if declared:
+        return names
+    seen = seen if seen is not None else set()
+    for base in class_node.bases:
+        if isinstance(base, ast.Name):
+            base_name = base.id
+        elif isinstance(base, ast.Attribute):
+            base_name = base.attr
+        else:
+            continue
+        if base_name in seen:
+            continue
+        base_node = class_nodes.get(base_name)
+        if base_node is None:
+            continue
+        seen.add(base_name)
+        inherited = _admin_attribute_names(base_node, attribute, class_nodes, seen)
+        if inherited is not None:
+            return inherited
+    return None
+
+
+def _tenant_admin_organization_violations(
+    module_name: str,
+    rel: str,
+    admin_node: ast.ClassDef,
+    class_nodes: Mapping[str, ast.ClassDef],
+) -> list[str]:
+    """Rule 13: a tenant admin exposes the organization column and filter."""
+    location = f"rule 13: {module_name}: {rel}:{admin_node.lineno}"
+    violations: list[str] = []
+    column_names = _admin_attribute_names(admin_node, "list_display", class_nodes)
+    if column_names is None or ORGANIZATION_ADMIN_COLUMN not in column_names:
+        violations.append(
+            f"{location} {admin_node.name} must expose the organization column in list_display"
+        )
+    filter_names = _admin_attribute_names(admin_node, "list_filter", class_nodes)
+    if filter_names is None or not (
+        ORGANIZATION_ADMIN_COLUMN in filter_names
+        or any(name.endswith(ORGANIZATION_FILTER_SUFFIX) for name in filter_names)
+    ):
+        violations.append(
+            f"{location} {admin_node.name} must expose an organization filter in list_filter"
+        )
+    return violations
+
 
 def _tenant_reference_violations(module_name: str, rel: str, tree: ast.Module) -> list[str]:
     """Rule 13: only orgs calls tenancy helpers or retypes the manager."""
@@ -171,6 +268,7 @@ def _decorator_registration_violations(
     decorator: ast.Call,
     origins_by_name: ClassOrigins,
     package: str,
+    class_nodes: Mapping[str, ast.ClassDef],
 ) -> list[str]:
     """Rule 13: one ``@admin.register`` decorator against its admin base."""
     location = f"rule 13: {module_name}: {rel}:{admin_node.lineno}"
@@ -181,6 +279,7 @@ def _decorator_registration_violations(
     tenant_base = (ORG_ADMIN_MODULE, TENANT_ADMIN_BASE) in admin_origins
     model_base = (DJANGO_ADMIN_MODULE, ADMIN_BASE) in admin_origins
     violations: list[str] = []
+    registers_tenant_model = False
     for model_name in model_names:
         if model_name not in origins_by_name:
             violations.append(
@@ -189,6 +288,7 @@ def _decorator_registration_violations(
             continue
         model_origins = _reachable_base_origins(model_name, origins_by_name, package)
         tenant = any(origin_name == "TenantModel" for _path, origin_name in model_origins)
+        registers_tenant_model = registers_tenant_model or tenant
         if tenant and not tenant_base:
             violations.append(
                 f"{location} registers tenant model {model_name} with {admin_node.name}; "
@@ -204,6 +304,10 @@ def _decorator_registration_violations(
                 f"{location} registers {model_name} with {admin_node.name}, which does not "
                 "subclass admin.ModelAdmin"
             )
+    if registers_tenant_model and tenant_base:
+        violations.extend(
+            _tenant_admin_organization_violations(module_name, rel, admin_node, class_nodes)
+        )
     return violations
 
 
@@ -220,6 +324,13 @@ def _admin_registration_violations(module: Module) -> list[str]:
     """
     origins_by_name = _package_class_origins(module.files)
     package = f"quickscale_modules_{module.name}"
+    class_nodes: dict[str, ast.ClassDef] = {}
+    for rel, text in sorted(module.files.items()):
+        if not rel.endswith(".py") or rel.startswith("migrations/"):
+            continue
+        for node in ast.walk(_parse(text)):
+            if isinstance(node, ast.ClassDef):
+                class_nodes.setdefault(node.name, node)
     violations: list[str] = []
     for rel, text in sorted(module.files.items()):
         if not rel.endswith(".py") or rel.startswith("migrations/"):
@@ -238,7 +349,13 @@ def _admin_registration_violations(module: Module) -> list[str]:
                     continue
                 violations.extend(
                     _decorator_registration_violations(
-                        module.name, rel, node, decorator, origins_by_name, package
+                        module.name,
+                        rel,
+                        node,
+                        decorator,
+                        origins_by_name,
+                        package,
+                        class_nodes,
                     )
                 )
     return violations

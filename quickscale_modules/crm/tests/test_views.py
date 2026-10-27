@@ -820,6 +820,23 @@ class TestDealViewSet:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["title"] == "New Deal"
 
+    def test_create_deal_rejects_foreign_org_owner(
+        self, authenticated_client, contact, stage, user
+    ):
+        """A deal owner outside the active organization is a 400, never saved."""
+        data = {
+            "title": "Foreign Owner Deal",
+            "contact_id": contact.id,
+            "stage_id": stage.id,
+            "amount": "25000.00",
+            "owner": user.id,
+        }
+        response = authenticated_client.post(
+            reverse("quickscale_crm:deal_list"), data, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "owner" in response.data
+
     def test_retrieve_deal(self, authenticated_client, deal):
         """Test retrieving a deal"""
         response = authenticated_client.get(

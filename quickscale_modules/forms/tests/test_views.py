@@ -263,6 +263,56 @@ class TestFormSubmitAPIView:
                 submission=sub, field_name="full_name"
             ).exists()
 
+    def test_optional_field_null_is_stored_empty(
+        self, api_client, form, form_field, email_field, optional_field
+    ):
+        """A JSON null for an optional field stores empty, never a 500."""
+        from quickscale_modules_orgs.current_org import org_scope
+
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com", "company": None}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
+            stored = FormFieldValue.all_objects.get(
+                submission=submission,
+                field_name="company",
+            )
+        assert stored.value == ""
+
+    def test_honeypot_null_value_is_stored_empty(
+        self, api_client, form, form_field, email_field, optional_field
+    ):
+        """The honeypot fast path normalizes null the same way and stays silent."""
+        from quickscale_modules_orgs.current_org import org_scope
+
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
+        data = {
+            "full_name": "Bot",
+            "email": "bot@spam.com",
+            "_hp_name": "I am a bot",
+            "company": None,
+        }
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
+            stored = FormFieldValue.all_objects.get(
+                submission=submission,
+                field_name="company",
+            )
+        assert submission.is_spam is True
+        assert stored.value == ""
+
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_captures_analytics_when_available(
         self,

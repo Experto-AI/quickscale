@@ -48,6 +48,7 @@ class CreditBalanceAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
     """Read-only admin for per-organization balance snapshots."""
 
     list_display = ["organization", "user", "balance", "updated_at"]
+    list_filter = ["organization"]
     list_select_related = ["organization", "user"]
 
 
@@ -64,7 +65,7 @@ class CreditTransactionAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
         "stripe_object_id",
         "created_at",
     ]
-    list_filter = ["transaction_type", "created_at"]
+    list_filter = ["organization", "transaction_type", "created_at"]
     list_select_related = ["organization", "user"]
 
 
@@ -80,7 +81,7 @@ class SubscriptionAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
         "stripe_subscription_id",
         "current_period_end",
     ]
-    list_filter = ["status", "plan"]
+    list_filter = ["organization", "status", "plan"]
     list_select_related = ["organization", "user", "plan"]
     search_fields = [
         "organization__name",
@@ -102,7 +103,7 @@ class PurchaseCheckoutAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
         "stripe_checkout_session_id",
         "checkout_expires_at",
     ]
-    list_filter = ["status", "plan"]
+    list_filter = ["organization", "status", "plan"]
     list_select_related = ["organization", "user", "plan"]
 
 

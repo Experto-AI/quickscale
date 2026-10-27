@@ -246,7 +246,8 @@ ADMIN_TENANT_OK = (
     "from quickscale_modules_demo.models import Widget\n\n\n"
     "@admin.register(Widget)\n"
     "class WidgetAdmin(TenantModelAdmin):\n"
-    "    pass\n"
+    '    list_display = ["organization"]\n'
+    '    list_filter = ["organization"]\n'
 )
 
 ADMIN_TENANT_ON_MODEL_ADMIN = (
@@ -294,7 +295,8 @@ ADMIN_CHAIN_OK = (
     "from quickscale_modules_demo.models import Widget\n\n\n"
     "@admin.register(Widget)\n"
     "class WidgetAdmin(WidgetAdminBase):\n"
-    "    pass\n"
+    '    list_display = ["organization"]\n'
+    '    list_filter = ["organization"]\n'
 )
 
 ADMIN_CHAIN_BASE = (
@@ -309,7 +311,8 @@ ADMIN_MULTI_MODEL_MIXED = (
     "from quickscale_modules_demo.models import Gadget, Widget\n\n\n"
     "@admin.register(Widget, Gadget)\n"
     "class MixedAdmin(TenantModelAdmin):\n"
-    "    pass\n"
+    '    list_display = ["organization"]\n'
+    '    list_filter = ["organization"]\n'
 )
 
 CASE_BUILDERS = {

@@ -95,17 +95,22 @@ and the Stripe return pages are public.
   used for checkout validation.
 - `CreditBalance` tracks the current authoritative per-organization credit balance; nullable
   user links remain provenance / compatibility only.
-- `CreditTransaction` records each credit mutation with balance snapshots and optional Stripe
-  reference metadata.
+- `CreditTransaction` records each credit mutation with balance snapshots, optional Stripe
+  reference metadata, and an optional caller-owned `reference` that makes a retried debit
+  idempotent.
 - `PurchaseCheckout` records one-time Checkout lifecycle state so account deletion and
   organization purge can reconcile or refuse live provider sessions; Stripe metadata and
   idempotency keys correlate completed or expired sessions even when the provider-create
-  response is lost.
+  response is lost. A repeated purchase request returns the organization's still-payable
+  checkout URL from its open reservation instead of creating a second payable session.
 - `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to
   the organization; recurring Checkout uses the same reservation-reference and response-loss
   recovery contract, while nullable user links remain provenance / compatibility only.
 - `WebhookEvent` is the transport-level idempotency gate for Stripe webhook processing.
-- `debit_user` is the approved service API for credit consumption.
+- `debit_user` is the approved service API for credit consumption; pass a `reference` to make a
+  retried debit return its original transaction instead of debiting twice. Both it and
+  `credit_user` enter the organization's tenant scope themselves, so a shell, management command,
+  or worker can call them without a request context.
 
 ### Account-deletion capability
 
@@ -119,11 +124,15 @@ billing records attributed to it, so the handler no longer nulls billing's user 
 
 ### Plan-feature gate
 
-`require_org_feature(feature_key)` is the published view decorator that answers `402` when the
-request's organization has no active subscription or its plan does not list the feature key. It
-resolves the organization through `quickscale_modules_orgs.permissions.resolve_request_org` and
-reads billing's own active `Subscription` row, so orgs and other consumers do not name a
-higher-layer module.
+`require_org_feature(feature_key)` is the published gate for API views. It resolves the
+organization through `quickscale_modules_orgs.permissions.resolve_request_org` and reads
+billing's own active `Subscription` row, so orgs and other consumers do not name a higher-layer
+module. An anonymous caller raises `401`; an authenticated caller with no organization context,
+no active subscription, or a plan that does not list the feature raises `402` with the stable
+`feature_not_available` code. The one QuickScale exception handler renders both in the shared
+`{"error": {"code", "message"}}` shape. Wrap a function-based API view with `@api_view`
+outermost, so the raise happens inside DRF's dispatch; a plain Django view would let the exception
+reach Django's handler instead.
 
 ### Organization pricing handoff
 
@@ -263,6 +272,11 @@ without crediting it, `checkout.session.async_payment_succeeded` credits the one
 exactly once, and `checkout.session.async_payment_failed` releases the reservation so it no
 longer blocks account deletion or organization purge.
 
+An `invoice.payment_failed` event applies only to `subscription_create` or `subscription_cycle`
+invoices that name a subscription; an unrelated failed invoice for the same customer is recorded
+and ignored. An `invoice.paid` for a plan that grants zero credits activates the subscription
+without writing a zero-amount ledger entry, so the event is not retried.
+
 **Upgrade note:** a deployment whose webhook endpoint is on an older API version stops
 processing all billing webhooks (`500`s) until the endpoint is recreated at
 `2026-06-24.dahlia`. Events refused under the old version are not credited automatically, so
@@ -302,8 +316,9 @@ internals.
 
 ### Structured extension points
 
-`debit_user` is the approved service API for credit consumption; the module also publishes
-`credit_user`, `handle_stripe_event`, and the reconciliation helpers in `services.py`.
+`debit_user` is the approved service API for credit consumption; its `reference` argument makes a
+retried call return the original transaction. The module also publishes `credit_user`,
+`handle_stripe_event`, and the reconciliation helpers in `services.py`.
 `require_org_feature(feature_key)` is the published plan-feature gate, and the module declares
 the `account_deletion_handlers` and `organization_pricing_url_hooks` capabilities that auth and
 orgs collect. Stripe catalog authoring, coupons, tax/VAT, metered billing, seat billing, and

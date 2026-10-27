@@ -365,10 +365,19 @@ class FormSubmitAPIView(CreateAPIView):
     def _create_field_values(
         self, submission: FormSubmission, form: Form, data: dict
     ) -> None:
-        """Persist field value snapshots for all active fields that have submitted values"""
+        """Persist field value snapshots for all active fields that have submitted values.
+
+        A JSON ``null`` for an optional field is the client's empty value, not
+        a database value: ``FormFieldValue.value`` is non-null, so ``None`` is
+        stored as the empty string.  The honeypot branch writes through this
+        same helper without serializer validation, so normalization lives here
+        rather than in the serializer.
+        """
         active_fields = form.fields.filter(is_active=True).order_by("order")
         for field in active_fields:
             submitted_value = data.get(field.name, "")
+            if submitted_value is None:
+                submitted_value = ""
             FormFieldValue.objects.create(
                 submission=submission,
                 organization=submission.organization,

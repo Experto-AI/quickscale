@@ -186,6 +186,7 @@ class CreditTransaction(TenantModel):
     transaction_type = models.CharField(max_length=20, choices=TransactionType.choices)
     stripe_event_id = models.CharField(max_length=255, blank=True, db_index=True)
     stripe_object_id = models.CharField(max_length=255, blank=True, db_index=True)
+    reference = models.CharField(max_length=255, blank=True)
     stripe_reference_data = models.JSONField(default=dict, blank=True)
     description = models.TextField(blank=True)
     balance_after = models.IntegerField()
@@ -198,6 +199,11 @@ class CreditTransaction(TenantModel):
                 fields=["stripe_event_id", "transaction_type"],
                 condition=populated_value_q("stripe_event_id"),
                 name="quickscale_billing_credittransaction_stripe_event_id_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "reference", "transaction_type"],
+                condition=~models.Q(reference=""),
+                name="quickscale_billing_credittransaction_reference_unique",
             ),
         ]
 

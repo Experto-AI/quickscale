@@ -115,6 +115,7 @@ class OrganizationMembership(models.Model):
 
     LAST_OWNER_DEMOTION_MESSAGE = "You cannot demote the last owner."
     LAST_OWNER_REMOVAL_MESSAGE = "You cannot remove the last owner."
+    OWNER_MUTATION_MESSAGE = "Only an owner can change or remove another owner."
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

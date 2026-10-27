@@ -32,12 +32,18 @@ def _cloud_storage_settings(resolved: ResolvedOptions) -> dict[str, Any]:
     }
     storage_options: dict[str, Any] = {
         "querystring_auth": querystring_auth,
+        # Never replace an existing object: fixed upload_to prefixes are shared
+        # across organizations, so an overwrite would substitute another
+        # tenant's media.  The module-owned backend also gives every save a
+        # fresh key, closing the check-then-write race that file_overwrite
+        # alone leaves open between concurrent uploads.
+        "file_overwrite": False,
         **optional_options,
     }
     settings: dict[str, Any] = {
         "STORAGES": {
             "default": {
-                "BACKEND": "storages.backends.s3.S3Storage",
+                "BACKEND": "quickscale_modules_storage._backends.UniqueKeyS3Storage",
                 "OPTIONS": storage_options,
             },
             "staticfiles": {

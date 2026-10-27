@@ -235,7 +235,7 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ✅ Session APIs authenticate through core's one session authentication class
   (`QuickscaleSessionAuthentication` in `quickscale_core.runtime`), so an unauthenticated call
   answers 401; the generated `settings/base.py` installs it as
-  `DEFAULT_AUTHENTICATION_CLASSES` through `compose_rest_framework`.
+  `DEFAULT_AUTHENTICATION_CLASSES` through `compose_rest_framework`. A published gate decorator wraps an API view and raises a declared module error (rule 10) instead of returning a response it builds, so the one handler renders the shared shape (`401` anonymous, `402` with a stable code when unentitled); orgs' HTML-only `require_org_role` (a direct blank `403`) is the recorded exception the harness accepts.
 - ✅ The generated `REST_FRAMEWORK` sets DRF's JSON renderer and parser defaults through
   `compose_rest_framework`, so a module API accepts and answers JSON only: a view that inherits
   the composed defaults pins no renderer or parser of its own, and an HTML-preferring or
@@ -407,7 +407,7 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   is a one-per-organization model (billing's `CreditBalance`), which redeclares `organization` as a
   `PROTECT` `OneToOneField` and keeps everything else.
 - ✅ Tenant models are registered on `TenantModelAdmin`, other models on `admin.ModelAdmin`, both
-  with `@admin.register`.
+  with `@admin.register`. A tenant-model admin exposes the `organization` column in `list_display` and an organization filter in `list_filter` (the plain field or a module's organization-selector class), even when read-only.
 - ❌ `tenant_org_fk(...)` or `TenantManager()` in a model outside `TenantModel`; a retyped
   `base_manager_name`; the manager-only ("dual-manager") tenant form.
 

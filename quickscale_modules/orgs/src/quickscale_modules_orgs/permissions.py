@@ -60,6 +60,19 @@ def user_has_org_role(
     return ROLE_HIERARCHY[membership.role] >= ROLE_HIERARCHY[min_role]
 
 
+def role_outranks_actor(*, target_role: OrgRole, actor_role: OrgRole | None) -> bool:
+    """Return whether the target's role ranks above the actor's role.
+
+    Member management reserves higher-ranked members: an ADMIN cannot change
+    or remove an OWNER.  A caller with no membership has no rank, so every
+    role outranks it.  Platform operators bypass this check at the call site
+    through :func:`is_platform_operator`.
+    """
+
+    actor_rank = -1 if actor_role is None else ROLE_HIERARCHY[actor_role]
+    return ROLE_HIERARCHY[target_role] > actor_rank
+
+
 def require_org_role(min_role: OrgRole) -> Callable:
     """Require the current request user to hold at least the given org role."""
 
