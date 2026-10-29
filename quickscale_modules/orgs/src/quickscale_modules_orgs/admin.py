@@ -438,8 +438,8 @@ def make_same_org_validated_form(
     The returned form's ``clean()`` checks that all FK and M2M values in
     ``org_related_fields`` belong to the same organization as the row's
     ``organization`` field (add forms) or the instance's current
-    ``organization_id`` (change forms).  NULL-org related values are
-    accepted for legacy compatibility.
+    ``organization_id`` (change forms).  A related value without an
+    organization is refused: tenant-scoped relations are NOT NULL.
     """
 
     class SameOrgValidatedForm(base_form_class):  # type: ignore[misc, valid-type]
@@ -469,7 +469,7 @@ def make_same_org_validated_form(
                     if hasattr(values, "_meta"):
                         # Single FK value.
                         related_org_id = getattr(values, "organization_id", None)
-                        if related_org_id is not None and related_org_id != org_id:
+                        if related_org_id != org_id:
                             raise ValidationError(
                                 {
                                     field_name: (
@@ -482,7 +482,7 @@ def make_same_org_validated_form(
                         # M2M iterable of values.
                         for val in values:
                             related_org_id = getattr(val, "organization_id", None)
-                            if related_org_id is not None and related_org_id != org_id:
+                            if related_org_id != org_id:
                                 raise ValidationError(
                                     {
                                         field_name: (
@@ -584,10 +584,9 @@ class OrgAwareAdminMixin:
                 value = getattr(obj, field_name, None)
                 if value is None:
                     continue
-                if hasattr(value, "organization_id"):
-                    related_org_id = value.organization_id
-                    if related_org_id is not None and related_org_id != org_id:
-                        raise ValidationError(
-                            f"{field_name} must belong to the same organization."
-                        )
+                related_org_id = getattr(value, "organization_id", None)
+                if related_org_id != org_id:
+                    raise ValidationError(
+                        f"{field_name} must belong to the same organization."
+                    )
         super().save_model(request, obj, form, change)  # type: ignore[misc]

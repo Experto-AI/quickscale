@@ -265,7 +265,14 @@ def rule_17_management_commands(corpus: Corpus) -> list[str]:
 
 
 def rule_23_service_surface(corpus: Corpus) -> list[str]:
-    """services.py declares __all__, and its public functions take a subject (rule 23)."""
+    """
+    Rule 23: the declared surface, one subject, and an explicit organization.
+
+    A public service takes keyword-only parameters after at most one leading
+    subject, and an ``organization`` parameter carries no default: the service
+    writes the organization its caller names instead of resolving the System
+    organization or the ambient context silently (enforcement gap 29).
+    """
     violations: list[str] = []
     exports: dict[str, set[str]] = {}
     for module in corpus.modules:

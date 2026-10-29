@@ -617,6 +617,26 @@ CASE_BUILDERS = {
             ),
         )
     ),
+    "organization_default": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            services=(
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(*, organization=None):\n"
+                "    return organization\n"
+            ),
+        )
+    ),
+    "organization_required": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            services=(
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(*, organization):\n"
+                "    return organization\n"
+            ),
+        )
+    ),
     "cross_import_hidden": lambda: _corpus(
         _golden_module("provider"),
         _with_files(
@@ -1030,6 +1050,15 @@ EXACT_FINDINGS = (
             "keyword-only parameters after at most one subject",
         ),
     ),
+    (
+        "organization_default",
+        "rule_23_service_surface",
+        (
+            "rule 23: demo: demo_query gives organization a default; "
+            "a service requires it explicitly",
+        ),
+    ),
+    ("organization_required", "rule_23_service_surface", ()),
     (
         "cross_import_hidden",
         "rule_23_service_surface",

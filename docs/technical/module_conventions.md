@@ -505,7 +505,7 @@ public surface is `services.py` (rule 4).
   cannot classify is refused), or with `min_org_role` beside its enforcing
   base (`OrgApiBaseView` for an API view); a page declares it with `LoginRequiredMixin`, orgs'
   `OrgRoleMixin` (which reads `min_org_role`), or a named public-read mixin
-  (`PublicSystemOrgReadMixin` or a module-owned `*PublicReadMixin` built on that pattern).
+  (`PublicSystemOrgReadMixin`, or a module-owned `*PublicReadMixin` that inherits it or declares `PublicReadPresentationMixin` for a page that reads no tenant-scoped row).
 - ✅ A view or API that manages a tenant model's data authorizes by org role through orgs'
   published `permissions` (`require_org_role`, `OrgRoleMixin`, and the DRF permission class
   `HasOrgRole(min_role)` beside them, delegating to the same `user_has_org_role` that
@@ -519,7 +519,7 @@ public surface is `services.py` (rule 4).
   to filter traffic, not to authorize, and is a listed exception.
 - ❌ `AllowAny` on a view whose code (inherited handlers included), or a module-owned helper
   its methods call, reads `request.user.is_authenticated` by hand.
-- ❌ A module page with no guard and no public-read declaration.
+- ❌ A module page with no guard and no public-read declaration, or a `*PublicReadMixin` that neither inherits `PublicSystemOrgReadMixin` nor declares `PublicReadPresentationMixin`.
 - ❌ `is_staff`, `is_superuser`, `IsAdminUser`, or a hand-written `redirect_to_login` in a module's
   views, outside the listed operator paths.
 
@@ -559,12 +559,12 @@ public surface is `services.py` (rule 4).
 - ✅ `services.py` defines `__all__`; exactly that list is the module's public service surface
   (rule 4).
 - ✅ A public service function takes keyword-only parameters after at most one leading subject
-  (`send_notification(*, template_key, recipients, context, about_users)` already does).
+  (`send_notification(*, template_key, recipients, context, about_users)` already does), and an `organization` parameter has no default: the service writes exactly the organization it is given, never a resolved System or ambient one.
 - ✅ A service that cannot do what it was asked raises the module's `<Module>Error` (rule 10);
   whether an optional module is usable is `is_enabled()`. Listed exception: analytics' capture is
   best-effort (a vendor outage must not fail a request) and says so in its docstring.
-- ❌ Returning `None` / `False` to signal a failure, or a cross-module import of a name not in
-  `__all__`.
+- ❌ Returning `None` / `False` to signal a failure, a cross-module import of a name not in
+  `__all__`, or an `organization` parameter with a default.
 
 **24. Small conventions.**
 - ✅ Every module ships `py.typed` (added to rule 11's file list).

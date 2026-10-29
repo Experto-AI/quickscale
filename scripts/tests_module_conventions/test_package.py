@@ -1156,6 +1156,34 @@ def test_service_surface_positional_parameter_control() -> None:
     )
 
 
+def test_service_surface_organization_requires_no_default_control() -> None:
+    """Rule 23: an organization parameter cannot be omitted by its caller."""
+    module = _golden_module()
+
+    def _services(source: str):
+        return _with_files(module, **{"services.py": f'__all__ = ["demo_query"]\n\n\n{source}'})
+
+    assert _violations(checker.rule_23_service_surface, module) == []
+    defaulted_keyword = _services(
+        "def demo_query(*, organization=None):\n    return organization\n"
+    )
+    assert any(
+        "gives organization a default" in violation
+        for violation in _violations(checker.rule_23_service_surface, defaulted_keyword)
+    )
+    defaulted_positional = _services(
+        "def demo_query(organization=None):\n    return organization\n"
+    )
+    assert any(
+        "gives organization a default" in violation
+        for violation in _violations(checker.rule_23_service_surface, defaulted_positional)
+    )
+    required_keyword = _services("def demo_query(*, organization):\n    return organization\n")
+    assert _violations(checker.rule_23_service_surface, required_keyword) == []
+    required_subject = _services("def demo_query(organization):\n    return organization\n")
+    assert _violations(checker.rule_23_service_surface, required_subject) == []
+
+
 def test_service_surface_cross_module_export_control() -> None:
     provider = _golden_module("provider")
     consumer = _golden_module("consumer")

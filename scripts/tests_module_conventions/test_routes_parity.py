@@ -158,6 +158,22 @@ def _rule19_corpus() -> Corpus:
     )
 
 
+def _rule19_public_read_corpus() -> Corpus:
+    module = _golden_module()
+    return _corpus(
+        _with_files(
+            module,
+            views=(
+                "from django.views.generic import TemplateView\n\n"
+                "class DemoPublicReadMixin:\n"
+                "    pass\n\n"
+                "class PublicPageView(DemoPublicReadMixin, TemplateView):\n"
+                "    pass\n"
+            ),
+        )
+    )
+
+
 _SEAM = (
     "{% load static quickscale_seam %}\n"
     "{% seam_module_flags %}\n"
@@ -203,6 +219,7 @@ CASE_BUILDERS = {
     "rule8": _rule8_corpus,
     "rule9": _rule9_corpus,
     "rule19": _rule19_corpus,
+    "rule19_public_read": _rule19_public_read_corpus,
     "rule31": _rule31_corpus,
     "rule32": _rule32_corpus,
     "collision": _collision_corpus,
@@ -272,6 +289,14 @@ EXACT_FINDINGS = (
             "rule 19: demo: views.py: view class PublicAPIView declares AllowAny and reads "
             "request.user.is_authenticated by hand",
             "rule 19: demo: views.py: view class MountPageView declares no authorization guard",
+        ),
+    ),
+    (
+        "rule19_public_read",
+        "rule_19_authorization",
+        (
+            "rule 19: demo: views.py: public-read mixin DemoPublicReadMixin neither "
+            "inherits PublicSystemOrgReadMixin nor declares PublicReadPresentationMixin",
         ),
     ),
     (

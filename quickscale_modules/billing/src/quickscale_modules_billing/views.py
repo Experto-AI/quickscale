@@ -60,6 +60,7 @@ from quickscale_modules_orgs.permissions import (
     OrgRoleMixin,
     resolve_request_org,
 )
+from quickscale_modules_orgs.public_context import PublicReadPresentationMixin
 
 
 def _request_organization(request: Request) -> Any:
@@ -426,12 +427,15 @@ class BillingDashboardView(LoginRequiredMixin, OrgRoleMixin, TemplateView):
         return context
 
 
-class BillingPublicReadMixin:
+class BillingPublicReadMixin(PublicReadPresentationMixin):
     """Explicit public-read declaration for billing's unauthenticated pages.
 
     The pricing page and the Stripe return pages are public by design; the
     named mixin states that guard decision on each view (Module Conventions
-    rule 19), so no page carries an unstated or hand-written guard.
+    rule 19), so no page carries an unstated or hand-written guard.  No page
+    reads a tenant-scoped row — the pricing page reads the global plan
+    catalog and the return pages build named URLs — so the mixin declares
+    orgs' no-DB presentation marker rather than priming tenant context.
     """
 
 

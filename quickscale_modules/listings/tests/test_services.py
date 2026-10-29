@@ -50,6 +50,19 @@ def test_publish_service_takes_one_subject_then_keyword_only() -> None:
     assert all(
         parameter.kind is inspect.Parameter.KEYWORD_ONLY for parameter in parameters[1:]
     )
+    organization = next(
+        parameter for parameter in parameters if parameter.name == "organization"
+    )
+    assert organization.kind is inspect.Parameter.KEYWORD_ONLY
+    assert organization.default is inspect.Parameter.empty
+
+
+def test_publish_service_requires_an_explicit_organization() -> None:
+    """Rule 23: omitting the organization is a TypeError, never a System-org write."""
+    with pytest.raises(TypeError):
+        services.create_published_listing_from_payload(
+            {"title": "Sea View Flat", "description": "Two rooms"}
+        )
 
 
 @pytest.mark.django_db

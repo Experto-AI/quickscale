@@ -57,6 +57,22 @@ def _service_functions(
     return functions
 
 
+def _organization_has_default(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Return whether a caller can omit the function's ``organization``."""
+    args = function.args
+    positional = list(args.posonlyargs) + list(args.args)
+    first_default = len(positional) - len(args.defaults)
+    for index, argument in enumerate(positional):
+        if argument.arg == "organization" and index >= first_default:
+            return True
+    return any(
+        argument.arg == "organization" and default is not None
+        for argument, default in zip(args.kwonlyargs, args.kw_defaults)
+    )
+
+
 def _module_bindings(tree: ast.Module) -> set[str]:
     """Names bound at module level: definitions, assignments, and imports."""
     bound: set[str] = set()
@@ -103,6 +119,11 @@ def _service_declarations(module: Module) -> tuple[list[str], set[str] | None]:
                 f"rule 23: {module.name}: {name} takes {positional} positional "
                 "parameter(s); services take keyword-only parameters after at most "
                 "one subject"
+            )
+        if _organization_has_default(function):
+            violations.append(
+                f"rule 23: {module.name}: {name} gives organization a default; "
+                "a service requires it explicitly"
             )
     return violations, set(declared)
 

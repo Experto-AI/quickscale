@@ -190,43 +190,43 @@ items:
     last_verified: "2026-10-29"
   - id: crm-null-org-legacy
     kind: rule-violation
-    status: open
+    status: fixed
     verification: confirmed
     aspect: G
     cost: [tax, ambiguity]
     population: tenant-models
     members_affected: [crm, orgs]
     rule_ref: "module_conventions rule 13; post-0006 CRM contract"
-    check: {kind: structural, state: proposed, model: contract-based}
+    check: {kind: review, state: review-only, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-29"
   - id: public-read-marker-mixins
     kind: rule-violation
-    status: open
+    status: fixed
     verification: confirmed
     aspect: E
     cost: [ambiguity]
     population: modules
     members_affected: [billing, forms]
     rule_ref: "module_conventions rule 19"
-    check: {kind: structural, state: proposed, model: contract-based}
+    check: {kind: structural, state: enforced, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-29"
   - id: listings-publish-org-fallback
     kind: drift
-    status: open
+    status: fixed
     verification: confirmed
     aspect: D
     cost: [ambiguity]
     population: modules
     members_affected: [listings]
     rule_ref: "decisions.md §Multi-org membership; §Fail-Hard Principle"
-    check: {kind: conformance, state: proposed, model: contract-based}
-    handoff: [tech]
+    check: {kind: conformance, state: enforced, model: contract-based}
+    handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-29"
   - id: stale-isolation-narratives
     kind: drift
     status: fixed
@@ -269,16 +269,16 @@ items:
 gaps:
   - {id: 21, rule: 17, state: closed, last_verified: "2026-10-25"}
   - {id: 22, rule: 37, state: closed, last_verified: "2026-10-26"}
-  - {id: 23, rule: 19, state: open, last_verified: "2026-10-24"}
+  - {id: 23, rule: 19, state: closed, last_verified: "2026-10-29"}
   - {id: 25, rule: 9, state: closed, last_verified: "2026-10-26"}
   - {id: 26, rule: 30, state: closed, last_verified: "2026-10-26"}
   - {id: 28, rule: 11, state: closed, last_verified: "2026-10-29"}
-  - {id: 29, rule: 23, state: open, last_verified: "2026-10-24"}
+  - {id: 29, rule: 23, state: closed, last_verified: "2026-10-29"}
 ```
 
 ## Summary table
 
-Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **2** (23 and 29; prior 21 closed 2026-10-25, 22 and 26 closed 2026-10-26, 25 closed 2026-10-26, 28 closed 2026-10-29). Cost classes overlap; the unique confirmed-item total is 3: defect 0 · collision 0 · ambiguity 3 · tax 1.
+Current confirmed open items: **0**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **0** (prior 21 closed 2026-10-25, 22 and 26 closed 2026-10-26, 25 closed 2026-10-26, 28 and 29 closed 2026-10-29, 23 closed 2026-10-29).
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
@@ -288,14 +288,14 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 | `billing-admin-org-filter` | drift | E / tenant-models | tax | 4/20 admin classes | fixed | fixed · high |
 | `forms-tenant-isolation-evidence` | drift | M / tenant-isolation-suites | tax | 1/6 suites | fixed | fixed · high |
 | `tenant-suite-default-role` | drift | M / test-settings | tax | 3/12 suites | fixed | fixed · medium-high |
-| `crm-null-org-legacy` | rule-violation | G / tenant-models | tax, ambiguity | CRM + orgs shared admin | open | confirmed · high |
-| `public-read-marker-mixins` | rule-violation | E / modules | ambiguity | 2/4 public-read mixins | open | confirmed · high |
-| `listings-publish-org-fallback` | drift | D / modules | ambiguity | 1/2 publish services | open | confirmed · high on code, medium on reachability |
+| `crm-null-org-legacy` | rule-violation | G / tenant-models | tax, ambiguity | CRM + orgs shared admin | fixed | fixed · high |
+| `public-read-marker-mixins` | rule-violation | E / modules | ambiguity | 2/4 public-read mixins | fixed | fixed · high |
+| `listings-publish-org-fallback` | drift | D / modules | ambiguity | 1/2 publish services | fixed | fixed · high |
 | `stale-isolation-narratives` | drift | O / tenant-isolation-suites | tax | 2/6 suites | fixed | fixed · high |
 | `orgs-invitation-notification-failure` | drift | F / modules | defect, ambiguity | 1/2 senders | fixed | fixed · high |
 | `core-cli-module-knowledge` | drift | C / modules | tax | 6/12 modules | accepted | confirmed · high |
 
-**Leading item.** `crm-null-org-legacy` now leads: the three slice-(a) evidence items closed on 2026-10-29 when rule 11 began requiring every tenant table, a non-operator isolation path, and a restricted default role. The remaining three open items are SA324 (b)'s write-service scope. The closed items remain in the tables as the audit’s record.
+**Leading item.** None: the six SA324 items closed on 2026-10-29. Slice (a) closed the three evidence items when rule 11 began requiring every tenant table, a non-operator isolation path, and a restricted default role; slice (b) closed the write-service items when rule 19 began requiring a declared public-read shape and rule 23 an explicit organization. The closed items remain in the tables as the audit’s record.
 
 ## Aspect sections
 
@@ -344,12 +344,12 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 | `services.py` with `__all__` and `is_enabled` | 12/12 | public surface is the declared list; keyword-only functions after at most one subject | `*/services.py`; harness rules 4, 23 | present |
 | Error base | 10 modules with an error surface | `<Module>Error` base; analytics/forms no errors; backups re-exports core `BackupError` | `*/exceptions.py`; `core/runtime` | present |
 | Write service requires explicit organization | blog | `create_published_post_from_payload(*, author, organization)` | `blog/services.py:362-367` | present |
-| Write service optional organization with fallback | listings | `organization: Any = None`; contextvar then `get_system_org()` | `listings/services.py:71-80,107-112` | divergent |
+| Write service requires explicit organization | blog, listings | blog `create_published_post_from_payload(*, author, organization)`; listings `create_published_listing_from_payload(payload, *, organization)` with no fallback | `blog/services.py:362-367`; `listings/services.py:68-82` | present |
 | Public validation error without status mapping | notifications | `NotificationValidationError` / `NotificationTemplateError` in `__all__`; no `status_code`/`default_code` (pending candidate) | `notifications/exceptions.py:45-51`; `services.py:68-69` | unknown |
 
 **Already consistent (keep):** all 12 service surfaces define `__all__`; public functions take keyword-only parameters after at most one leading subject; no inspected public service returns `None`/`False` to signal failure. Billing’s public exception subclasses and the notifications webhook/configuration classes declare `status_code`/`default_code`; blog/listings validation errors are caught by their views and mapped to 400. The notifications validation/template subclasses do not, which is the pending candidate above.
 
-**Items:** `listings-publish-org-fallback`. Pending candidate: `notifications-validation-status`.
+**Items:** none open — `listings-publish-org-fallback` fixed 2026-10-29. Pending candidate: `notifications-validation-status`.
 
 ### E/H — Authorization, API shape, public read, admin
 
@@ -358,7 +358,7 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 | Variant | Members | Effective value | Evidence | State |
 |---|---|---|---|---|
 | Public-read mixin primes tenant context | blog, listings | `BlogPublicReadMixin(PublicSystemOrgReadMixin)`, `ListingsPublicReadMixin(PublicSystemOrgReadMixin)` | `blog/views.py:240`; `listings/views.py:103` | present |
-| Empty public-read marker | billing (6 pages), forms (1 page) | empty class body; no context priming | `billing/views.py:427-434`; `forms/views.py:622-624` | divergent |
+| No-DB public-read marker | billing (6 pages), forms (1 page) | `BillingPublicReadMixin(PublicReadPresentationMixin)` and `FormPagePublicReadMixin(PublicReadPresentationMixin)` declare the no-tenant-read shape | `billing/views.py:430-440`; `forms/views.py:678-685`; `orgs/public_context.py` | fixed |
 | Tenant admin uses `TenantModelAdmin` | 20/20 | all tenant-model admins | §G table; harness rule 13 | present |
 | Tenant admin exposes organization list filter | 20/20 | every tenant admin lists it; billing's four since SA314 (b) | `billing/admin.py:47-122`; `organizations.md:635` | present |
 | Tenant admin organization immutable on change | billing read-only; blog/crm shared mixin; forms local override; listings/social editable leaves | see §9 | `orgs/admin.py:425-560`; `forms/admin.py:71-78,170-177` | consistent by design, trigger noted |
@@ -368,7 +368,7 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 
 **Already consistent (keep):** every module page/API declares a guard; `is_staff` appears only in analytics’ traffic filter and orgs’ operator paths; org-role checks go through `user_has_org_role`/`HasOrgRole`; webhooks are signature-verified and return the shared accepted/duplicate body. The webhook empty throttle is consistent by design (rule 26), not the divergence the technical hand-off suspected.
 
-**Items:** `public-read-marker-mixins`; `billing-feature-gate` and `billing-admin-org-filter` are fixed (§4–5).
+**Items:** none open — `public-read-marker-mixins` fixed 2026-10-29; `billing-feature-gate` and `billing-admin-org-filter` are fixed (§4–5).
 
 ### G — Data model basics and tenant contract
 
@@ -378,16 +378,16 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 |---|---|---|---|---|
 | `TenantModel` inheritance | 22/22 | direct or through `AbstractListing`/`BaseSocialItem`; `Meta` inherits base | `*/models.py`; harness rule 13 | present |
 | `organization` NOT NULL `PROTECT` | 22/22 | `tenant_org_fk` null=False, PROTECT | `orgs/_tenancy_types.py:121-155` | present |
-| Dead NULL-organization constraint | CRM Tag, Stage (2 constraints) | `condition=Q(organization__isnull=True)` can never match | `crm/models.py:43,156`; tests `test_models.py:55,206` | divergent |
-| NULL-organization compatibility branch | CRM serializers; orgs shared admin form | accepts related rows with `organization_id=None` | `crm/serializers.py:64,190,357,446,624`; `orgs/admin.py:441-442` | divergent |
+| Dead NULL-organization constraint | CRM Tag, Stage (2 constraints) | removed by the forward `0002` migration; the organization-scoped constraints remain | `crm/models.py`; `crm/migrations/0002_remove_crm_null_org_constraints.py` | fixed |
+| NULL-organization compatibility branch | CRM serializers; orgs shared admin form | removed: a related row without the same organization is refused | `crm/serializers.py:60-72`; `orgs/admin.py:432-498,572-593` | fixed |
 | User FK `SET_NULL` with listed CASCADE exceptions | 10 modules | 3 allowlisted CASCADE; no PROTECT | `orgs/tests/test_user_fk_conformance.py`; `decisions.md:693` | present |
 | Constraint/index names | 28 constraints / 6 indexes | stemmed names; abstract `Index` exception | harness rule 25; `*/models.py` | present |
 | `__str__` / `Meta.ordering` / choices | 12/12 | present or inherited; TextChoices used | harness rule 14 | present |
 | Primary keys / `db_table` / `app_label` | 12/12 | BigAutoField default; no `db_table`/`app_label`; orgs UUID exception | harness rules 2, 14 | present |
 
-**Already consistent (keep):** user-FK on_delete and tenant markers. The CRM null-bucket constraints are dead, not a live data path; the effective model is NOT NULL.
+**Already consistent (keep):** user-FK on_delete and tenant markers. The CRM NULL-owner constraints and compatibility branches are removed; tenant-scoped relations are NOT NULL with no compatibility branch.
 
-**Items:** `crm-null-org-legacy`.
+**Items:** none open — `crm-null-org-legacy` fixed 2026-10-29.
 
 ### J — Commands and jobs
 
@@ -617,7 +617,7 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 
 ### 8. `crm-null-org-legacy` — a NULL-organization state the model cannot hold
 
-- **ID / kind / status:** `crm-null-org-legacy` · `rule-violation` · `open`.
+- **ID / kind / status:** `crm-null-org-legacy` · `rule-violation` · `fixed`.
 - **Aspect / population / context:** G (secondary B) · `tenant-models` · CRM models/serializers and orgs’ shared admin form.
 - **Table / evidence:** §G.1 rows 3–4. `TenantModel.organization` is `tenant_org_fk` with `null=False` (`orgs/_tenancy_types.py:121-155`). CRM `Tag` and `Stage` still declare partial unique constraints with `condition=Q(organization__isnull=True)` (`crm/models.py:43,156`) and tests assert those names (`crm/tests/test_models.py:55,206`). CRM serializers accept related rows whose `organization_id is None` as “legacy/solo compatibility” (`crm/serializers.py:64,190,357,446,624`), and orgs’ shared `make_same_org_validated_form` accepts NULL-org related values (`orgs/admin.py:441-442`). CRM tests state the post-0006 contract: NULL-owned stages no longer exist and are not accepted (`test_services.py:108`, `test_serializers.py:1772`).
 - **Difference and cost:** **tax / ambiguity.** The NULL bucket can never match; the dead constraints and branches teach authors a compatibility rule that the schema forbids. The shared admin helper is used by blog and CRM, so the dead acceptance is in a foundation. No live defect found: the database refuses the state.
@@ -627,10 +627,11 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 - **Enforcement:** proposed AST/constraint check for `organization__isnull` on a NOT NULL tenant field and for `organization_id is None` acceptance in tenant serializers/forms; control case rejects the current CRM pattern. Evidence state: `proposed`.
 - **Migration / acceptance:** remove constraints/branches/tests; no data migration (state cannot exist); rollback by reverting code. Acceptance: no NULL-org branch/constraint remains outside a documented exception. Responsibility: CRM + orgs owners.
 - **Confidence / hand-off:** high · none.
+- **Resolution (2026-10-29, SA324 (b)):** the NULL-owner constraints are removed from the CRM models with a forward `0002` migration, the serializers compare the related organization directly, orgs' shared admin helper refuses a related value without an organization, and the three tests that pinned the dead state are removed or inverted. Proposal 8 is adopted in `decisions.md` §Multi-tenant SaaS Architecture; the constraint check remains a review rule because the roadmap's detector scope is rules 19 and 23.
 
 ### 10. `public-read-marker-mixins` — two “public read” mixins do not prime public context
 
-- **ID / kind / status:** `public-read-marker-mixins` · `rule-violation` · `open`.
+- **ID / kind / status:** `public-read-marker-mixins` · `rule-violation` · `fixed`.
 - **Aspect / population / context:** E · `modules` · 4 public-read mixins; billing 6 pages, forms 1 page; blog/listings real mixins.
 - **Table / evidence:** §E/H.1 rows 1–2. `BlogPublicReadMixin(PublicSystemOrgReadMixin)` and `ListingsPublicReadMixin(PublicSystemOrgReadMixin)` override `get_public_org`; `BillingPublicReadMixin` (`billing/views.py:427-434`) and `FormPagePublicReadMixin` (`forms/views.py:622-624`) are empty class bodies. The forms page only renders a React mount div today; the billing pages read global `Plan` rows and `request.user`.
 - **Difference and cost:** **ambiguity.** The name promises the public-read context pattern (rule 19) but the empty mixin does not wrap `dispatch()` in `org_scope`, so a future DB read added to the page would be unscoped instead of fail-closed. The harness accepts any `*PublicReadMixin` by name (`_routes_authorization.py:56-62`), so it cannot tell a marker from an implementation.
@@ -640,10 +641,11 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 - **Enforcement:** proposed rule 19 check for the mixin body/base or a documented no-DB declaration; control cases for both. Evidence state: `proposed`.
 - **Migration / acceptance:** change billing/forms mixins; no data migration; rollback trivial. Acceptance: a public page with a tenant query runs under System-org context. Responsibility: billing/forms owners.
 - **Confidence / hand-off:** high · none.
+- **Resolution (2026-10-29, SA324 (b)):** billing's and forms' mixins inherit orgs' `PublicReadPresentationMixin`, each stating that its page reads no tenant-scoped row; blog and listings keep `PublicSystemOrgReadMixin`. Rule 19 now resolves every `*PublicReadMixin` to one of the two shapes and refuses an empty one, with passing controls for both shapes. Proposal 10 is adopted in `decisions.md`.
 
 ### 11. `listings-publish-org-fallback` — the publish service defaults to the System org
 
-- **ID / kind / status:** `listings-publish-org-fallback` · `drift` · `open`.
+- **ID / kind / status:** `listings-publish-org-fallback` · `drift` · `fixed`.
 - **Aspect / population / context:** D (secondary B) · `modules` · 2 publish services.
 - **Table / evidence:** §D.1 rows 3–4. Blog’s service requires `organization` keyword-only (`blog/services.py:362-367`). Listings’ service declares `organization: Any = None` (`listings/services.py:71-80`) and, when omitted, resolves the ContextVar or `Organization.objects.get_system_org()` (`:107-112`); the view passes `getattr(request, "org", None)` (`listings/views.py:75`). CRM and billing write paths refuse a missing org (`crm/views.py:44-58`; `billing/views.py:65-82`).
 - **Difference and cost:** **ambiguity.** A project caller that omits `organization` silently publishes into the System org, which owns public content; a superuser or direct service call can reach this path. The decisions say the server session is the sole org authority and the fail-hard principle forbids silent fallback (`decisions.md:153-159,584-598`). The blog service already models the explicit contract.
@@ -653,6 +655,7 @@ Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-kno
 - **Enforcement:** proposed signature/AST check and a control call without organization; evidence state `proposed`.
 - **Migration / acceptance:** change the signature and view; update callers/tests; no data migration. Acceptance: omitting the organization raises `TypeError` or a module validation error, not a System-org write. Responsibility: listings owner.
 - **Confidence / hand-off:** high on code divergence, medium on reachability (the HTTP middleware usually supplies an org) · tech.
+- **Resolution (2026-10-29, SA324 (b)):** `create_published_listing_from_payload()` takes `organization` as a required keyword-only argument and the System-org/ContextVar fallback is gone; the view passes `request.org` and refuses a request without one instead of resolving an org. Rule 23 refuses a service `organization` parameter that carries a default, with both controls. Proposal 11 is adopted in `decisions.md`.
 
 ### 13. `stale-isolation-narratives` — two isolation suites describe a pre-fix world
 
@@ -708,13 +711,13 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Coherence proposal 7 — Tenant suite defaults are restricted (adopted).** Every suite for a module with tenant models defaults its database connection to the restricted role; an environment variable may override, but the default never bypasses RLS.
 
-**Coherence proposal 8 — No NULL-tenant compatibility.** Tenant-scoped relations are NOT NULL. A compatibility branch for a NULL organization is removed with its constraint and test, or backed by a named legacy-data decision and a reachable migration.
+**Coherence proposal 8 — No NULL-tenant compatibility (adopted).** Tenant-scoped relations are NOT NULL. A compatibility branch for a NULL organization is removed with its constraint and test, or backed by a named legacy-data decision and a reachable migration.
 
 **Coherence proposal 9 — README Extending standard (adopted).** Every module README’s Extending section answers the five standard questions (What QuickScale owns, What the project owns, Update-safe customizations, Structured extension points, Upgrade expectations) as mandatory level-three subsections; managed files and update expectations are named.
 
-**Coherence proposal 10 — Public-read mixins prime context.** A `*PublicReadMixin` either inherits the orgs public-context mixin or is documented as a no-DB presentation marker; a page that reads tenant data uses the priming mixin.
+**Coherence proposal 10 — Public-read mixins prime context (adopted).** A `*PublicReadMixin` either inherits the orgs public-context mixin or is documented as a no-DB presentation marker; a page that reads tenant data uses the priming mixin.
 
-**Coherence proposal 11 — Write services require an organization.** A write service requires an explicit organization (or an explicit public-context marker); it never selects the System org silently.
+**Coherence proposal 11 — Write services require an organization (adopted).** A write service requires an explicit organization (or an explicit public-context marker); it never selects the System org silently.
 
 **Coherence proposal 12 — One default home (adopted).** A manifest default has one home; code constants either derive from the manifest or are removed.
 
@@ -730,7 +733,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Gap 22 (closed 2026-10-26) — rule 37’s template scan sees enumerations, not single-name branches.** `_template_module_literals` still counts a bracket/pipeline list, and the scan now also reads each Jinja tag for a quoted module name and each template's `QUICKSCALE_<MODULE>_*`, `quickscale_modules_<module>`, `quickscale_<module>_*`, and `modules/<module>/` tokens (`_identity_module_lists.py`). The theme's declared module surface and the generated isolation test's dormant runtime gate are the recorded exceptions. Controls: a fixture template with a single module branch or prefixed constant fails; the derived discovery template and non-module core tokens pass. State `closed`; linked item 1.
 
-**Gap 23 — rule 19 accepts a public-read mixin by name only.** `PUBLIC_READ_MIXIN_SUFFIX` and `_is_sanctioned_guard_name` accept any `*PublicReadMixin` (`_routes_authorization.py:31-62`); there is no check that it subclasses `PublicSystemOrgReadMixin` or primes context. Control: an empty mixin should fail; the blog/listings mixin should pass. State `observed-in-source`; linked item 10.
+**Gap 23 (closed 2026-10-29) — rule 19 accepted a public-read mixin by name only.** `PUBLIC_READ_MIXIN_SUFFIX` and `_is_sanctioned_guard_name` accept any `*PublicReadMixin` (`_routes_authorization.py:31-62`); there is no check that it subclasses `PublicSystemOrgReadMixin` or primes context. Rule 19 now resolves every module-owned `*PublicReadMixin` to `PublicSystemOrgReadMixin` ancestry or orgs' `PublicReadPresentationMixin` and reports a mixin that declares neither. Controls: an empty mixin fails, a priming mixin passes, a wrapped priming mixin passes, and a presentation marker passes. State `closed` (2026-10-29); linked item 10.
 
 **Gap 25 (closed 2026-10-26) — rule 9 does not scan published gate decorators.** The harness scanned module views and module-owned helpers; `require_org_feature` was a decorator returning `HttpResponse`, not a view, so the bare 402 was invisible. Rule 9's detector now scans gate decorator factories and rejects a bare error response; a shaped 402 is a raise of a declared module error, and orgs' HTML-only `require_org_role` is the recorded exception. Controls pass: a shaped gate and a 401 anonymous gate are accepted, a bare 402/403 is refused, and a recorded HTML-only gate is skipped. Linked item 4.
 
@@ -738,7 +741,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Gap 28 (closed 2026-10-29) — rule 11 checks file presence, not isolation evidence.** It did not require every tenant table in the RLS boundary, a regular-member view test, or a restricted default role in `tests/settings.py`. Rule 11 now derives each concrete tenant model's table and requires a `SELECT ... FROM` query against it, a non-operator isolation test, and the restricted default role; the control rejects a one-table/operator-only/unrestricted suite. State `closed`; linked items 6–7.
 
-**Gap 29 — rule 23/3 does not require an explicit organization on a write service.** Listings’ optional `organization` and System-org fallback pass the signature and service-surface checks. Control: a write service with a defaulted organization fails; a keyword-only required organization passes. State `observed-in-source`; linked item 11.
+**Gap 29 (closed 2026-10-29) — rule 23/3 did not require an explicit organization on a write service.** Listings’ optional `organization` and System-org fallback pass the signature and service-surface checks. Rule 23 now refuses an exported service `organization` parameter that carries a default, positional or keyword-only. Controls: a defaulted keyword-only organization fails, a defaulted positional organization fails, a required keyword-only organization passes, and a required organization subject passes. State `closed` (2026-10-29); linked item 11.
 
 ## Consistent by design
 
@@ -755,7 +758,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 **To the technical audit (live defects or live-defect risk).**
 
 - `orgs-invitation-notification-failure` — a committed invitation plus an unhandled post-commit sender error; source links in item 15. Resolved 2026-10-27; retained as the hand-off record.
-- `listings-publish-org-fallback` — a supported service call can write public content into the System org.
+- `listings-publish-org-fallback` — a supported service call can write public content into the System org. Resolved 2026-10-29; retained as the hand-off record.
 - Pending candidate `notifications-validation-status` — public `NotificationValidationError` has no `status_code`/`default_code`; no confirmed shipped API lets it escape except the orgs post-commit path. Not promoted without a reachable API trace.
 
 **To the architectural audit (structural roots).**
@@ -774,7 +777,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Catalogue:** no new aspect letter. The pass used A–V; the only cross-cutting addition is a generated-output-authority clause under L/O, captured as proposal 1. No new aspect is warranted without a population that the current catalogue cannot express.
 
-**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) a sender’s post-commit failure follows item 15’s recorded best-effort policy; Settled by SA324 (a): (e) the new module's test settings default restricted and rule 11 requires the RLS proof to cover every tenant table. Each is a forced decision, not a copy-source choice.
+**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (d) a sender’s post-commit failure follows item 15’s recorded best-effort policy; Settled by SA324 (b): (c) a new public page that reads tenant data uses the priming mixin, while one that reads none declares `PublicReadPresentationMixin`, and (f) a write service takes an explicit organization and never resolves the System org. Settled by SA324 (a): (e) the new module's test settings default restricted and rule 11 requires the RLS proof to cover every tenant table. Each is a forced decision, not a copy-source choice.
 
 **Residual work and limits.**
 
@@ -850,3 +853,4 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 - 2026-10-26 — `billing-feature-gate` and `billing-admin-org-filter`: fixed by SA314 (b); proposals 4 and 5 adopted, gap 25 closed with its gate controls.
 - 2026-10-27 — `orgs-invitation-notification-failure`: **resolved** by SA315 (a); the best-effort policy is recorded in decisions.md §Notifications Contract, the sender catches only `NotificationsError` and surfaces the failure on both invite surfaces, and tests cover the HTML and JSON outcomes plus a non-notifications error.
 - 2026-10-29 — `forms-tenant-isolation-evidence`, `tenant-suite-default-role` and `stale-isolation-narratives`: **resolved** by SA324 (a); rule 11 now requires every tenant table, a non-operator isolation path and the restricted default role, gap 28 is closed, and forms/listings/social default to `quickscale_test_role`.
+- 2026-10-29 — `crm-null-org-legacy`, `public-read-marker-mixins` and `listings-publish-org-fallback`: **resolved** by SA324 (b); proposals 8, 10 and 11 are adopted in `decisions.md`, rule 19 requires a declared public-read shape and rule 23 an explicit organization, gaps 23 and 29 are closed, CRM's NULL-owner constraints and branches are removed with a forward `0002`, and no confirmed item or enforcement gap remains open.

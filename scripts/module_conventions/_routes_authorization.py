@@ -36,6 +36,11 @@ GUARD_MIXIN_NAMES: frozenset[str] = frozenset({"LoginRequiredMixin", "OrgRoleMix
 PUBLIC_READ_MIXIN_NAMES: frozenset[str] = frozenset({"PublicSystemOrgReadMixin"})
 PUBLIC_READ_MIXIN_SUFFIX = "PublicReadMixin"
 
+#: Rule 19's second public-read shape: orgs' marker for a public page that
+#: reads no tenant-scoped row at all.  A ``*PublicReadMixin`` must resolve to
+#: one of the two declared shapes, so an empty mixin cannot pass by its name.
+PUBLIC_READ_PRESENTATION_MIXIN_NAME = "PublicReadPresentationMixin"
+
 #: Rule 19's enforcers of a ``min_org_role`` attribute: the attribute is a
 #: guard only beside a base that reads it.
 ROLE_ENFORCING_BASE_NAMES: frozenset[str] = frozenset({"OrgApiBaseView", "OrgRoleMixin"})
@@ -533,6 +538,61 @@ def _token_violations(
     return violations
 
 
+def _inherits_public_read_shape(
+    node: ast.ClassDef,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+    seen: set[str],
+) -> bool:
+    """Return whether a class resolves to a sanctioned public-read shape."""
+    for base in node.bases:
+        base_id = _base_name(base)
+        if base_id is None:
+            continue
+        if base_id in PUBLIC_READ_MIXIN_NAMES:
+            return True
+        if base_id == PUBLIC_READ_PRESENTATION_MIXIN_NAME:
+            return True
+        if base_id in classes and base_id not in seen:
+            seen.add(base_id)
+            if _inherits_public_read_shape(classes[base_id][0], classes, seen):
+                return True
+    return False
+
+
+def _public_read_mixin_violations(
+    module: Module,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+) -> list[str]:
+    """
+    Return rule 19's undeclared ``*PublicReadMixin`` findings.
+
+    A module-owned ``*PublicReadMixin`` declares one of two shapes: it
+    inherits ``PublicSystemOrgReadMixin``, so the page runs under the public
+    organization's context, or it inherits orgs'
+    ``PublicReadPresentationMixin``, so the page reads no tenant-scoped row.
+    A mixin that declares neither fails closed rather than passing by its
+    name alone (enforcement gap 23).
+    """
+    violations: list[str] = []
+    for rel, text in module.files.items():
+        if not rel.endswith(".py") or rel.startswith("migrations/"):
+            continue
+        tree = _parse(text)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            if not node.name.endswith(PUBLIC_READ_MIXIN_SUFFIX):
+                continue
+            if _inherits_public_read_shape(node, classes, {node.name}):
+                continue
+            violations.append(
+                f"rule 19: {module.name}: {rel}: public-read mixin {node.name} "
+                "neither inherits PublicSystemOrgReadMixin nor declares "
+                "PublicReadPresentationMixin"
+            )
+    return violations
+
+
 def _guard_violations(module: Module) -> list[str]:
     """
     Return rule 19's guard violations for one module.
@@ -580,4 +640,5 @@ def _guard_violations(module: Module) -> list[str]:
                         imports_by_rel,
                     )
                 )
+    violations.extend(_public_read_mixin_violations(module, classes))
     return violations

@@ -152,6 +152,32 @@ class TestPublishListingApi:
         assert response.status_code == 403
         assert _error(response)["code"] == "permission_denied"
 
+    def test_publish_listing_api_request_without_organization_context_is_refused(
+        self, db
+    ):
+        """A caller the permission class admits without an org fails closed."""
+        from rest_framework.exceptions import PermissionDenied
+        from rest_framework.parsers import JSONParser
+        from rest_framework.request import Request
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_listings.views import ListingPublishAPIView
+
+        request = APIRequestFactory().post(
+            "/listings/api/publish/",
+            {"title": "Listing", "description": "Body"},
+            format="json",
+        )
+        request.user = get_user_model().objects.create_user(
+            username="operator",
+            email="operator@example.com",
+            password="operatorpass123",
+            is_staff=True,
+        )
+
+        with pytest.raises(PermissionDenied):
+            ListingPublishAPIView().post(Request(request, parsers=[JSONParser()]))
+
     def test_publish_listing_api_member_role_creates_published_listing(
         self, client, member_user
     ):

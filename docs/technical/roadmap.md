@@ -12,7 +12,7 @@ production runs 0.89.0, and 0.89.0 is on PyPI (see
 [Deferred — property portal](#deferred-property-portal)).
 
 **Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
-database. All hardening tickets (SA315, SA320, SA321, SA323, SA324) land,
+database. All hardening tickets (SA315, SA320, SA321, SA323, SA324) have landed,
 the tag is re-cut, `bap-web` adopts it, SA191d (re-proof) is the release's final validation on
 `develop`, SA191d (production) ships the same tag, and the operator's Phases 5–6 sealing and PyPI
 publication follow ([publish_procedure.md](publish_procedure.md)).
@@ -43,8 +43,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA324 | Required |
-| SA324 | Make tenant contract evidence and write services coherent | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -76,11 +75,12 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (SA321 closed; SA153 deferred) | no: SA153 deferred | no: SA153 deferred | yes: — |
-| 2 | SA324 | yes | yes | yes: SA324 |
+| 2 | SA191d (re-proof) | no: re-cut tag and operator gates | no: SA191d (production) | yes: — |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
-**Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
-then the operator's `develop` push, production-switch, publication and retirement approvals. Track 3:
+**Clearing blockers.** Track 1: none. Track 2: all hardening is closed; SA191d waits for the
+re-cut tag, then the operator's `develop` push, production-switch, publication and retirement
+approvals. Track 3:
 SA191d (production) clears SA277.
 
 ### Ownership and merge coordination
@@ -171,22 +171,7 @@ conformance check on `properties.PropertyAgent` and siblings.
 
 - [x] **SA323 — Harden module upload, form, export and notification paths.**
 
-- [ ] **SA324 — Make tenant contract evidence and write services coherent.**
-
-  Closes coherence `forms-tenant-isolation-evidence`, `tenant-suite-default-role`,
-  `stale-isolation-narratives`, `listings-publish-org-fallback`, `public-read-marker-mixins`, and
-  `crm-null-org-legacy` (proposals 6–8, 10–11, 13; gaps 23, 28–29). Q4 default: every tenant suite
-  defaults to the restricted role; an environment variable may override.
-
-  **Slices:**
-  - [x] (a) Evidence: forms' RLS boundary covers all four tenant tables with matching,
-    non-matching and unset context plus a regular-member view; the three suites default
-    restricted; the two narratives describe the current contract; the rule 11 detector requires
-    all three (Tier 2-full).
-  - [ ] (b) Services: listings' publish service requires an explicit organization; both
-    public-read mixins prime public context or are documented no-DB markers; CRM's NULL-organization
-    branch is removed with its test; detectors for rules 19 and 23 carry their controls
-    (Tier 2-full).
+- [x] **SA324 — Make tenant contract evidence and write services coherent.**
 
 ### Track 3 — upgrade path, generator state and backups
 

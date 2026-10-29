@@ -1389,7 +1389,7 @@ def test_authorization_dynamic_permission_controls() -> None:
             checker.rule_19_authorization, computed_override_with_inherited_declaration
         )
     )
-    public_read_mixin = _with_files(
+    undeclared_public_read_mixin = _with_files(
         module,
         views=(
             "from django.views.generic import TemplateView\n\n"
@@ -1399,7 +1399,48 @@ def test_authorization_dynamic_permission_controls() -> None:
             "    pass\n"
         ),
     )
-    assert _violations(checker.rule_19_authorization, public_read_mixin) == []
+    assert any(
+        "public-read mixin DemoPublicReadMixin neither inherits" in violation
+        for violation in _violations(checker.rule_19_authorization, undeclared_public_read_mixin)
+    )
+    priming_public_read_mixin = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n"
+            "from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin\n\n"
+            "class DemoPublicReadMixin(PublicSystemOrgReadMixin):\n"
+            "    pass\n\n"
+            "class PublicPageView(DemoPublicReadMixin, TemplateView):\n"
+            "    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, priming_public_read_mixin) == []
+    wrapped_public_read_mixin = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n"
+            "from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin\n\n"
+            "class DemoPublicReadBase(PublicSystemOrgReadMixin):\n"
+            "    pass\n\n"
+            "class DemoPublicReadMixin(DemoPublicReadBase):\n"
+            "    pass\n\n"
+            "class PublicPageView(DemoPublicReadMixin, TemplateView):\n"
+            "    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, wrapped_public_read_mixin) == []
+    presentation_public_read_mixin = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n"
+            "from quickscale_modules_orgs.public_context import PublicReadPresentationMixin\n\n"
+            "class DemoPublicReadMixin(PublicReadPresentationMixin):\n"
+            "    pass\n\n"
+            "class PublicPageView(DemoPublicReadMixin, TemplateView):\n"
+            "    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, presentation_public_read_mixin) == []
     public_catalog = _with_files(
         module,
         views=(

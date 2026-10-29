@@ -19,6 +19,7 @@ from scripts.module_conventions._routes_authorization import (
     GUARD_MIXIN_NAMES,
     PUBLIC_READ_MIXIN_NAMES,
     PUBLIC_READ_MIXIN_SUFFIX,
+    PUBLIC_READ_PRESENTATION_MIXIN_NAME,
     ROLE_ENFORCING_BASE_NAMES,
     _allow_any_hand_check_violations,
     _class_declares_guard,
@@ -28,10 +29,12 @@ from scripts.module_conventions._routes_authorization import (
     _effective_permission_names,
     _get_permissions_binding,
     _guard_violations,
+    _inherits_public_read_shape,
     _inherits_role_enforcement,
     _is_sanctioned_guard_name,
     _module_helper_index,
     _permission_expression_name,
+    _public_read_mixin_violations,
     _reads_user_is_authenticated,
     _sibling_rel,
     _token_violations,
@@ -119,6 +122,7 @@ __all__ = (
     "OPERATOR_TOKENS",
     "PUBLIC_READ_MIXIN_NAMES",
     "PUBLIC_READ_MIXIN_SUFFIX",
+    "PUBLIC_READ_PRESENTATION_MIXIN_NAME",
     "RATE_LITERAL",
     "ROLE_ENFORCING_BASE_NAMES",
     "RULE_7_ALLOWED_TEMPLATE_MOUNTS",
@@ -145,6 +149,7 @@ __all__ = (
     "_effective_methods",
     "_effective_permission_names",
     "_get_permissions_binding",
+    "_inherits_public_read_shape",
     "_inherits_role_enforcement",
     "_is_admin_model_override",
     "_is_sanctioned_guard_name",
@@ -155,6 +160,7 @@ __all__ = (
     "_pagination_violations",
     "_paginator_classifications",
     "_permission_expression_name",
+    "_public_read_mixin_violations",
     "_reads_user_is_authenticated",
     "_rendered_managed_json_violations",
     "_resolves_to_core_list_pagination",
@@ -304,7 +310,11 @@ def rule_19_authorization(corpus: Corpus) -> list[str]:
     enforcing base (``OrgApiBaseView`` or ``OrgRoleMixin``),
     ``LoginRequiredMixin``/``OrgRoleMixin``, a named public-read mixin
     (``PublicSystemOrgReadMixin`` or a ``*PublicReadMixin``), or inheritance
-    of one of those from a class in the same module.  DRF permission
+    of one of those from a class in the same module.  A module-owned
+    ``*PublicReadMixin`` must itself declare one of the two sanctioned shapes:
+    ``PublicSystemOrgReadMixin`` ancestry, or orgs'
+    ``PublicReadPresentationMixin`` for a page that reads no tenant-scoped
+    row; an empty mixin does not pass by its name alone.  DRF permission
     declarations count only where they enforce — on a DRF view or through
     its ancestry, never on a plain Django page — and permission import
     aliases resolve in the declaring class's file.  Third, an ``AllowAny``

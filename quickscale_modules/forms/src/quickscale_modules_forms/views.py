@@ -60,6 +60,7 @@ from quickscale_modules_orgs.current_org import (
 )
 from quickscale_modules_orgs.models import OrgRole
 from quickscale_modules_orgs.permissions import HasOrgRole, is_platform_operator
+from quickscale_modules_orgs.public_context import PublicReadPresentationMixin
 
 logger = logging.getLogger(__name__)
 
@@ -674,8 +675,13 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
             yield _flush()
 
 
-class FormPagePublicReadMixin:
-    """Explicit public-read declaration for the public form page (rule 19)."""
+class FormPagePublicReadMixin(PublicReadPresentationMixin):
+    """Explicit public-read declaration for the public form page (rule 19).
+
+    The page renders the React mount point from the URL slug and reads no
+    tenant-scoped row, so the mixin declares orgs' no-DB presentation marker
+    rather than priming tenant context.
+    """
 
 
 class FormPageView(FormPagePublicReadMixin, TemplateView):

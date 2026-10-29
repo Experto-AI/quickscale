@@ -32,7 +32,8 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 Module-to-module use goes through `services.py` (Module Conventions rule 4):
 `create_published_listing_from_payload()` and the `ListingsError` base are its declared
 `__all__` surface, and every argument after the leading payload subject is keyword-only
-(rule 23).
+(rule 23). `organization` is required and has no default: the service writes exactly the
+organization it is given and never resolves the ambient context or the System organization.
 
 ### AbstractListing model
 
@@ -62,10 +63,13 @@ carries no renderer or parser pin. The publishing write is throttled by its
 shape `{"error": {"code", "message", "fields"}}`, produced by
 `quickscale_core.runtime.conventions.exception_handler` — the handler `quickscale apply`
 installs in `REST_FRAMEWORK` (a manual installation must install it the same way; see
-Operations). The organization is ambient: it comes from `request.org` set by orgs'
-`TenantMiddleware`; a session naming an organization the user no longer belongs to is refused
-by that middleware before the view runs. Requests are validated before creation and answer with
-a validation error, or a conflict error when the slug or a unique field already exists.
+Operations). The view publishes for `request.org`, the organization orgs' `TenantMiddleware`
+resolves; a session naming an organization the user no longer belongs to is refused by that
+middleware before the view runs, and a request that reaches the view without an organization
+is refused with `permission_denied` instead of falling back to the System organization. The
+service takes that organization as a required argument. Requests are validated before creation
+and answer with a validation error, or a conflict error when the slug or a unique field already
+exists.
 
 ### Filtering
 
@@ -155,8 +159,9 @@ templates and frontend code.
 ### Update-safe customizations
 
 Change option values, override the module's templates under `templates/quickscale_listings/`,
-and call `create_published_listing_from_payload()` from project-owned code. The concrete model
-and its routes stay project-owned and are never rewritten by an update.
+and call `create_published_listing_from_payload()` from project-owned code, passing the target
+organization explicitly. The concrete model and its routes stay project-owned and are never
+rewritten by an update.
 
 ### Structured extension points
 

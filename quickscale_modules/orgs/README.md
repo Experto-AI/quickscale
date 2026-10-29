@@ -113,7 +113,8 @@ and `get_tenant_models()`. The module also installs the always-on RLS boot guard
 - `sanitization.py` publishes `sanitize_href()` and `sanitize_rendered_html()`; blog and
   listings render user-authored links through them.
 - `public_context.py` publishes `PublicSystemOrgReadMixin` for public reads that resolve the
-  System organization.
+  System organization, and `PublicReadPresentationMixin` for a public page that reads no
+  tenant-scoped row.
 - `views.py` publishes `OrgApiBaseView`, the sanctioned organization-role JSON API base: a DRF
   `APIView` with session authentication (CSRF enforced), `min_org_role` access gating, and
   JSON-only parsing and rendering through the composed `REST_FRAMEWORK` defaults, so every org

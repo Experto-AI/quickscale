@@ -16,7 +16,8 @@
       "0001_initial.py": "fc4cfe45993670c5b2c37527507425b6be97ed171871f665c3ce309beaca1a79"
     },
     "crm": {
-      "0001_initial.py": "268b91ee8ddff0d90e88442709293dd94a174cc735cb0ac64f430c8e8cd63ad1"
+      "0001_initial.py": "268b91ee8ddff0d90e88442709293dd94a174cc735cb0ac64f430c8e8cd63ad1",
+      "0002_remove_crm_null_org_constraints.py": "66cfb9fa37db0f96b069cf34d68c7ca3fbd8249df7a2004b1daa27985b607a09"
     },
     "forms": {
       "0001_initial.py": "d290ecae7aa42cb00d22d4674a5feae6941165d17b39b8e714680a44715b10ef"
