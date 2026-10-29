@@ -33,6 +33,7 @@ from quickscale_modules_notifications.exceptions import (
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationDeliveryEvent,
+    NotificationMessage,
 )
 
 _EVENT_STATUS_MAP = {
@@ -233,11 +234,17 @@ def _record_delivery_event(
 ) -> WebhookIngestionResult:
     """Record one provider event idempotently and reconcile its delivery.
 
-    The delivery row is re-read under ``select_for_update`` inside the
-    transaction: its recorded status is the one the event is reconciled
-    against, so concurrent or redelivered events apply in a serialized order.
+    Both rows are re-read under ``select_for_update`` inside the
+    transaction.  The parent message is locked **first**, matching
+    ``dispatch_notification_message``'s message-then-deliveries order, so
+    sibling-delivery webhooks serialize on the message: the second one
+    re-reads the aggregate after the first commits and cannot save a stale
+    status over it.
     """
     with transaction.atomic():
+        locked_message = NotificationMessage.objects.select_for_update().get(
+            pk=delivery.message.pk
+        )
         locked_delivery = NotificationDelivery.objects.select_for_update().get(
             pk=delivery.pk
         )
@@ -268,7 +275,7 @@ def _record_delivery_event(
         )
         event.status_after = locked_delivery.status
         event.save(update_fields=["status_after"])
-        _refresh_message_status(locked_delivery.message)
+        _refresh_message_status(locked_message)
         return WebhookIngestionResult(
             duplicate=False,
             delivery_id=locked_delivery.pk,

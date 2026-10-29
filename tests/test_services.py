@@ -974,3 +974,95 @@ def test_is_enabled_reads_the_module_enabled_setting() -> None:
         assert services.is_enabled() is True
     with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False):
         assert services.is_enabled() is False
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_sibling_webhooks_leave_a_current_aggregate_status(
+    notification_settings_row,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two sibling webhooks serialize on the parent message before aggregating.
+
+    Both deliveries start queued and both receive ``email.delivered``.  The
+    gate holds each recompute until the other arrives: without the parent
+    lock both recompute from a view that still sees the sibling queued
+    (``partial``), while the lock makes the second wait for the first commit
+    so it observes both deliveries and records ``sent``.
+    """
+    import threading
+
+    from django.db import close_old_connections, connection
+
+    del notification_settings_row
+
+    message = NotificationMessage.objects.create(
+        template_key="quickscale_notifications.generic",
+        subject="Sibling aggregate",
+        from_email="QuickScale <noreply@example.com>",
+        rendered_text="Plain text body",
+        context_json={"headline": "Sibling aggregate", "body": "Plain text body"},
+        status=NotificationMessage.Status.QUEUED,
+    )
+    deliveries = [
+        NotificationDelivery.objects.create(
+            message=message,
+            recipient_email=recipient,
+            provider_message_id=f"provider-sibling-{recipient}",
+        )
+        for recipient in ("alpha@example.com", "beta@example.com")
+    ]
+
+    barrier = threading.Barrier(2)
+    original_refresh = _webhooks._refresh_message_status
+
+    def gated_refresh(parent: NotificationMessage) -> None:
+        try:
+            barrier.wait(timeout=3)
+        except threading.BrokenBarrierError:
+            pass
+        original_refresh(parent)
+
+    monkeypatch.setattr(_webhooks, "_refresh_message_status", gated_refresh)
+
+    errors: list[BaseException] = []
+
+    def ingest(delivery: NotificationDelivery, svix_id: str) -> None:
+        close_old_connections()
+        try:
+            body = json.dumps(_resend_event_payload(delivery)).encode("utf-8")
+            headers = build_webhook_signature_headers(
+                body,
+                secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+                svix_id=svix_id,
+                timestamp=int(time.time()),
+            )
+            ingest_webhook_event(
+                body=body,
+                svix_id=headers["svix-id"],
+                svix_timestamp=headers["svix-timestamp"],
+                svix_signature=headers["svix-signature"],
+            )
+        except Exception as exc:  # reported after both threads join
+            errors.append(exc)
+        finally:
+            connection.close()
+
+    threads = [
+        threading.Thread(
+            target=ingest,
+            args=(delivery, f"msg_sibling_{delivery.recipient_email}"),
+        )
+        for delivery in deliveries
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=15)
+
+    assert not any(thread.is_alive() for thread in threads), (
+        "both webhook threads must finish"
+    )
+    assert errors == [], f"webhook ingestion failed: {errors!r}"
+
+    message.refresh_from_db()
+    assert message.status == NotificationMessage.Status.SENT
