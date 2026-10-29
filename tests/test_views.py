@@ -7,6 +7,28 @@ import pytest
 from django.urls import reverse
 
 
+def _auth_view_messages(caplog) -> str:
+    """Return the formatted messages the auth views logger emitted."""
+    return "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "quickscale_modules_auth.views"
+    )
+
+
+def _assert_no_exception_payload_logged(caplog) -> None:
+    """Assert no auth-view record carries an exception message or traceback.
+
+    The generated structured formatter adds an ``exception`` field only for a
+    record's ``exc_info``, so a record without ``exc_info`` cannot leak an
+    identity-bearing provider or database exception through it.
+    """
+    for record in caplog.records:
+        if record.name == "quickscale_modules_auth.views":
+            assert record.exc_info is None
+            assert record.exc_text is None
+
+
 @pytest.mark.django_db
 class TestProfileView:
     """Tests for ProfileView"""
@@ -37,19 +59,122 @@ class TestProfileUpdateView:
         response = authenticated_client.get(reverse("quickscale_auth:profile_edit"))
         assert response.status_code == 200
 
-    def test_profile_update_post_valid(self, authenticated_client, user):
+    def test_profile_update_post_valid(self, authenticated_client, user, user_data):
         """Test profile update with valid data"""
         response = authenticated_client.post(
             reverse("quickscale_auth:profile_edit"),
             {
                 "first_name": "Updated",
                 "last_name": "Name",
-                "email": user.email,
+                "email": "replacement@example.com",
             },
         )
         assert response.status_code == 302
         user.refresh_from_db()
         assert user.first_name == "Updated"
+        # The address is allauth's, so the profile form never writes it.
+        assert user.email == user_data["email"]
+
+
+@pytest.mark.django_db
+class TestProfileEmailChange:
+    """A profile email change runs through django-allauth's address flow."""
+
+    def test_profile_update_does_not_write_the_email_directly(
+        self, authenticated_client, user
+    ):
+        """A submitted profile email changes neither the address rows nor User."""
+        from allauth.account.models import EmailAddress
+
+        EmailAddress.objects.create(
+            user=user,
+            email=user.email,
+            verified=True,
+            primary=True,
+        )
+
+        response = authenticated_client.post(
+            reverse("quickscale_auth:profile_edit"),
+            {
+                "first_name": "Updated",
+                "last_name": "Name",
+                "email": "replacement@example.com",
+            },
+        )
+
+        assert response.status_code == 302
+        user.refresh_from_db()
+        assert user.email == "testuser@example.com"
+        assert not EmailAddress.objects.filter(email="replacement@example.com").exists()
+        assert EmailAddress.objects.filter(
+            user=user,
+            email="testuser@example.com",
+            verified=True,
+            primary=True,
+        ).exists()
+
+    def test_allauth_email_change_revokes_the_old_password_reset(
+        self, authenticated_client, user, mailoutbox
+    ):
+        """After the flow completes, the old address can reset no password."""
+        from allauth.account.models import EmailAddress, EmailConfirmationHMAC
+        from django.test import Client
+
+        old_email = user.email
+        new_email = "replacement@example.com"
+        EmailAddress.objects.create(
+            user=user,
+            email=old_email,
+            verified=True,
+            primary=True,
+        )
+
+        added = authenticated_client.post(
+            reverse("account_email"),
+            {"action_add": "", "email": new_email},
+        )
+        assert added.status_code == 302
+        pending = EmailAddress.objects.get(user=user, email=new_email)
+        confirmed = authenticated_client.post(
+            reverse("account_confirm_email", args=[EmailConfirmationHMAC(pending).key])
+        )
+        assert confirmed.status_code == 302
+        assert EmailAddress.objects.filter(
+            user=user,
+            email=new_email,
+            verified=True,
+        ).exists()
+
+        made_primary = authenticated_client.post(
+            reverse("account_email"),
+            {"action_primary": "", "email": new_email},
+        )
+        assert made_primary.status_code == 302
+        removed_old = authenticated_client.post(
+            reverse("account_email"),
+            {"action_remove": "", "email": old_email},
+        )
+        assert removed_old.status_code == 302
+
+        user.refresh_from_db()
+        assert user.email == new_email
+        assert not EmailAddress.objects.filter(user=user, email=old_email).exists()
+
+        # Control: the current address still receives a reset link.
+        mailoutbox.clear()
+        current_reset = Client().post(
+            reverse("account_reset_password"), {"email": new_email}
+        )
+        assert current_reset.status_code == 302
+        assert any("password/reset/key" in message.body for message in mailoutbox)
+
+        # The old address receives no reset link after the change.
+        mailoutbox.clear()
+        old_reset = Client().post(
+            reverse("account_reset_password"), {"email": old_email}
+        )
+        assert old_reset.status_code == 302
+        assert all("password/reset/key" not in message.body for message in mailoutbox)
 
 
 @pytest.mark.django_db
@@ -1171,7 +1296,13 @@ class TestAccountDeleteView:
             ),
             patch(
                 "quickscale_modules_billing._subscription_mutations.resume_current_subscription",
-                side_effect=[RuntimeError("resume failed"), None],
+                side_effect=[
+                    RuntimeError(
+                        f"resume failed for {user.get_full_name()} "
+                        f"{user.email} at {organizations[0].name}"
+                    ),
+                    None,
+                ],
             ) as mock_resume,
         ):
             response = authenticated_client.post(
@@ -1183,6 +1314,16 @@ class TestAccountDeleteView:
         assert any(
             "Manual provider reconciliation" in message for message in caplog.messages
         )
+        logged = _auth_view_messages(caplog)
+        assert "RuntimeError" in logged
+        assert f"pk={user.pk}" in logged
+        assert user.username not in logged
+        assert user.email not in logged
+        assert user.get_full_name() not in logged
+        for organization in organizations:
+            assert organization.name not in logged
+        assert any(f"pk={organization.pk}" in logged for organization in organizations)
+        _assert_no_exception_payload_logged(caplog)
 
     def test_account_delete_records_retained_organization_obligation_skips(
         self, authenticated_client, user, caplog
@@ -1228,6 +1369,10 @@ class TestAccountDeleteView:
             PURGE_TOMBSTONE,
         ):
             assert any(obligation_name in message for message in caplog.messages)
+        logged = _auth_view_messages(caplog)
+        assert f"pk={personal_org.pk}" in logged
+        assert personal_org.name not in logged
+        _assert_no_exception_payload_logged(caplog)
 
     def test_account_delete_records_skips_for_member_only_organization(
         self, authenticated_client, user, caplog
@@ -2021,19 +2166,23 @@ class TestAccountDeleteView:
         assert observed == [(organization.pk, True)]
 
     def test_account_delete_retries_when_billing_reference_changes(
-        self, authenticated_client, user
+        self, authenticated_client, user, caplog
     ):
         """A late constraint failure rolls back cleanly and asks the user to retry."""
+        import logging
         from unittest.mock import patch
 
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
         from django.db import IntegrityError
 
+        caplog.set_level(logging.ERROR, logger="quickscale_modules_auth.views")
         with patch.object(
             type(user),
             "save",
-            side_effect=IntegrityError("late billing reference"),
+            side_effect=IntegrityError(
+                f"late billing reference for {user.get_full_name()} <{user.email}>"
+            ),
         ):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
@@ -2045,6 +2194,46 @@ class TestAccountDeleteView:
             "Provider references changed" in str(message.message)
             for message in messages_framework.get_messages(response.wsgi_request)
         )
+        logged = _auth_view_messages(caplog)
+        assert "IntegrityError" in logged
+        assert f"pk={user.pk}" in logged
+        assert user.username not in logged
+        assert user.email not in logged
+        assert user.get_full_name() not in logged
+        _assert_no_exception_payload_logged(caplog)
+
+    def test_account_delete_protected_data_failure_logs_no_identity(
+        self, authenticated_client, user, caplog
+    ):
+        """A protected-data failure logs the pk, never the name or address."""
+        import logging
+        from unittest.mock import patch
+
+        from django.contrib import messages as messages_framework
+        from django.db.models.deletion import ProtectedError
+
+        caplog.set_level(logging.ERROR, logger="quickscale_modules_auth.views")
+        with patch.object(
+            type(user),
+            "save",
+            side_effect=ProtectedError("retained references", {user}),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert any(
+            "retained data" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+        logged = _auth_view_messages(caplog)
+        assert "ProtectedError" in logged
+        assert f"pk={user.pk}" in logged
+        assert user.username not in logged
+        assert user.email not in logged
+        assert user.get_full_name() not in logged
+        _assert_no_exception_payload_logged(caplog)
 
     # ------------------------------------------------------------------
     # success-message fix
@@ -2706,9 +2895,10 @@ class TestAccountDeleteViewDeclaredHandlers:
         ]
 
     def test_account_delete_preserves_the_acquisition_error_when_cleanup_fails(
-        self, authenticated_client, user
+        self, authenticated_client, user, caplog
     ):
         """A failing lock release cannot replace the error that triggered it."""
+        import logging
         from contextlib import contextmanager
 
         from django.contrib.auth import get_user_model
@@ -2744,7 +2934,9 @@ class TestAccountDeleteViewDeclaredHandlers:
                 yield
             finally:
                 events.append(("exit", organization_id))
-                raise RuntimeError("unlock failed")
+                raise RuntimeError(
+                    f"unlock failed for {user.get_full_name()} {user.email}"
+                )
 
         def fail_second_lock(organization_id):
             acquisitions["count"] += 1
@@ -2757,6 +2949,7 @@ class TestAccountDeleteViewDeclaredHandlers:
             (organization.pk for organization in organizations), key=str
         )[0]
 
+        caplog.set_level(logging.ERROR, logger="quickscale_modules_auth.views")
         with (
             _declared_handlers(handler),
             pytest.raises(ValueError, match="unexpected lock defect"),
@@ -2768,6 +2961,12 @@ class TestAccountDeleteViewDeclaredHandlers:
             ("enter", first_organization_id),
             ("exit", first_organization_id),
         ]
+        logged = _auth_view_messages(caplog)
+        assert "RuntimeError" in logged
+        assert user.username not in logged
+        assert user.email not in logged
+        assert user.get_full_name() not in logged
+        _assert_no_exception_payload_logged(caplog)
 
 
 @pytest.mark.django_db

@@ -60,6 +60,10 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_ALLOW_REGISTRATION = True
 SESSION_COOKIE_AGE = 1209600
 
+# The auth flows send confirmation and reset mail; the outbox backs the
+# address-flow regression tests.
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
 # billing is installed in this suite; declare its options and the projected
 # secret settings apply renders from the `_ENV_VAR` names (rule 35).
 QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"

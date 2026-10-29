@@ -8,7 +8,8 @@ with a custom user model and organization-aware account flows.
 - django-allauth integration for email/password authentication.
 - Custom `User` model extending Django's `AbstractUser`, ready for custom fields.
 - Authentication views: login, logout, signup, and password management.
-- Account management: profile view/edit and account deletion.
+- Account management: profile view/edit, django-allauth email address management, and account
+  deletion.
 - Responsive account templates and client-side plus server-side form validation.
 - Security: CSRF protection and password strength indicators.
 - A post-registration signal receiver for project-specific logic.
@@ -112,8 +113,8 @@ SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
 - Account templates under `templates/quickscale_auth/` (with allauth overrides under
   `templates/account/`) extending `quickscale_auth/base.html`.
 - Static assets under `static/quickscale_auth/{css,js}/`.
-- Account flows: login, logout, signup, password change and reset, profile view/edit, and
-  account deletion.
+- Account flows: login, logout, signup, password change and reset, profile view/edit, allauth
+  email address management, and account deletion.
 - Account removal disables and anonymizes the account in place; the row is retained so authored
   records stay attributed to the disabled account. The view collects installed modules' declared
   `account_deletion_handlers` capabilities (billing declares the provenance discovery, Stripe
@@ -138,9 +139,16 @@ The module mounts under `accounts/`, alongside django-allauth's own routes:
 | `accounts/logout/` | django-allauth | Logout confirmation |
 | `accounts/password/change/` | django-allauth | Change password |
 | `accounts/password/reset/` | django-allauth | Request password reset |
+| `accounts/email/` | django-allauth | Manage email addresses |
 | `accounts/profile/` (`quickscale_auth:profile`) | Module | View profile |
-| `accounts/profile/edit/` (`quickscale_auth:profile_edit`) | Module | Edit profile |
+| `accounts/profile/edit/` (`quickscale_auth:profile_edit`) | Module | Edit profile (name only) |
 | `accounts/account/delete/` (`quickscale_auth:account_delete`) | Module | Delete account |
+
+The profile edit page deliberately does not edit the email address:
+django-allauth owns the login identity through its `EmailAddress` rows, so an
+address change goes through `accounts/email/` (add, verify, make primary,
+remove the old address).  Writing `User.email` from the profile form would
+leave the old verified address usable for login and password reset.
 
 ## Management commands
 
