@@ -114,7 +114,10 @@ conformance check on `properties.PropertyAgent` and siblings.
   - [ ] (re-proof) After the re-cut, update `bap-web` to the 0.89.0 tag, push
     it to `develop`, and pass the acceptance there as the release's final validation, with CI
     green (tenant conformance included) and both dependency audits clean apart from the recorded
-    dev-only exception (Tier 2-full).
+    dev-only exception. Check the GitHub Actions run on `develop`; while it fails, fix and push
+    again until it passes (a project defect is fixed in `bap-web`, a QuickScale defect follows the
+    release re-entry loop). Known first failure: classify the `properties` models in the tenant
+    contract (Tier 2-full).
   - [ ] (production) After re-proof and operator approval, ship the same commit and tag: execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
