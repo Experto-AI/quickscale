@@ -1346,7 +1346,7 @@ class TestFullE2EWorkflow:
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
         assert (
-            "uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5"
+            "uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1"
             in ci_content
         )
         assert "files: ./coverage.xml" in ci_content
