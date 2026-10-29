@@ -220,6 +220,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `./predeploy.sh` as the pre-deploy command, `/ready/` gates the deployment on a reached
     database with no pending migrations, and production serving refuses container-local media
     unless `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` marks a development or test deployment.
+  - **Module boundaries tighten.** Oversized images are refused from their header before decoding,
+    option-backed form choices must match the declared options, CSV export streams in bounded chunks,
+    retention clears submissions stored without an IP, and sibling webhook events serialize so the
+    message status stays current.
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
   - **`ClientIdentityMiddleware` in generated projects.** A first-position middleware aligns ordinary DRF request identity with the canonical resolver, so a short forwarded chain cannot be trusted by one consumer and rejected by another. Proxy configuration is validated before mutation and the production proxy count is derived rather than guessed.

@@ -43,8 +43,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA323, SA324 | Required |
-| SA323 | Harden module upload, form, export and notification paths | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA324 | Required |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | — | Required |
 | SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
@@ -77,7 +76,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (SA321 closed; SA153 deferred) | no: SA153 deferred | no: SA153 deferred | yes: — |
-| 2 | SA323 | yes | yes | yes: SA323, SA324 |
+| 2 | SA324 | yes | yes | yes: SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -170,16 +169,7 @@ conformance check on `properties.PropertyAgent` and siblings.
 
 - [x] **SA315 — Close orgs and auth lifecycle defects.**
 
-- [ ] **SA323 — Harden module upload, form, export and notification paths.**
-
-  Closes tech `media-image-decode-before-dimension-cap`, `forms-option-values-not-validated`,
-  `forms-csv-export-materializes-all-values`, `forms-retention-skips-null-ip-rows`, and
-  `notifications-message-status-aggregate-race`.
-
-  **Acceptance:** a compressed high-pixel image is rejected before decode; a select, radio or
-  checkbox value outside its options is a 400; CSV export streams with bounded memory; retention
-  removes rows stored without an IP; concurrent sibling webhooks leave a correct aggregate status
-  (Tier 2-full).
+- [x] **SA323 — Harden module upload, form, export and notification paths.**
 
 - [ ] **SA324 — Make tenant contract evidence and write services coherent.**
 

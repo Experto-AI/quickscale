@@ -374,6 +374,29 @@ class TestFormsAnonymizeSubmissions:
             sub.refresh_from_db()
         assert sub.ip_address is None
 
+    def test_anonymize_clears_a_user_agent_stored_without_an_ip(self, form):
+        """A NULL-IP row with a stored user agent is still personal data."""
+        from datetime import timedelta
+
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            sub = FormSubmission.objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address=None,
+                user_agent="NoIpAgent/1.0",
+            )
+            cutoff = timezone.now() - timedelta(days=form.data_retention_days + 1)
+            FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
+
+        with org_scope(form.organization):
+            sub.refresh_from_db()
+        assert sub.ip_address is None
+        assert sub.user_agent == "", "retention must clear the stored user agent"
+
 
 @pytest.mark.django_db
 class TestFormsAnonymizeSubmissionsOperatorPath:

@@ -84,6 +84,22 @@ key only, never by name, username, or address; the failure records also omit the
 and traceback, logging only the exception type, because a deletion failure's exception can embed
 the protected rows' identity.
 
+**Fix record (2026-10-29).** SA323 closes five findings recorded below; their entries keep the
+audit evidence and now carry `status: fixed`: `media-image-decode-before-dimension-cap`,
+`forms-option-values-not-validated`, `forms-csv-export-materializes-all-values`,
+`forms-retention-skips-null-ip-rows`, and `notifications-message-status-aggregate-race`. Upload
+validators read the header's format and dimensions and apply the format, dimension, and pixel
+checks before `load()` decodes the bitmap, in storage's shared validator and in blog's storage-off
+fallback. The dynamic form serializer rejects a select, radio, or option-backed checkbox value
+outside the field's declared option values, while an optionless checkbox keeps the shipped React
+control's `"true"`/`"false"` contract; the public submit endpoint renders either rejection as a 400. The admin CSV
+export iterates submissions in fixed-size chunks with their values prefetched and re-establishes
+its tenant or operator context inside the response generator, so the request never materializes
+the whole value table. Retention selects and clears a submission when its IP is present or its
+user agent is non-empty, and an already-anonymized row matches neither. The webhook path locks the
+parent message row before it reconciles the delivery and re-aggregates the message status, in the
+same message-then-deliveries order dispatch uses.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -345,12 +361,12 @@ items:
      reality: maintainer-toolchain,
      anchors: [.github/workflows/publish.yml], depends_on: [], chain: [],
      first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: media-image-decode-before-dimension-cap, status: open, severity: S3, category: IV,
+  - {id: media-image-decode-before-dimension-cap, status: fixed, severity: S3, category: IV,
      title: "Upload validation decodes the full image before checking its dimensions", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py,
                quickscale_modules/blog/src/quickscale_modules_blog/services.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-29}
   - {id: orgs-bulk-delete-leaves-zero-owners, status: fixed, severity: S3, category: II,
      title: "Bulk deletion of co-owners passes per-row checks and leaves the org ownerless", effort: Medium,
      confidence: High, reality: generated-project,
@@ -386,16 +402,16 @@ items:
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_paths.py,
                quickscale_modules/backups/src/quickscale_modules_backups/models.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: forms-csv-export-materializes-all-values, status: open, severity: S4, category: V,
+  - {id: forms-csv-export-materializes-all-values, status: fixed, severity: S4, category: V,
      title: "CSV export builds the whole field-value table in memory", effort: Small, confidence: High,
      reality: generated-project,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/views.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: forms-option-values-not-validated, status: open, severity: S4, category: IX,
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-29}
+  - {id: forms-option-values-not-validated, status: fixed, severity: S4, category: IX,
      title: "Select/radio/checkbox values are not checked against options", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/serializers.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-29}
   - {id: generated-readme-examples-invalid, status: fixed, severity: S4, category: X,
      title: "Generated README examples use invalid YAML, clobber the generated .env, and miss the Vite output in .gitignore",
      effort: Small, confidence: High, reality: generated-project,
@@ -420,16 +436,16 @@ items:
      effort: Small, confidence: High, reality: maintainer-toolchain,
      anchors: [quickscale_devtools/src/quickscale_devtools/beta_migration/execution.py],
      depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-24}
-  - {id: notifications-message-status-aggregate-race, status: open, severity: S4, category: II,
+  - {id: notifications-message-status-aggregate-race, status: fixed, severity: S4, category: II,
      title: "Concurrent sibling-delivery webhooks leave the message aggregate stale", effort: Trivial,
      confidence: Medium, reality: generated-project,
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/_delivery.py],
-     depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-24}
-  - {id: forms-retention-skips-null-ip-rows, status: open, severity: S4, category: IX,
+     depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-29}
+  - {id: forms-retention-skips-null-ip-rows, status: fixed, severity: S4, category: IX,
      title: "Retention never clears user_agent on submissions stored without an IP", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/management/commands/_retention.py],
-     depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-29}
   - {id: orgs-role-mixin-checks-request-org, status: watchlist}
   - {id: backups-upload-restore-by-model-permission, status: watchlist}
   - {id: single-sync-worker-vendor-calls, status: watchlist}
@@ -1037,12 +1053,12 @@ machine-readable index above); no S1/S2 finding remains open.
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
   and the restore-metadata fix still lands before the prune change.
-- **Generator/CLI/release batch:** `media-image-decode-before-dimension-cap`. The README,
-  `.dockerignore`, E2E-contract, publish-resumability, remove-traversal, apply-force, dirty-recipient
-  and auth email-change fixes are closed; the rest ride with the next generator release.
+- **Generator/CLI/release batch:** the README, `.dockerignore`, E2E-contract,
+  publish-resumability, remove-traversal, apply-force, dirty-recipient, upload-decoding and auth
+  email-change fixes are closed; the rest ride with the next generator release.
 
-**S4 tail:** batch by file (orgs receivers, backups admin/perms, forms export/options, three prior
-S4s). No ordering constraint beyond “restore-metadata before prune”.
+**S4 tail:** batch by file (orgs receivers, backups admin/perms). No ordering constraint beyond
+“restore-metadata before prune”.
 
 Parallelizable: the billing, orgs, CRM, media, generator-docs, and release-workflow batches touch
 disjoint files. The backup batch and the generator batch both touch `quickscale_core` but different
@@ -1073,10 +1089,11 @@ reviewers.
   verified.
 - **CRM:** `crm-deal-owner-cross-tenant` is fixed; org-scoped reads, contact/stage/tag/owner
   validation, bulk stage filters, and CSV-free exports verified.
-- **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite` and
-  `forms-null-optional-field-500` are fixed; `media-image-decode-before-dimension-cap` and three S4s
-  remain; extension-from-format, SVG exclusion, public/private media split, CSV formula
-  neutralization, and retention (prior S4) verified.
+- **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite`,
+  `forms-null-optional-field-500`, `media-image-decode-before-dimension-cap`,
+  `forms-csv-export-materializes-all-values`, `forms-option-values-not-validated`, and
+  `forms-retention-skips-null-ip-rows` are fixed; extension-from-format, SVG exclusion,
+  public/private media split, and CSV formula neutralization verified.
 - **CLI:** `cli-remove-accepts-path-traversal`, `cli-apply-force-never-forces`; argv-list subprocess,
   advisory locks, theme preflight, and apply checkpoint/rollback verified.
 - **Core generator/DR:** the restore/prune/lock items and the fixed S4 README/ignore items;
@@ -1085,9 +1102,9 @@ reviewers.
   (`e2e-generated-ci-contract-stale-grep`, `publish-pypi-no-skip-existing`); action SHA pins,
   least-privilege permissions, and the gate registry verified. The manual/unwired gates are in the
   Tooling gaps section.
-- **Notifications/social/listings/analytics:** no new defect beyond the carried notifications race
-  and watchlist items; Svix raw-body verification, delivery-status contract, public filters, and
-  analytics escaping verified.
+- **Notifications/social/listings/analytics:** the carried
+  `notifications-message-status-aggregate-race` is fixed; watchlist items remain; Svix raw-body
+  verification, delivery-status contract, public filters, and analytics escaping verified.
 - **Devtools:** the prior `beta-migrate-existing-recipient-no-dirty-guard` is fixed by SA317; the
   rest was sampled.
 
@@ -1123,7 +1140,8 @@ reviewers.
 - **CRM:** org-scoped querysets, foreign contact/stage/tag rejection, and bulk stage/mark filters
   verified. Refuted: “contact/stage foreign-org ids are writable” (serializer validates them).
 - **Notifications:** Svix signature is verified over the raw body before parsing; event id is the
-  replay key; the forward-only status contract is implemented. Prior race carried.
+  replay key; the forward-only status contract is implemented, and sibling webhook updates
+  serialize on the parent message before re-aggregating its status (SA323).
 - **CLI:** subprocess calls use argv lists with `shell` disabled; apply/update acquire advisory
   locks; theme preflight runs before mutation; removal snapshots and rolls back. Refuted: “apply
   writes outside the project through `package`” (config schema requires a lowercase identifier).
@@ -1402,3 +1420,13 @@ release.
   liveness, and production serving refuses `FileSystemStorage` unless `QUICKSCALE_ALLOW_LOCAL_MEDIA=1`
   marks a development or test deployment. The self-hosted-Compose question is answered: Railway is
   the sole supported production path.)
+- 2026-10-29 — `media-image-decode-before-dimension-cap`,
+  `forms-option-values-not-validated`, `forms-csv-export-materializes-all-values`,
+  `forms-retention-skips-null-ip-rows`, `notifications-message-status-aggregate-race`: **resolved**
+  (SA323: both upload validators apply the format, dimension, and pixel checks to the header before
+  `load()` decodes the bitmap; option-backed choice values outside the declared options are a 400
+  while an optionless checkbox keeps the shipped boolean contract; the CSV
+  export streams fixed-size chunks under a re-established tenant or operator context; retention
+  clears a row whose IP is present or whose user agent is non-empty; and the webhook path locks the
+  parent message before reconciling the delivery and re-aggregating its status, so sibling events
+  serialize in dispatch's message-then-deliveries order).

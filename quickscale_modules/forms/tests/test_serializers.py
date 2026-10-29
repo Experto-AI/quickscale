@@ -152,3 +152,88 @@ class TestFormSubmissionCreateSerializer:
             )
             assert not serializer.is_valid()
             assert "full_name" in serializer.errors
+
+    @pytest.mark.parametrize(
+        "field_type",
+        [
+            FormField.FieldType.SELECT,
+            FormField.FieldType.RADIO,
+            FormField.FieldType.CHECKBOX,
+        ],
+    )
+    def test_choice_value_outside_options_raises_field_error(self, form, field_type):
+        """A select/radio/checkbox value must be one of the declared options."""
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type=field_type,
+                label="Choice",
+                name="choice",
+                required=True,
+                order=1,
+                options=[
+                    {"value": "low", "label": "Low"},
+                    {"value": "high", "label": "High"},
+                ],
+            )
+            serializer = FormSubmissionCreateSerializer(
+                data={"choice": "medium"}, context={"form": form}
+            )
+            assert not serializer.is_valid()
+
+        assert "choice" in serializer.errors
+        assert "valid choice" in str(serializer.errors["choice"][0])
+
+    @pytest.mark.parametrize(
+        "field_type",
+        [
+            FormField.FieldType.SELECT,
+            FormField.FieldType.RADIO,
+            FormField.FieldType.CHECKBOX,
+        ],
+    )
+    def test_choice_value_in_options_passes_validation(self, form, field_type):
+        """A declared option value still reaches the submission ledger."""
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type=field_type,
+                label="Choice",
+                name="choice",
+                required=True,
+                order=1,
+                options=[
+                    {"value": "low", "label": "Low"},
+                    {"value": "high", "label": "High"},
+                ],
+            )
+            serializer = FormSubmissionCreateSerializer(
+                data={"choice": "low"}, context={"form": form}
+            )
+            assert serializer.is_valid(), serializer.errors
+
+    def test_optionless_checkbox_accepts_the_shipped_boolean_values(self, form):
+        """The shipped React checkbox submits "true"/"false", not an option."""
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type=FormField.FieldType.CHECKBOX,
+                label="Subscribe",
+                name="subscribe",
+                required=True,
+                order=1,
+            )
+            for value in ("true", "false"):
+                serializer = FormSubmissionCreateSerializer(
+                    data={"subscribe": value}, context={"form": form}
+                )
+                assert serializer.is_valid(), serializer.errors
+            invalid = FormSubmissionCreateSerializer(
+                data={"subscribe": "yes"}, context={"form": form}
+            )
+            assert not invalid.is_valid()
+
+        assert "subscribe" in invalid.errors

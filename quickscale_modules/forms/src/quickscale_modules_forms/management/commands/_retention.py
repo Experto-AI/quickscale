@@ -29,6 +29,7 @@ def anonymize_expired_submissions(*, dry_run: bool = False) -> list[tuple[str, i
     from datetime import timedelta
 
     from django.db import transaction
+    from django.db.models import Q
     from django.utils import timezone
 
     from quickscale_modules_forms.models import Form, FormSubmission
@@ -39,6 +40,11 @@ def anonymize_expired_submissions(*, dry_run: bool = False) -> list[tuple[str, i
 
     results: list[tuple[str, int]] = []
     now = timezone.now()
+
+    # A row still carries personal data while its IP or its user agent is
+    # stored, so a submission that arrived without an IP (but with a user
+    # agent) stays in scope; an already-anonymized row matches neither arm.
+    needs_anonymization = Q(ip_address__isnull=False) | ~Q(user_agent="")
 
     with transaction.atomic():
         # Phase 1 — Read form inventory with operator_access_for_command
@@ -71,7 +77,7 @@ def anonymize_expired_submissions(*, dry_run: bool = False) -> list[tuple[str, i
                         form=form,
                         submitted_at__lt=cutoff,
                     )
-                    .exclude(ip_address=None)
+                    .filter(needs_anonymization)
                     .values_list("pk", flat=True)
                 )
 
@@ -89,7 +95,7 @@ def anonymize_expired_submissions(*, dry_run: bool = False) -> list[tuple[str, i
             with org_scope(form.organization):
                 count = (
                     FormSubmission.objects.filter(pk__in=old_pks)
-                    .exclude(ip_address=None)
+                    .filter(needs_anonymization)
                     .update(ip_address=None, user_agent="")
                 )
                 results.append((form.slug, count))

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from django.test import override_settings
+from PIL import Image
 
 from quickscale_modules_blog import services
 from quickscale_modules_blog.exceptions import (
@@ -319,3 +320,76 @@ def test_is_enabled_reads_the_module_enabled_setting() -> None:
         assert services.is_enabled() is True
     with override_settings(QUICKSCALE_BLOG_ENABLED=False):
         assert services.is_enabled() is False
+
+
+class TestBlogUploadValidationOrder:
+    """The storage-off fallback applies every cap before it decodes pixels."""
+
+    @staticmethod
+    def _uploaded_file():
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return SimpleUploadedFile(
+            "hero.png",
+            b"header-only",
+            content_type="image/png",
+        )
+
+    def test_rejects_oversized_dimensions_before_decoding(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A too-wide image is refused from the header without load()."""
+        load_called = False
+
+        class HeaderOnlyImage:
+            format = "PNG"
+            width = 4097
+            height = 10
+            size = (4097, 10)
+
+            def load(self) -> None:
+                nonlocal load_called
+                load_called = True
+
+        monkeypatch.setattr(services._storage, "storage_services", lambda: None)
+        monkeypatch.setattr(
+            "quickscale_modules_blog.services.Image.open",
+            lambda *args, **kwargs: HeaderOnlyImage(),
+        )
+
+        with pytest.raises(BlogMediaUploadValidationError) as error:
+            services._validate_blog_image_upload(self._uploaded_file())
+
+        assert "width" in error.value.errors["file"]
+        assert load_called is False, "a rejected dimension cap must not decode pixels"
+
+    def test_rejects_oversized_pixel_budget_before_decoding(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The pixel budget is refused from the header without load()."""
+        load_called = False
+
+        class HeaderOnlyImage:
+            format = "PNG"
+            width = 10
+            height = 10
+            size = (10, 10)
+
+            def load(self) -> None:
+                nonlocal load_called
+                load_called = True
+
+        monkeypatch.setattr(services._storage, "storage_services", lambda: None)
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 50)
+        monkeypatch.setattr(
+            "quickscale_modules_blog.services.Image.open",
+            lambda *args, **kwargs: HeaderOnlyImage(),
+        )
+
+        with pytest.raises(BlogMediaUploadValidationError) as error:
+            services._validate_blog_image_upload(self._uploaded_file())
+
+        assert "pixel limit" in error.value.errors["file"]
+        assert load_called is False, "a rejected pixel budget must not decode pixels"
