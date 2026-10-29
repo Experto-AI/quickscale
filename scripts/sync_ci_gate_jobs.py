@@ -205,10 +205,10 @@ __all__ = [
 # the human-readable version in a trailing comment, and pins the Poetry release
 # the action installs. The comments are YAML comments, so the parsed step value
 # is the bare ref while the emitted text carries the version.
-CHECKOUT_REF = "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803"
-CHECKOUT_COMMENT = "# v6.1.0"
-SETUP_PYTHON_REF = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
-SETUP_PYTHON_COMMENT = "# v6.3.0"
+CHECKOUT_REF = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+CHECKOUT_COMMENT = "# v7.0.1"
+SETUP_PYTHON_REF = "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+SETUP_PYTHON_COMMENT = "# v7.1.0"
 INSTALL_POETRY_REF = "snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263"
 INSTALL_POETRY_COMMENT = "# v1.4.2"
 POETRY_VERSION = "2.4.1"

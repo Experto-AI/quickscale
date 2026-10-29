@@ -458,3 +458,9 @@ steps:
       - "Create predeploy.sh from the current template and make it executable in the image (Dockerfile: chmod +x /app/start.sh /app/predeploy.sh). Remove the migrate and createcachetable steps from start.sh and leave the runtime-role provisioning step in place: Railway runs predeploy.sh before the new deployment starts, and a failed pre-deploy step aborts the deployment."
       - "Compare and manually adopt the current <package>/urls.py and settings/production.py: /healthcheck/ stays a DB-free liveness endpoint, /ready/ answers 200 only while the database is reachable and no migrations are pending, and both are exempt from SECURE_SSL_REDIRECT. Production serving refuses django.core.files.storage.FileSystemStorage unless QUICKSCALE_ALLOW_LOCAL_MEDIA=1 marks a development or test deployment; configure the storage module with S3-compatible object storage instead."
       - "Compare and manually adopt the current OPERATIONS.md and README.md production sections: migrations run in predeploy.sh, never at container boot; the readiness endpoint is the Railway deployment gate; and the local Docker Compose stack is not a production deployment."
+
+  - id: release-2026-10-29-action-pins
+    minimum: "0.89.0"
+    title: "Adopt the refreshed generated CI action pins"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml action pins: actions/checkout v7.0.1, actions/setup-python v7.1.0, actions/setup-node v7.1.0, pnpm/action-setup v6.1.0, actions/cache v6.1.0, and codecov/codecov-action v7.1.1, each pinned to its commit SHA with the version comment. The job structure, inputs, and generated-project behavior are unchanged; this is a supply-chain pin refresh."

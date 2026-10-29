@@ -30,7 +30,7 @@ jobs:
         django-version: ["{{ django_ci_version }}"]
 
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # Non-live module credentials live in the managed .github/quickscale-ci-env
     # file, so this user-owned workflow names no module value and a module
@@ -40,7 +40,7 @@ jobs:
       run: cat .github/quickscale-ci-env >> "$GITHUB_ENV"
 
     - name: Set up Python {% raw %}${{ matrix.python-version }}{% endraw %}
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: {% raw %}${{ matrix.python-version }}{% endraw %}
 
@@ -78,7 +78,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .venv
         key: venv-{% raw %}${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}{% endraw %}
@@ -107,7 +107,7 @@ jobs:
 {{ module_ci_test_env | default("") | indent(8, true) }}        # End QuickScale module CI environment
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       if: matrix.python-version == '{{ python_patch_version }}' && matrix.django-version == '{{ django_ci_version }}'
       with:
         files: ./coverage.xml
@@ -121,15 +121,15 @@ jobs:
     # A job-level hashFiles() guard is rejected by GitHub before any job starts:
     # every showcase_react generation emits frontend/package.json, so this job runs.
     steps:
-    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Set up Node.js
-      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: '24.22.1'
 
     - name: Install pnpm
-      uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       with:
         version: 11.18.0
 
@@ -138,7 +138,7 @@ jobs:
       run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
     - name: Setup pnpm cache
-      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: {% raw %}${{ env.STORE_PATH }}{% endraw %}
         key: {% raw %}${{ runner.os }}-pnpm-store-${{ hashFiles('frontend/pnpm-lock.yaml') }}{% endraw %}
