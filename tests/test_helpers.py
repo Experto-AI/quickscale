@@ -460,6 +460,72 @@ class TestValidateFileUpload:
                 max_height=360,
             )
 
+    def test_validate_file_upload_rejects_oversized_dimensions_before_decoding(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The dimension cap is judged from the header, before load() decodes."""
+        uploaded = _uploaded_image()
+        load_called = False
+
+        class HeaderOnlyImage:
+            format = "PNG"
+            width = 20_000
+            height = 20_000
+            size = (20_000, 20_000)
+
+            def load(self) -> None:
+                nonlocal load_called
+                load_called = True
+
+        monkeypatch.setattr(
+            "quickscale_modules_storage._helpers.Image.open",
+            lambda *args, **kwargs: HeaderOnlyImage(),
+        )
+
+        with pytest.raises(ValueError, match="Image width exceeds maximum"):
+            validate_file_upload(
+                uploaded,
+                max_size_bytes=2_000_000,
+                allowed_image_formats={"PNG"},
+                max_width=4096,
+            )
+
+        assert load_called is False, "a rejected dimension cap must not decode pixels"
+
+    def test_validate_file_upload_rejects_oversized_pixel_budget_before_decoding(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The pixel budget is judged from the header, before load() decodes."""
+        uploaded = _uploaded_image()
+        load_called = False
+
+        class HeaderOnlyImage:
+            format = "PNG"
+            width = 10
+            height = 10
+            size = (10, 10)
+
+            def load(self) -> None:
+                nonlocal load_called
+                load_called = True
+
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 50)
+        monkeypatch.setattr(
+            "quickscale_modules_storage._helpers.Image.open",
+            lambda *args, **kwargs: HeaderOnlyImage(),
+        )
+
+        with pytest.raises(ValueError, match="Image exceeds safe pixel limit"):
+            validate_file_upload(
+                uploaded,
+                max_size_bytes=2_000_000,
+                allowed_image_formats={"PNG"},
+            )
+
+        assert load_called is False, "a rejected pixel budget must not decode pixels"
+
 
 class TestPathSanitization:
     def test_sanitize_relative_media_path_removes_leading_slashes_and_traversal(

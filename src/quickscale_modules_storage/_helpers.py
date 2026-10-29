@@ -337,6 +337,18 @@ def build_public_media_url(
     return relative_path
 
 
+def _reject_oversized_pixel_budget(*, width: int, height: int) -> None:
+    """Reject a header-only image whose pixel count exceeds Pillow's guard.
+
+    The check reads the header-derived dimensions, before ``load()``
+    decodes the pixels, so a highly compressed image cannot allocate its
+    full bitmap only to be rejected by the format or dimension caps.
+    """
+    max_pixels = Image.MAX_IMAGE_PIXELS
+    if max_pixels is not None and width * height > int(max_pixels):
+        raise ValueError(IMAGE_BOMB_VALIDATION_ERROR)
+
+
 def validate_file_upload(
     uploaded_file: UploadedFile,
     *,
@@ -345,7 +357,12 @@ def validate_file_upload(
     max_width: int | None = None,
     max_height: int | None = None,
 ) -> ValidatedUpload:
-    """Validate uploaded image by size, format, and optional dimensions."""
+    """Validate an uploaded image without decoding past a failing cap.
+
+    The byte cap runs first; the header then supplies the format and
+    dimensions, which the format, dimension, and pixel-budget checks judge
+    before ``load()`` proves the payload decodes.
+    """
     size_bytes = int(uploaded_file.size or 0)
     if size_bytes > max_size_bytes:
         raise ValueError(f"File exceeds maximum upload size of {max_size_bytes} bytes")
@@ -353,6 +370,25 @@ def validate_file_upload(
     try:
         uploaded_file.seek(0)
         image = Image.open(uploaded_file)
+
+        image_format = str(image.format or "").upper()
+        if image_format not in allowed_image_formats:
+            allowed_list = ", ".join(sorted(allowed_image_formats))
+            raise ValueError(
+                f"Unsupported image format. Allowed formats: {allowed_list}"
+            )
+
+        width = int(image.width)
+        height = int(image.height)
+
+        if max_width is not None and width > max_width:
+            raise ValueError(f"Image width exceeds maximum of {max_width} pixels")
+
+        if max_height is not None and height > max_height:
+            raise ValueError(f"Image height exceeds maximum of {max_height} pixels")
+
+        _reject_oversized_pixel_budget(width=width, height=height)
+
         image.load()
     except Image.DecompressionBombError as exc:
         raise ValueError(IMAGE_BOMB_VALIDATION_ERROR) from exc
@@ -360,20 +396,6 @@ def validate_file_upload(
         raise ValueError("Unsupported or invalid image file") from exc
     finally:
         uploaded_file.seek(0)
-
-    image_format = str(image.format or "").upper()
-    if image_format not in allowed_image_formats:
-        allowed_list = ", ".join(sorted(allowed_image_formats))
-        raise ValueError(f"Unsupported image format. Allowed formats: {allowed_list}")
-
-    width = int(image.width)
-    height = int(image.height)
-
-    if max_width is not None and width > max_width:
-        raise ValueError(f"Image width exceeds maximum of {max_width} pixels")
-
-    if max_height is not None and height > max_height:
-        raise ValueError(f"Image height exceeds maximum of {max_height} pixels")
 
     content_type = str(uploaded_file.content_type or "application/octet-stream")
 
