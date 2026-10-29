@@ -62,15 +62,13 @@ def _is_foreign_org_related(
 ) -> bool:
     """Return whether a related object belongs to a different organization.
 
-    Returns ``False`` when org_id is ``None`` (solo route) or when the
-    related object has ``organization_id=None`` (legacy/solo compatibility).
-    Returns ``True`` only when both the org context and the related object's
-    organization are non-NULL and differ.
+    Returns ``False`` when org_id is ``None`` (no active org context).  A
+    related row whose organization differs — or is missing, which the NOT
+    NULL tenant FK forbids — is foreign.
     """
     if org_id is None or related_obj is None:
         return False
-    related_org_id = getattr(related_obj, "organization_id", None)
-    return related_org_id is not None and related_org_id != org_id
+    return getattr(related_obj, "organization_id", None) != org_id
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -177,8 +175,8 @@ class ContactNoteSerializer(serializers.ModelSerializer):
         """Reject foreign-org parent contact on all create routes.
 
         When creating a ContactNote, the parent contact must belong to the
-        caller's active organization (or have NULL organization for legacy/
-        solo compatibility).  Foreign-org parent references are rejected.
+        caller's active organization.  Foreign-org parent references are
+        rejected.
         """
         org_id = _request_org_id(self)
         if org_id is None:
@@ -188,10 +186,7 @@ class ContactNoteSerializer(serializers.ModelSerializer):
         # Validate contact_id belongs to the current org.
         contact = attrs.get("contact")
         if contact is not None:
-            if (
-                contact.organization_id is not None
-                and contact.organization_id != org_id
-            ):
+            if contact.organization_id != org_id:
                 raise serializers.ValidationError(
                     {
                         "contact": "The specified contact does not belong to this organization."
@@ -342,9 +337,8 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         """Reject foreign-org related IDs on all create and update routes.
 
         When creating or updating, the related company and tags must belong
-        to the same organization (or have NULL organization for legacy/solo
-        compatibility). Foreign-org references are rejected.  The active
-        organization is resolved from ``request.org`` (set by
+        to the same organization. Foreign-org references are rejected.  The
+        active organization is resolved from ``request.org`` (set by
         middleware). No personal-org fallback is performed.
         """
         org_id = _request_org_id(self)
@@ -355,10 +349,7 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         # Validate company_id belongs to the current org.
         company = attrs.get("company")
         if company is not None:
-            if (
-                company.organization_id is not None
-                and company.organization_id != org_id
-            ):
+            if company.organization_id != org_id:
                 raise serializers.ValidationError(
                     {
                         "company_id": "The specified company does not belong to this organization."
@@ -368,11 +359,7 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         # Validate tag_ids belong to the current org.
         tags = attrs.get("tags")
         if tags:
-            foreign_tags = [
-                tag
-                for tag in tags
-                if tag.organization_id is not None and tag.organization_id != org_id
-            ]
+            foreign_tags = [tag for tag in tags if tag.organization_id != org_id]
             if foreign_tags:
                 raise serializers.ValidationError(
                     {
@@ -444,8 +431,7 @@ class DealNoteSerializer(serializers.ModelSerializer):
         """Reject foreign-org parent deal on all create routes.
 
         When creating a DealNote, the parent deal must belong to the
-        caller's active organization (or have NULL organization for
-        legacy/solo compatibility).  Foreign-org parent references
+        caller's active organization.  Foreign-org parent references
         are rejected.
         """
         org_id = _request_org_id(self)
@@ -456,7 +442,7 @@ class DealNoteSerializer(serializers.ModelSerializer):
         # Validate deal_id belongs to the current org.
         deal = attrs.get("deal")
         if deal is not None:
-            if deal.organization_id is not None and deal.organization_id != org_id:
+            if deal.organization_id != org_id:
                 raise serializers.ValidationError(
                     {"deal": "The specified deal does not belong to this organization."}
                 )
@@ -638,11 +624,10 @@ class DealDetailSerializer(serializers.ModelSerializer):
         """Reject foreign-org related IDs on all create and update routes.
 
         When creating or updating, the related contact, stage, owner, and tags
-        must belong to the same organization (or have NULL organization for
-        legacy/solo compatibility). Foreign-org references are rejected.
-        A submitted owner must be a current member of the active organization.
-        The active organization is resolved from ``request.org`` (set by
-        middleware). No personal-org fallback is performed.
+        must belong to the same organization. Foreign-org references are
+        rejected. A submitted owner must be a current member of the active
+        organization. The active organization is resolved from ``request.org``
+        (set by middleware). No personal-org fallback is performed.
         """
         org_id = _request_org_id(self)
         if org_id is None:
@@ -652,10 +637,7 @@ class DealDetailSerializer(serializers.ModelSerializer):
         # Validate contact_id belongs to the current org.
         contact = attrs.get("contact")
         if contact is not None:
-            if (
-                contact.organization_id is not None
-                and contact.organization_id != org_id
-            ):
+            if contact.organization_id != org_id:
                 raise serializers.ValidationError(
                     {
                         "contact_id": "The specified contact does not belong to this organization."
@@ -665,7 +647,7 @@ class DealDetailSerializer(serializers.ModelSerializer):
         # Validate stage_id belongs to the current org.
         stage = attrs.get("stage")
         if stage is not None:
-            if stage.organization_id is not None and stage.organization_id != org_id:
+            if stage.organization_id != org_id:
                 raise serializers.ValidationError(
                     {
                         "stage_id": "The specified stage does not belong to this organization."
@@ -689,11 +671,7 @@ class DealDetailSerializer(serializers.ModelSerializer):
         # Validate tag_ids belong to the current org.
         tags = attrs.get("tags")
         if tags:
-            foreign_tags = [
-                tag
-                for tag in tags
-                if tag.organization_id is not None and tag.organization_id != org_id
-            ]
+            foreign_tags = [tag for tag in tags if tag.organization_id != org_id]
             if foreign_tags:
                 raise serializers.ValidationError(
                     {

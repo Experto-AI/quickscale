@@ -50,10 +50,10 @@ class TestTagModel:
         assert field.unique is False
 
     def test_tag_owner_bucket_constraint_exists(self):
-        """Tag has two partial UniqueConstraints for owner-bucket uniqueness."""
+        """Tag keeps the per-organization constraint and no NULL-owner bucket."""
         constraint_names = [c.name for c in Tag._meta.constraints]
-        assert "quickscale_crm_tag_name_null_unique" in constraint_names
         assert "quickscale_crm_tag_name_organization_unique" in constraint_names
+        assert "quickscale_crm_tag_name_null_unique" not in constraint_names
 
     def test_tag_same_name_different_orgs_allowed(self, org_a, org_b):
         """Same tag name is allowed across different organizations."""
@@ -201,12 +201,14 @@ class TestStageModel:
                     )
 
     def test_stage_terminal_semantic_constraints_exist(self):
-        """Stage has two partial UniqueConstraints for owner-bucket uniqueness."""
+        """Stage keeps the per-organization constraint and no NULL-owner bucket."""
         constraint_names = [c.name for c in Stage._meta.constraints]
-        assert "quickscale_crm_stage_terminal_semantic_null_unique" in constraint_names
         assert (
             "quickscale_crm_stage_terminal_semantic_organization_unique"
             in constraint_names
+        )
+        assert (
+            "quickscale_crm_stage_terminal_semantic_null_unique" not in constraint_names
         )
 
     def test_stage_same_terminal_semantic_different_orgs_allowed(self, org_a, org_b):

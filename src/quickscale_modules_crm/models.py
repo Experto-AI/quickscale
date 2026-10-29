@@ -36,13 +36,8 @@ class Tag(TenantModel):
     class Meta(TenantModel.Meta):
         ordering = ["name"]
         constraints = [
-            # Block duplicate names within the NULL-owned bucket.
-            models.UniqueConstraint(
-                fields=["name"],
-                name="quickscale_crm_tag_name_null_unique",
-                condition=Q(organization__isnull=True),
-            ),
-            # Block duplicate names within the same non-null org bucket.
+            # Block duplicate names within the same organization.  There is no
+            # NULL-owner bucket: the inherited organization FK is NOT NULL.
             models.UniqueConstraint(
                 fields=["name", "organization"],
                 name="quickscale_crm_tag_name_organization_unique",
@@ -149,13 +144,8 @@ class Stage(TenantModel):
     class Meta(TenantModel.Meta):
         ordering = ["order", "name"]
         constraints = [
-            # Block duplicate terminal semantics within the NULL-owned bucket.
-            models.UniqueConstraint(
-                fields=["terminal_semantic"],
-                name="quickscale_crm_stage_terminal_semantic_null_unique",
-                condition=Q(organization__isnull=True),
-            ),
-            # Block duplicate terminal semantics within the same non-null org bucket.
+            # Block duplicate terminal semantics within the same organization.
+            # There is no NULL-owner bucket: the organization FK is NOT NULL.
             models.UniqueConstraint(
                 fields=["terminal_semantic", "organization"],
                 name="quickscale_crm_stage_terminal_semantic_organization_unique",

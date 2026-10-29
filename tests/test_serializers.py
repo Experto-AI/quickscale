@@ -1842,7 +1842,6 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
     Coverage matrix:
     - Org-scoped route: foreign-org stage_id is rejected
     - Org-scoped route: same-org stage_id is accepted
-    - Org-scoped route: foreign-org stage_id is rejected (null-org legacy superseded)
     - Solo route: foreign-org stage_id is rejected (personal-org scoping)
     - Solo route: same-org stage_id is accepted
     """
@@ -1895,41 +1894,6 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
             context={"request": request},
         )
         assert serializer.is_valid(), serializer.errors
-
-    def test_org_scoped_rejects_null_org_legacy_stage(self, org_a, org_a_admin):
-        """BulkUpdateStageSerializer rejects foreign-org stage on org-scoped route.
-
-        Phase 1 post-0006 contract: NULL-owned stages are no longer accepted
-        on org-scoped routes.  Since creating NULL-owned stages is now
-        impossible at the ORM level, this test proves that a foreign-org
-        stage is also rejected — same contract outcome.
-        """
-        from rest_framework.test import APIRequestFactory
-
-        from quickscale_modules_crm.models import Stage
-        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
-
-        from quickscale_modules_orgs.models import Organization
-
-        other_org = Organization.objects.create(
-            name="Other Org", slug="other-org-serial"
-        )
-        with org_scope(other_org):
-            other_stage = Stage.objects.create(
-                name="Other Stage", order=1, organization=other_org
-            )
-
-        factory = APIRequestFactory()
-        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
-        request.user = org_a_admin
-        request.org = org_a
-
-        serializer = BulkUpdateStageSerializer(
-            data={"deal_ids": [1], "stage_id": other_stage.id},
-            context={"request": request},
-        )
-        assert not serializer.is_valid()
-        assert "stage_id" in serializer.errors
 
     @override_settings(QUICKSCALE_ORGS_MODE="solo")
     def test_solo_route_rejects_foreign_org_stage(self, staff_user, org_b):
