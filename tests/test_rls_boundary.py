@@ -22,19 +22,61 @@ import pytest
 from django.db import connection
 from django.urls import reverse
 
-from quickscale_modules_blog.models import Category, Post, Tag
+from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
 
 # ---------------------------------------------------------------------------
 # Restricted role helpers (mirror the social module pattern)
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
-_BLOG_TABLES = (
-    "quickscale_blog_category",
-    "quickscale_blog_tag",
-    "quickscale_blog_blogmediaasset",
-    "quickscale_blog_post",
-)
+_BLOG_TABLE_BY_MODEL = {
+    Category: "quickscale_blog_category",
+    Tag: "quickscale_blog_tag",
+    BlogMediaAsset: "quickscale_blog_blogmediaasset",
+    Post: "quickscale_blog_post",
+}
+_BLOG_TENANT_MODELS = tuple(_BLOG_TABLE_BY_MODEL)
+_BLOG_TABLES = tuple(_BLOG_TABLE_BY_MODEL.values())
+
+
+def _model_id(model: type) -> str:
+    """Return the model name as a pytest parameter id."""
+    return model.__name__
+
+
+def _create_tenant_row(model: type, *, organization: Any, label: str) -> object:
+    """Create one row of *model* under the organization's context."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    set_current_org_id(organization.id)
+    try:
+        if model is Category:
+            return Category.objects.create(
+                name=f"{label} Category",
+                slug=f"{label.lower()}-category",
+                organization=organization,
+            )
+        if model is Tag:
+            return Tag.objects.create(
+                name=f"{label} Tag",
+                slug=f"{label.lower()}-tag",
+                organization=organization,
+            )
+        if model is BlogMediaAsset:
+            return BlogMediaAsset.objects.create(
+                file=f"{label.lower()}.png",
+                original_filename=f"{label.lower()}.png",
+                organization=organization,
+            )
+        return Post.objects.create(
+            title=f"{label} Post",
+            slug=f"{label.lower()}-post",
+            content="Content",
+            status=Post.Status.PUBLISHED,
+            organization=organization,
+        )
+    finally:
+        set_current_org_id(None)
 
 
 def _ensure_rls_test_role() -> None:
@@ -129,6 +171,48 @@ class TestBlogRlsBoundaryRestrictedRole:
                     )
             finally:
                 cursor.execute("RESET ROLE")
+
+    @pytest.mark.parametrize("model", _BLOG_TENANT_MODELS, ids=_model_id)
+    def test_restricted_role_scopes_every_tenant_table(
+        self, model: type, org_a: Any, org_b: Any
+    ) -> None:
+        """Every tenant table returns only the matching org's rows."""
+        _ensure_rls_test_role()
+        _create_tenant_row(model, organization=org_a, label="Org A")
+        _create_tenant_row(model, organization=org_b, label="Org B")
+        table = _BLOG_TABLE_BY_MODEL[model]
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
+            try:
+                for organization in (org_a, org_b):
+                    cursor.execute(
+                        "SET app.current_org_id = %s", [str(organization.id)]
+                    )
+                    cursor.execute(f"SELECT organization_id FROM {table}")
+                    org_ids = {str(row[0]) for row in cursor.fetchall()}
+                    assert org_ids == {str(organization.id)}, (
+                        f"Expected only {organization.slug} rows in {table}, "
+                        f"got {org_ids}"
+                    )
+
+                cursor.execute("SET app.current_org_id = %s", [str(uuid.uuid4())])
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                (count,) = cursor.fetchone()
+                assert count == 0, (
+                    f"RLS should block all {table} rows with a non-matching org context"
+                )
+
+                cursor.execute("RESET app.current_org_id")
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                (count,) = cursor.fetchone()
+                assert count == 0, (
+                    f"RLS should block all {table} rows when the org context is unset"
+                )
+            finally:
+                cursor.execute("RESET ROLE")
+                cursor.execute("RESET app.current_org_id")
+                cursor.execute("RESET app.operator_access")
 
     def test_restricted_role_sees_only_own_org_category(
         self, org_a: Any, org_b: Any
