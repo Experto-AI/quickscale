@@ -138,11 +138,13 @@ conformance check on `properties.PropertyAgent` and siblings.
   or a template security fix), and the steps-per-release count to watch, trending toward zero
   (58 declared steps on 2026-10-23). Operator docs do not duplicate steps either stage covers.
   Decisions say that supporting further projects meets the "second long-lived project"
-  revocation trigger.
+  revocation trigger. "Beta migration" is renamed "website migration" throughout (the
+  `beta_migration` package, CLI commands, docs and tests become `website_migration`).
 
   **Slices:**
-  - [ ] (a) Record the two-stage path, boundary rule and revocation triggers in decisions;
-    remove operator steps either stage covers (Tier 2-fast).
+  - [ ] (a) Rename "beta migration" to "website migration" (`beta_migration` →
+    `website_migration` in code, CLI, docs and tests); record the two-stage path, boundary rule
+    and revocation triggers in decisions; remove operator steps either stage covers (Tier 2-fast).
   - [ ] (b) After SA191d (production), confirm them and the steps count against the cutover
     evidence; validate links and smoke instructions (Tier 1).
 
