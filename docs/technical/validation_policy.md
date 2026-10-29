@@ -192,6 +192,9 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 
 `make test` runs both gates sequentially as a combined check.
 
+Every tenant module's suite defaults its database connection to the restricted
+`quickscale_test_role`; `QS_<MODULE>_DB_USER` overrides it.
+
 **Coverage Targets:**
 - 90% equal-weight package mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.
 - CI fails if the equal-weight package mean drops below 90% or any file falls below 80%.

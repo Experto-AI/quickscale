@@ -102,7 +102,7 @@ MIDDLEWARE = [
 ]
 
 DATABASES = {
-    "default": suite_database("forms"),
+    "default": suite_database("forms", user="quickscale_test_role"),
 }
 
 ROOT_URLCONF = "tests.urls"

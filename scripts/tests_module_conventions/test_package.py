@@ -1589,6 +1589,102 @@ def test_package_file_controls() -> None:
         "missing tests/test_isolation.py" in violation
         for violation in _violations(checker.rule_11_package_files, missing_isolation)
     )
+    two_tables = replace(
+        module,
+        files={
+            **module.files,
+            "models.py": (
+                module.files["models.py"] + "\n\nclass Gadget(TenantModel):\n"
+                "    class Meta(TenantModel.Meta):\n"
+                "        ordering = ['pk']\n"
+            ),
+        },
+    )
+    assert any(
+        "tenant table quickscale_demo_gadget (Gadget)" in violation
+        for violation in _violations(checker.rule_11_package_files, two_tables)
+    )
+    operator_only = replace(
+        module,
+        tests={
+            **module.tests,
+            "test_isolation.py": (
+                '"""Tenant isolation behaviour."""\n\n\n'
+                "def test_operator(superuser):\n"
+                '    with operator_access(user=superuser, reason="control"):\n'
+                "        pass\n"
+            ),
+        },
+    )
+    assert any(
+        "has no non-operator isolation proof" in violation
+        for violation in _violations(checker.rule_11_package_files, operator_only)
+    )
+    grant_only = replace(
+        two_tables,
+        tests={
+            **two_tables.tests,
+            "test_rls_boundary.py": (
+                '"""RLS boundary behaviour."""\n\n'
+                '_TABLES = ("quickscale_demo_widget", "quickscale_demo_gadget")\n\n\n'
+                "def _ensure(cursor):\n"
+                "    for table in _TABLES:\n"
+                '        cursor.execute(f"GRANT SELECT ON {table} TO role")\n\n\n'
+                "def test_boundary(cursor):\n"
+                '    table = "quickscale_demo_widget"\n'
+                '    cursor.execute(f"SELECT COUNT(*) FROM {table}")\n'
+            ),
+        },
+    )
+    assert any(
+        "quickscale_demo_gadget (Gadget)" in violation
+        for violation in _violations(checker.rule_11_package_files, grant_only)
+    )
+    operator_and_no_org = replace(
+        module,
+        tests={
+            **module.tests,
+            "test_isolation.py": (
+                '"""Tenant isolation behaviour."""\n\n\n'
+                "def test_operator(superuser):\n"
+                '    with operator_access(user=superuser, reason="control"):\n'
+                "        assert Widget.all_objects.count() > 0\n\n\n"
+                "def test_member_without_org(client):\n"
+                '    response = client.get("/demo/")\n'
+                "    assert response.status_code == 403\n"
+            ),
+        },
+    )
+    assert any(
+        "has no non-operator isolation proof" in violation
+        for violation in _violations(checker.rule_11_package_files, operator_and_no_org)
+    )
+    member_setup = replace(
+        module,
+        tests={
+            **module.tests,
+            "test_isolation.py": (
+                '"""Tenant isolation behaviour."""\n\n\n'
+                "def test_member(client):\n"
+                '    Widget.all_objects.create(name="own")\n'
+                '    response = client.get("/demo/")\n'
+                "    assert response.status_code == 200\n"
+                '    assert "own" in response.content.decode()\n'
+            ),
+        },
+    )
+    assert _violations(checker.rule_11_package_files, member_setup) == []
+    unrestricted = replace(
+        module,
+        tests={
+            **module.tests,
+            "settings.py": "DATABASES = {'default': {'USER': 'postgres'}}\n",
+        },
+    )
+    assert any(
+        "does not default the database role to quickscale_test_role" in violation
+        for violation in _violations(checker.rule_11_package_files, unrestricted)
+    )
     no_enabled = _with_files(
         module,
         services=(

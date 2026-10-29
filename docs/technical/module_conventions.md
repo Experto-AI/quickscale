@@ -298,10 +298,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 **11. Package files, tests, models, docs.**
 - ✅ Every module ships `apps.py`, `adapter.py`, `services.py` with `is_enabled()`, `module.yml`,
   `pyproject.toml`, `poetry.toml`, `py.typed`, and `README.md`; one-off public files (`contracts.py`,
-  `helpers.py`, `constants.py`) fold into these or become private. allauth's adapter file is
-  `allauth_adapter.py`, so no module has both `adapter.py` and `adapters.py`.
+  `helpers.py`, `constants.py`) fold into these or become private. allauth's adapter file is `allauth_adapter.py`, so no module has both `adapter.py` and `adapters.py`.
 - ✅ Required tests: `test_apps.py`, `test_services.py`, `test_migrations.py` when the module has
-  models, and `test_isolation.py` plus `test_rls_boundary.py` for a module with tenant models.
+  models, and `test_isolation.py` plus `test_rls_boundary.py` for tenant models; the boundary queries
+  every tenant table under matching, non-matching and unset context, the isolation suite exercises a non-operator path, and `tests/settings.py` defaults to `quickscale_test_role`.
 - ✅ A module's `tests/conftest.py` takes `pytest_configure` and
   `pytest_collection_modifyitems` from `quickscale_core.testing.pytest_plugin` — imported
   directly, or imported and reused by a module-local wrapper hook — so no module keeps a private

@@ -179,7 +179,7 @@ conformance check on `properties.PropertyAgent` and siblings.
   defaults to the restricted role; an environment variable may override.
 
   **Slices:**
-  - [ ] (a) Evidence: forms' RLS boundary covers all four tenant tables with matching,
+  - [x] (a) Evidence: forms' RLS boundary covers all four tenant tables with matching,
     non-matching and unset context plus a regular-member view; the three suites default
     restricted; the two narratives describe the current contract; the rule 11 detector requires
     all three (Tier 2-full).

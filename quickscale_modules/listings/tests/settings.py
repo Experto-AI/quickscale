@@ -77,7 +77,7 @@ TEMPLATES = [
 
 # Database
 DATABASES = {
-    "default": suite_database("listings"),
+    "default": suite_database("listings", user="quickscale_test_role"),
 }
 
 # Static files

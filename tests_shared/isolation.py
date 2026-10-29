@@ -44,14 +44,15 @@ def assert_org_scoped_response(
             do not match ``expected_names`` exactly.
 
     """
-    assert response.status_code == 200, (
+    assert response.status_code == 200, (  # noqa: S101
         f"Expected 200 OK, got {response.status_code}. Response: {response.content.decode()[:200]}"
     )
 
     data = response.json()
     visible_names = {item[item_key] for item in data}
 
-    assert visible_names == expected_names, (
+    assert visible_names == expected_names, (  # noqa: S101
         f"Expected only {expected_names}, but got {visible_names}. "
-        "This confirms the cross-tenant isolation gap (Finding 11)."
+        "This confirms cross-tenant isolation: only the requesting "
+        "organization's rows are visible."
     )

@@ -641,6 +641,103 @@ CASE_BUILDERS = {
             files={k: v for k, v in _golden_module().files.items() if k != "py.typed"},
         )
     ),
+    "isolation_one_table": lambda: _corpus(
+        replace(
+            _golden_module(),
+            files={
+                **_golden_module().files,
+                "models.py": (
+                    _golden_module().files["models.py"] + "\n\nclass Gadget(TenantModel):\n"
+                    "    class Meta(TenantModel.Meta):\n"
+                    "        ordering = ['pk']\n"
+                ),
+            },
+        )
+    ),
+    "isolation_operator_only": lambda: _corpus(
+        replace(
+            _golden_module(),
+            tests={
+                **_golden_module().tests,
+                "test_isolation.py": (
+                    '"""Tenant isolation behaviour."""\n\n\n'
+                    "def test_operator(superuser):\n"
+                    '    with operator_access(user=superuser, reason="control"):\n'
+                    "        pass\n"
+                ),
+            },
+        )
+    ),
+    "isolation_operator_and_no_org": lambda: _corpus(
+        replace(
+            _golden_module(),
+            tests={
+                **_golden_module().tests,
+                "test_isolation.py": (
+                    '"""Tenant isolation behaviour."""\n\n\n'
+                    "def test_operator(superuser):\n"
+                    '    with operator_access(user=superuser, reason="control"):\n'
+                    "        assert Widget.all_objects.count() > 0\n\n\n"
+                    "def test_member_without_org(client):\n"
+                    '    response = client.get("/demo/")\n'
+                    "    assert response.status_code == 403\n"
+                ),
+            },
+        )
+    ),
+    "isolation_grant_only": lambda: _corpus(
+        replace(
+            replace(
+                _golden_module(),
+                files={
+                    **_golden_module().files,
+                    "models.py": (
+                        _golden_module().files["models.py"] + "\n\nclass Gadget(TenantModel):\n"
+                        "    class Meta(TenantModel.Meta):\n"
+                        "        ordering = ['pk']\n"
+                    ),
+                },
+            ),
+            tests={
+                **_golden_module().tests,
+                "test_rls_boundary.py": (
+                    '"""RLS boundary behaviour."""\n\n'
+                    '_TABLES = ("quickscale_demo_widget", "quickscale_demo_gadget")\n\n\n'
+                    "def _ensure(cursor):\n"
+                    "    for table in _TABLES:\n"
+                    '        cursor.execute(f"GRANT SELECT ON {table} TO role")\n\n\n'
+                    "def test_boundary(cursor):\n"
+                    '    table = "quickscale_demo_widget"\n'
+                    '    cursor.execute(f"SELECT COUNT(*) FROM {table}")\n'
+                ),
+            },
+        )
+    ),
+    "isolation_member_setup": lambda: _corpus(
+        replace(
+            _golden_module(),
+            tests={
+                **_golden_module().tests,
+                "test_isolation.py": (
+                    '"""Tenant isolation behaviour."""\n\n\n'
+                    "def test_member(client):\n"
+                    '    Widget.all_objects.create(name="own")\n'
+                    '    response = client.get("/demo/")\n'
+                    "    assert response.status_code == 200\n"
+                    '    assert "own" in response.content.decode()\n'
+                ),
+            },
+        )
+    ),
+    "isolation_unrestricted": lambda: _corpus(
+        replace(
+            _golden_module(),
+            tests={
+                **_golden_module().tests,
+                "settings.py": "DATABASES = {'default': {'USER': 'postgres'}}\n",
+            },
+        )
+    ),
     "one_off_file": lambda: _corpus(_with_files(_golden_module(), **{"helpers.py": "VALUE = 1\n"})),
     "no_is_enabled": lambda: _corpus(
         _with_files(
@@ -945,6 +1042,41 @@ EXACT_FINDINGS = (
     ),
     ("clean", "rule_11_package_files", ()),
     ("missing_py_typed", "rule_11_package_files", ("rule 11: demo: missing py.typed",)),
+    (
+        "isolation_one_table",
+        "rule_11_package_files",
+        (
+            "rule 11: demo: tests/test_rls_boundary.py does not query tenant table "
+            "quickscale_demo_gadget (Gadget)",
+        ),
+    ),
+    (
+        "isolation_operator_only",
+        "rule_11_package_files",
+        ("rule 11: demo: tests/test_isolation.py has no non-operator isolation proof",),
+    ),
+    (
+        "isolation_operator_and_no_org",
+        "rule_11_package_files",
+        ("rule 11: demo: tests/test_isolation.py has no non-operator isolation proof",),
+    ),
+    (
+        "isolation_grant_only",
+        "rule_11_package_files",
+        (
+            "rule 11: demo: tests/test_rls_boundary.py does not query tenant table "
+            "quickscale_demo_gadget (Gadget)",
+        ),
+    ),
+    ("isolation_member_setup", "rule_11_package_files", ()),
+    (
+        "isolation_unrestricted",
+        "rule_11_package_files",
+        (
+            "rule 11: demo: tests/settings.py does not default the database role to "
+            "quickscale_test_role",
+        ),
+    ),
     (
         "one_off_file",
         "rule_11_package_files",

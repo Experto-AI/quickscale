@@ -164,30 +164,30 @@ items:
     last_verified: "2026-10-26"
   - id: forms-tenant-isolation-evidence
     kind: drift
-    status: open
+    status: fixed
     verification: confirmed
     aspect: M
     cost: [tax]
     population: tenant-isolation-suites
     members_affected: [forms]
     rule_ref: "module_conventions rule 11; decisions.md §Multi-tenant SaaS Architecture"
-    check: {kind: conformance, state: proposed, model: contract-based}
+    check: {kind: conformance, state: enforced, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-29"
   - id: tenant-suite-default-role
     kind: drift
-    status: open
+    status: fixed
     verification: confirmed
     aspect: M
     cost: [tax]
     population: test-settings
     members_affected: [forms, listings, social]
-    rule_ref: "validation_policy.md §Testing Standards; proposed rule"
-    check: {kind: conformance, state: proposed, model: contract-based}
+    rule_ref: "validation_policy.md §Testing Standards; decisions.md §Unit/Integration Gate Split"
+    check: {kind: conformance, state: enforced, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-29"
   - id: crm-null-org-legacy
     kind: rule-violation
     status: open
@@ -229,17 +229,17 @@ items:
     last_verified: "2026-10-24"
   - id: stale-isolation-narratives
     kind: drift
-    status: open
+    status: fixed
     verification: confirmed
     aspect: O
     cost: [tax]
     population: tenant-isolation-suites
     members_affected: [crm, social]
     rule_ref: "module_conventions rules 11 and 29; test evidence accuracy"
-    check: {kind: review, state: proposed, model: contract-based}
+    check: {kind: review, state: review-only, model: contract-based}
     handoff: []
     first_seen: "2026-10-24"
-    last_verified: "2026-10-24"
+    last_verified: "2026-10-29"
   - id: orgs-invitation-notification-failure
     kind: drift
     status: fixed
@@ -272,13 +272,13 @@ gaps:
   - {id: 23, rule: 19, state: open, last_verified: "2026-10-24"}
   - {id: 25, rule: 9, state: closed, last_verified: "2026-10-26"}
   - {id: 26, rule: 30, state: closed, last_verified: "2026-10-26"}
-  - {id: 28, rule: 11, state: open, last_verified: "2026-10-24"}
+  - {id: 28, rule: 11, state: closed, last_verified: "2026-10-29"}
   - {id: 29, rule: 23, state: open, last_verified: "2026-10-24"}
 ```
 
 ## Summary table
 
-Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **3** (23, 28, and 29; prior 21 closed 2026-10-25, 22 and 26 closed 2026-10-26, 25 closed 2026-10-26). Cost classes overlap; the unique confirmed-item total is 6: defect 0 · collision 0 · ambiguity 3 · tax 4.
+Current confirmed open items: **3**. Prior accepted: **1** (`core-cli-module-knowledge`). Prior items left unverified: **41** (the 2026-10-16 census IDs are not itemized in the retained report; last-known `resolved`, excluded from current counts). Pending candidates: **1** (`notifications-validation-status`), plus the residual leads in §10. Open enforcement gaps: **2** (23 and 29; prior 21 closed 2026-10-25, 22 and 26 closed 2026-10-26, 25 closed 2026-10-26, 28 closed 2026-10-29). Cost classes overlap; the unique confirmed-item total is 3: defect 0 · collision 0 · ambiguity 3 · tax 1.
 
 | ID | Kind | Aspect / population | Cost | Affected / applicable | Status | Verification / confidence |
 |---|---|---|---|---|---|---|
@@ -286,16 +286,16 @@ Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-kno
 | `notifications-anymail-wiring-split` | rule-violation | B / modules | tax | 1/12 modules | resolved 2026-10-26 | fixed · high |
 | `billing-feature-gate` | rule-violation | H / modules | ambiguity | 1/12 modules | fixed (was regressed) | fixed · medium-high |
 | `billing-admin-org-filter` | drift | E / tenant-models | tax | 4/20 admin classes | fixed | fixed · high |
-| `forms-tenant-isolation-evidence` | drift | M / tenant-isolation-suites | tax | 1/6 suites | open | confirmed · high |
-| `tenant-suite-default-role` | drift | M / test-settings | tax | 3/12 suites | open | confirmed · medium-high |
+| `forms-tenant-isolation-evidence` | drift | M / tenant-isolation-suites | tax | 1/6 suites | fixed | fixed · high |
+| `tenant-suite-default-role` | drift | M / test-settings | tax | 3/12 suites | fixed | fixed · medium-high |
 | `crm-null-org-legacy` | rule-violation | G / tenant-models | tax, ambiguity | CRM + orgs shared admin | open | confirmed · high |
 | `public-read-marker-mixins` | rule-violation | E / modules | ambiguity | 2/4 public-read mixins | open | confirmed · high |
 | `listings-publish-org-fallback` | drift | D / modules | ambiguity | 1/2 publish services | open | confirmed · high on code, medium on reachability |
-| `stale-isolation-narratives` | drift | O / tenant-isolation-suites | tax | 2/6 suites | open | confirmed · high |
+| `stale-isolation-narratives` | drift | O / tenant-isolation-suites | tax | 2/6 suites | fixed | fixed · high |
 | `orgs-invitation-notification-failure` | drift | F / modules | defect, ambiguity | 1/2 senders | fixed | fixed · high |
 | `core-cli-module-knowledge` | drift | C / modules | tax | 6/12 modules | accepted | confirmed · high |
 
-**Leading item.** `billing-feature-gate` now leads: `generated-module-branches` and `notifications-anymail-wiring-split` closed on 2026-10-26 when the core templates moved onto module declarations and rules 37/30 began enforcing the clauses. The closed items remain in the tables as the audit’s record.
+**Leading item.** `crm-null-org-legacy` now leads: the three slice-(a) evidence items closed on 2026-10-29 when rule 11 began requiring every tenant table, a non-operator isolation path, and a restricted default role. The remaining three open items are SA324 (b)'s write-service scope. The closed items remain in the tables as the audit’s record.
 
 ## Aspect sections
 
@@ -437,9 +437,9 @@ Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-kno
 | billing | present | 4/4 models | yes (`test_every_tenant_model_scopes…`) | `quickscale_test_role` | present |
 | blog | present | 4/4 tables (cross-org 2) | yes | `quickscale_test_role` | present |
 | crm | present | 7/7 tables | yes (`test_restricted_role_authenticated_list_view`) | `quickscale_test_role` | present |
-| forms | present | 1/4 tables (`Form` only) | operator path only | `postgres` | divergent |
-| listings | present | 1/1 table | yes | `postgres` | role divergent |
-| social | present | 2/2 models | yes | `postgres` | role divergent |
+| forms | present | 4/4 models | yes (`test_regular_member_sees_only_own_org_forms`) | `quickscale_test_role` | present |
+| listings | present | 1/1 table | yes | `quickscale_test_role` | present |
+| social | present | 2/2 models | yes | `quickscale_test_role` | present |
 
 **Already consistent (keep):** 12/12 modules ship `test_apps.py`, `test_services.py`, and `test_migrations.py` where they have models; 6/6 tenant modules ship `test_isolation.py` and `test_rls_boundary.py`; conftest hooks come from `quickscale_core.testing.pytest_plugin`; test names carry no ticket ids. The integration gate runs module suites through `provision_ci_postgres.sh --profile restricted`; the role divergence affects direct `pytest`/IDE runs, not the gate invocation.
 
@@ -457,7 +457,7 @@ Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-kno
 | Every option key / command / flag named | 12/12 | all found | README/options/commands census | present |
 | Extending section covers the five standard items | 12/12 | each answers What QuickScale owns / What the project owns / Update-safe customizations / Structured extension points / Upgrade expectations | `module-extension.md:356-380`; all `## Extending` sections; harness rule 38 | present |
 | Release stamps in module error strings | 12/12 | none | `*/src/**/*.py`; harness rule 29 | present |
-| Isolation-test narratives describe current state | 4/6 current; CRM/social stale | CRM says no org FK/expected failure; social says assertion “confirms the gap” when it proves isolation | `crm/tests/test_isolation.py:1-22,126-134,232-240`; `social/tests/test_isolation.py:83,132` | divergent |
+| Isolation-test narratives describe current state | 6/6 current | CRM and social describe the enforced isolation contract; the shared assertion helper names isolation, not a gap | `*/tests/test_isolation.py`; `tests_shared/isolation.py` | present |
 | Docs links resolve | 12/12 module READMEs; docs tree | only the prior coherence report had a broken `**kwargs` link, replaced by this rewrite | relative-link scan | present |
 
 **Already consistent (keep):** README outline, option/command coverage, no versioned headings, no ticket ids in shipped source, module.yml descriptions have no release stamps, and rule documents are discoverable from `module-extension.md`/`START_HERE.md`.
@@ -589,29 +589,31 @@ Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-kno
 
 ### 6. `forms-tenant-isolation-evidence` — forms’ RLS proof covers one of four tenant tables
 
-- **ID / kind / status:** `forms-tenant-isolation-evidence` · `drift` · `open`.
+- **ID / kind / status:** `forms-tenant-isolation-evidence` · `drift` · `fixed`.
 - **Aspect / population / context:** M · `tenant-isolation-suites` · 6 tenant modules; forms.
 - **Table / evidence:** §M.1 row 4. `forms/tests/test_rls_boundary.py:5,26,89,104,124,203` states and tests only the `quickscale_forms_form` table; `_FORMS_TABLES` (all four) is used only for grants (`:72`). `forms/tests/test_isolation.py` has only the superuser operator path and a staff fail-closed path; no regular-member cross-tenant view test. Billing loops 4/4, CRM 7/7, social 2/2, blog 4/4, listings 1/1.
 - **Difference and cost:** **tax.** A regression in RLS on `FormSubmission`, `FormField`, or `FormFieldValue`, or in the forms admin view scoping, would not be caught by the forms suite; these are the submission payload and personal-data tables. The gate runs the suite, so this is a gate-coverage gap, not only local.
 - **Declared rule:** rule 11 required `test_isolation.py` + `test_rls_boundary.py` for tenant models (`module_conventions.md:298-316`); decisions require FORCE-RLS on all 22 tenant tables (`decisions.md:683`).
 - **Options:** loop all four tenant tables in the RLS boundary test (parameterized), add a regular-member view-path test, or add a separate forms-only view test.
 - **Recommended rule:** *coherence proposal 6* — A tenant module’s RLS boundary test exercises every enrolled tenant table with matching, non-matching, and unset org context, and its isolation test exercises the regular-member view path.
-- **Enforcement:** proposed test-coverage check over `test_rls_boundary.py` table names vs `TenantModel` subclasses; control case rejects a suite that names one table and accepts a parameterized suite. Evidence state: `proposed`.
+- **Enforcement:** rule 11 now derives each concrete tenant model's table and requires a `SELECT ... FROM` query against it, a non-operator isolation test, and a restricted default role (`_package_files.py`); controls reject a one-table/operator-only/unrestricted suite. Evidence state: `enforced`.
 - **Migration / acceptance:** extend the suite; no product change. Acceptance: all four tables appear in the restricted-role assertions. Responsibility: forms owner.
 - **Confidence / hand-off:** high · none.
+- **Resolution (2026-10-29, SA324 (a)):** forms' boundary suite is parameterized over all four tenant models with matching, non-matching and unset context; `test_regular_member_sees_only_own_org_forms` exercises the member request path; rule 11 rejects a boundary that leaves a tenant table unqueried. Proposal 6 is adopted in `decisions.md`.
 
 ### 7. `tenant-suite-default-role` — three tenant suites default to a superuser connection
 
-- **ID / kind / status:** `tenant-suite-default-role` · `drift` · `open`.
+- **ID / kind / status:** `tenant-suite-default-role` · `drift` · `fixed`.
 - **Aspect / population / context:** M (secondary N) · `test-settings` · 12 test settings; 3 tenant suites.
 - **Table / evidence:** §M.1 rows 4–6. `billing/tests/settings.py:101`, `blog/...:80`, `crm/...:48` pass `user="quickscale_test_role"`; `forms/...:105`, `listings/...:80`, `social/...:75` call `suite_database("<module>")`, whose default is `postgres` (`core/testing/settings.py:55-67`). The integration gate overrides via `provision_ci_postgres.sh --profile restricted`, but a direct `pytest` or IDE run uses the default.
 - **Difference and cost:** **tax.** A developer running the forms/listings/social suite directly can silently run as a superuser, which bypasses RLS; the same command in billing/blog/crm runs restricted. The docs say a single module suite requires a restricted role (`development.md:272-274`), so the defaults contradict the stated expectation and produce weaker local evidence.
 - **Declared rule:** `validation_policy.md:179-183` (integration role `NOSUPERUSER NOBYPASSRLS`); proposed rule.
 - **Options:** default all tenant suites to `quickscale_test_role`; require `QS_*_DB_USER`; document the asymmetry. Non-tenant suites can keep `postgres` where they need migration/role setup.
 - **Recommended rule:** *coherence proposal 7* — Every suite for a module with tenant models defaults its connection to the restricted role; an environment variable may override, but the default never bypasses RLS.
-- **Enforcement:** proposed check on `tests/settings.py` for tenant modules; control case rejects a default `postgres`. Evidence state: `proposed`.
+- **Enforcement:** rule 11 requires a tenant module's `tests/settings.py` to pass `user="quickscale_test_role"` to `suite_database`; the control rejects a default `postgres`. Evidence state: `enforced`.
 - **Migration / acceptance:** change three defaults; ensure the provisioning helper grants the role; no product change. Acceptance: direct `pytest` connects as the restricted role. Responsibility: forms/listings/social owners.
 - **Confidence / hand-off:** medium-high (default and gate behavior confirmed; whether direct superuser runs are considered supported is not recorded) · none.
+- **Resolution (2026-10-29, SA324 (a)):** forms, listings and social default `suite_database(..., user="quickscale_test_role")`; `QS_<MODULE>_DB_USER` still overrides. Q4 is answered in favour of the restricted default. Proposal 7 is adopted in `decisions.md` §Unit/Integration Gate Split.
 
 ### 8. `crm-null-org-legacy` — a NULL-organization state the model cannot hold
 
@@ -654,16 +656,17 @@ Current confirmed open items: **6**. Prior accepted: **1** (`core-cli-module-kno
 
 ### 13. `stale-isolation-narratives` — two isolation suites describe a pre-fix world
 
-- **ID / kind / status:** `stale-isolation-narratives` · `drift` · `open`.
+- **ID / kind / status:** `stale-isolation-narratives` · `drift` · `fixed`.
 - **Aspect / population / context:** O (secondary M) · `tenant-isolation-suites` · 6 suites; CRM and social.
 - **Table / evidence:** §O.1 row 5. CRM’s module docstring says “CRM models have no `organization` FK … data from one organization is visible to every other organization today” and “These tests document that failure” (`crm/tests/test_isolation.py:1-10`); the class docstring still says the leak “is expected to fail today” (`:126-134`); a test docstring says it “stays RED on v87” (`:232-240`) although the test now asserts isolation. Social’s two assertion messages say “This confirms the cross-tenant isolation gap” when the assertion is that isolation works (`social/tests/test_isolation.py:83,132`). Blog, billing, listings, forms narratives describe the current state.
 - **Difference and cost:** **tax.** A maintainer or auditor reading the suite cannot tell whether isolation is enforced; the stale text pins a fixed Finding 11 and a v87 status that no longer applies. This is test evidence, not a live defect.
 - **Declared rule:** rules 11/29 test evidence; the test files should describe what they protect (rule 11). Rule 29 bans ticket ids in tests; these are Phase/Finding references, not ticket ids.
 - **Options:** update the docstrings/messages to current state; add a review checklist for stale “expected to fail”/“gap” language; leave as historical.
 - **Recommended rule:** *coherence proposal 13* — A test’s module/class docstring and assertion messages describe the current contract; a historical failure belongs in the changelog, not as present-tense test evidence.
-- **Enforcement:** review-only (no reliable static check for stale prose); control is a review of the tenant isolation suite. Evidence state: `proposed`.
+- **Enforcement:** review-only (no reliable static check for stale prose); control is a review of the tenant isolation suite. Evidence state: `review-only`.
 - **Migration / acceptance:** rewrite CRM/social prose; no code change. Acceptance: no present-tense “leak exists”/“expected to fail” claim in a passing isolation test. Responsibility: CRM/social owners.
 - **Confidence / hand-off:** high · none.
+- **Resolution (2026-10-29, SA324 (a)):** CRM's module/class/test docstrings and social's two assertion messages describe the enforced isolation contract; the shared assertion helper names isolation, not a gap. Proposal 13 is adopted as a review-only clause.
 
 ### 15. `orgs-invitation-notification-failure` — the invitation is committed, then a send failure escapes as 500
 
@@ -701,9 +704,9 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Coherence proposal 5 — Tenant admin operator contract (adopted).** Every tenant-model admin exposes the organization column and an organization list filter, even when the model is read-only, so the per-org operator path is usable without a raw query parameter.
 
-**Coherence proposal 6 — Tenant isolation evidence is complete.** A tenant module’s RLS boundary test exercises every enrolled tenant table with matching, non-matching, and unset org context; its isolation test exercises the regular-member view path, not only the operator path.
+**Coherence proposal 6 — Tenant isolation evidence is complete (adopted).** A tenant module’s RLS boundary test exercises every enrolled tenant table with matching, non-matching, and unset org context; its isolation test exercises the regular-member view path, not only the operator path.
 
-**Coherence proposal 7 — Tenant suite defaults are restricted.** Every suite for a module with tenant models defaults its database connection to the restricted role; an environment variable may override, but the default never bypasses RLS.
+**Coherence proposal 7 — Tenant suite defaults are restricted (adopted).** Every suite for a module with tenant models defaults its database connection to the restricted role; an environment variable may override, but the default never bypasses RLS.
 
 **Coherence proposal 8 — No NULL-tenant compatibility.** Tenant-scoped relations are NOT NULL. A compatibility branch for a NULL organization is removed with its constraint and test, or backed by a named legacy-data decision and a reachable migration.
 
@@ -715,7 +718,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Coherence proposal 12 — One default home (adopted).** A manifest default has one home; code constants either derive from the manifest or are removed.
 
-**Coherence proposal 13 — Test evidence is current.** A test’s module/class docstring and assertion messages describe the current contract; a historical failure belongs in the changelog, not as present-tense test evidence.
+**Coherence proposal 13 — Test evidence is current (adopted).** A test’s module/class docstring and assertion messages describe the current contract; a historical failure belongs in the changelog, not as present-tense test evidence.
 
 **Coherence proposal 14 — Error messages name behaviour, not releases (adopted).** A module error message names the current behaviour; a support change is a release note, not a version stamp.
 
@@ -733,7 +736,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Gap 26 (closed 2026-10-26) — rule 30 checks module adapters, not core templates.** `rule_30_settings_composition` reads every core generator template outside the theme tree and reports a `QUICKSCALE_<MODULE>_*` token; the notifications adapter now writes `ANYMAIL` and the generated base settings carries only the generic `MODULE_SETTINGS` application. Control: a core template that reads a module setting fails; the generic `MODULE_SETTINGS`/`compose_rest_framework(...)` composition passes. State `closed`; linked items 1–2.
 
-**Gap 28 — rule 11 checks file presence, not isolation evidence.** It does not require every tenant table in the RLS boundary, a regular-member view test, or a restricted default role in `tests/settings.py`. Control: a one-table/one-operator-path suite fails; the all-table/restricted suite passes. State `observed-in-source`; linked items 6–7.
+**Gap 28 (closed 2026-10-29) — rule 11 checks file presence, not isolation evidence.** It did not require every tenant table in the RLS boundary, a regular-member view test, or a restricted default role in `tests/settings.py`. Rule 11 now derives each concrete tenant model's table and requires a `SELECT ... FROM` query against it, a non-operator isolation test, and the restricted default role; the control rejects a one-table/operator-only/unrestricted suite. State `closed`; linked items 6–7.
 
 **Gap 29 — rule 23/3 does not require an explicit organization on a write service.** Listings’ optional `organization` and System-org fallback pass the signature and service-surface checks. Control: a write service with a defaulted organization fails; a keyword-only required organization passes. State `observed-in-source`; linked item 11.
 
@@ -771,7 +774,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 
 **Catalogue:** no new aspect letter. The pass used A–V; the only cross-cutting addition is a generated-output-authority clause under L/O, captured as proposal 1. No new aspect is warranted without a population that the current catalogue cannot express.
 
-**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) a sender’s post-commit failure follows item 15’s recorded best-effort policy; (e) whether the new module’s test settings default restricted (item 7) and which tables the RLS proof covers (item 6). Each is a forced decision, not a copy-source choice.
+**Add-one-more probe (paper).** Add a layer-3 module with one routed JSON list, one publish API, one webhook, one transactional email, one vendor secret, one scheduled command, and one tenant model. The normal path requires a manifest (`config`, `required_modules`, `dependencies`, `derivation`, `throttle_scopes`), an adapter, a package layout, a README, `MODULE_CATALOG`/`AUTHORITATIVE_MODULE_COUNT`, a mypy section, a `.env.example` catalog entry, and any seam/admin/CI rows. Settled by SA320 (c): (a) the admin/CI/compose hook is module-declared — a module-owned admin template, `project_blocks` regions, and `compose_env`; (b) nested vendor settings live in the module adapter (notifications writes `ANYMAIL`). Open choices the current contract does not settle for the author: (c) whether a new public page uses the priming mixin or the empty marker (item 10); (d) a sender’s post-commit failure follows item 15’s recorded best-effort policy; Settled by SA324 (a): (e) the new module's test settings default restricted and rule 11 requires the RLS proof to cover every tenant table. Each is a forced decision, not a copy-source choice.
 
 **Residual work and limits.**
 
@@ -784,7 +787,7 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 ## Questions that would change a rule
 
 2. **Q2 (`orgs-invitation-notification-failure`) — answered 2026-10-27: best-effort.** The committed invitation stays, the failure is logged and surfaced, and no sender raises after commit (`decisions.md` §Notifications Contract).
-4. **Q4 (`tenant-suite-default-role`):** Is a direct `pytest` run under the default `postgres` role a supported workflow, or must every tenant suite default to the restricted role?
+4. **Q4 (`tenant-suite-default-role`) — answered 2026-10-29: the restricted default.** Every tenant suite defaults to `quickscale_test_role`; `QS_<MODULE>_DB_USER` overrides it for a developer or IDE run.
 5. **Q5 (consistent-by-design trigger):** May a leaf tenant admin row be reassigned to another organization? If not, listings/social should use the shared immutable-org admin behavior.
 
 ## Reconciliation log
@@ -846,3 +849,4 @@ These are paste-ready proposals. Proposals 3, 4, 5, 9, 12, and 14 are adopted an
 - 2026-10-25 — gap 21: closed; the computed-operation detector, both fixture controls, and the two commands' `--dry-run` handling landed.
 - 2026-10-26 — `billing-feature-gate` and `billing-admin-org-filter`: fixed by SA314 (b); proposals 4 and 5 adopted, gap 25 closed with its gate controls.
 - 2026-10-27 — `orgs-invitation-notification-failure`: **resolved** by SA315 (a); the best-effort policy is recorded in decisions.md §Notifications Contract, the sender catches only `NotificationsError` and surfaces the failure on both invite surfaces, and tests cover the HTML and JSON outcomes plus a non-notifications error.
+- 2026-10-29 — `forms-tenant-isolation-evidence`, `tenant-suite-default-role` and `stale-isolation-narratives`: **resolved** by SA324 (a); rule 11 now requires every tenant table, a non-operator isolation path and the restricted default role, gap 28 is closed, and forms/listings/social default to `quickscale_test_role`.

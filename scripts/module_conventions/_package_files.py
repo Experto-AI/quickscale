@@ -10,6 +10,7 @@ keep working.  Rule 18's pyproject template diff lives in
 from __future__ import annotations
 
 import ast
+import re
 
 from scripts.module_conventions._package_pyproject import _module_pyproject_violations
 from scripts.module_conventions._settings_reads import _module_level_targets
@@ -22,6 +23,7 @@ from scripts.module_conventions.core import (
     _class_names,
     _declared_exports,
     _keyword,
+    _meta_class,
     _model_classes,
     _parse,
     _string_assignments,
@@ -332,6 +334,330 @@ def _has_tenant_model(text: str) -> bool:
     return False
 
 
+# Rule 11's tenant-isolation evidence (coherence proposal 6/7, gap 28).  The
+# restricted login role every tenant suite must default to; ``suite_database``
+# still honors each module's ``QS_<MODULE>_DB_USER`` override.
+RULE_11_RESTRICTED_TEST_ROLE = "quickscale_test_role"
+
+#: Calls and fixtures that mark an isolation test as the operator escape hatch.
+_ISOLATION_OPERATOR_MARKERS = frozenset({"operator_access", "all_objects"})
+
+_RESTRICTED_USER_RE = re.compile(rf"user\s*=\s*[\"']{RULE_11_RESTRICTED_TEST_ROLE}[\"']")
+
+
+def _app_label(apps_text: str | None, module_name: str) -> str:
+    """Return the Django app label a module's AppConfig declares."""
+    if apps_text:
+        for node in ast.walk(_parse(apps_text)):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "label" for target in targets):
+                continue
+            value = node.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                return value.value
+    return f"quickscale_{module_name}"
+
+
+def _meta_flag(node: ast.ClassDef, name: str) -> bool:
+    """Return whether a model's own ``Meta`` sets ``name = True``."""
+    meta = _meta_class(node)
+    if meta is None:
+        return False
+    for statement in meta.body:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+        else:
+            continue
+        if any(isinstance(target, ast.Name) and target.id == name for target in targets):
+            return isinstance(statement.value, ast.Constant) and statement.value.value is True
+    return False
+
+
+def _declared_db_table(node: ast.ClassDef) -> str | None:
+    """Return a model's literal ``Meta.db_table`` when it declares one."""
+    meta = _meta_class(node)
+    if meta is None:
+        return None
+    for statement in meta.body:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+        else:
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "db_table" for target in targets):
+            continue
+        value = statement.value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return value.value
+    return None
+
+
+def _tenant_model_tables(
+    models_text: str,
+    apps_text: str | None,
+    module_name: str,
+) -> list[tuple[str, str]]:
+    """
+    Return ``(model name, table)`` for each concrete tenant model.
+
+    Django derives an undeclared table as ``<app label>_<model name lower>``;
+    a literal ``Meta.db_table`` wins.  Abstract bases and proxies are not
+    enrolled tables, so they contribute none.
+    """
+    label = _app_label(apps_text, module_name)
+    tree = _parse(models_text)
+    classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+    found: list[tuple[str, str]] = []
+    for node in _model_classes(tree):
+        if node.name == "TenantModel" or _meta_flag(node, "abstract") or _meta_flag(node, "proxy"):
+            continue
+        bases = [
+            *_class_names(node),
+            *(ancestor.name for ancestor in _ancestors(node, classes)),
+        ]
+        if "TenantModel" not in bases and not any(base in MODULE_ABSTRACT_BASES for base in bases):
+            continue
+        found.append((node.name, _declared_db_table(node) or f"{label}_{node.name.lower()}"))
+    return found
+
+
+def _binding_assignments(statements: list[ast.stmt]) -> list[tuple[list[str], ast.expr]]:
+    """
+    Return the target/expression pairs one Python scope assigns.
+
+    ``_own_scope_statements`` descends into ``if``/``try`` blocks but stops at
+    a nested function or class, so a local name never merges with the same
+    name in another function.
+    """
+    assignments: list[tuple[list[str], ast.expr]] = []
+    for node in _own_scope_statements(statements):
+        if isinstance(node, ast.Assign):
+            targets = [target.id for target in node.targets if isinstance(target, ast.Name)]
+            assignments.append((targets, node.value))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            assignments.append(([node.target.id], node.value))
+        elif isinstance(node, (ast.For, ast.AsyncFor)) and isinstance(node.target, ast.Name):
+            assignments.append(([node.target.id], node.iter))
+    return assignments
+
+
+def _resolve_bindings(
+    assignments: list[tuple[list[str], ast.expr]],
+    seed: dict[str, set[str]],
+) -> dict[str, set[str]]:
+    """Resolve names to the table literals they can hold within one scope."""
+    bindings = {name: set(values) for name, values in seed.items()}
+    for _ in range(len(assignments) + 1):
+        changed = False
+        for targets, value in assignments:
+            literals = {
+                element.value
+                for element in ast.walk(value)
+                if isinstance(element, ast.Constant) and isinstance(element.value, str)
+            }
+            for name in {
+                element.id for element in ast.walk(value) if isinstance(element, ast.Name)
+            }:
+                literals.update(bindings.get(name, set()))
+            for target in targets:
+                if not literals <= bindings.get(target, set()):
+                    bindings[target] = bindings.get(target, set()) | literals
+                    changed = True
+        if not changed:
+            return bindings
+    return bindings
+
+
+def _enclosing_function(
+    node: ast.AST,
+    parents: dict[ast.AST, ast.AST],
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    """Return the nearest enclosing function, or ``None`` at module level."""
+    current = parents.get(node)
+    while current is not None:
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return current
+        current = parents.get(current)
+    return None
+
+
+def _boundary_table_coverage(text: str) -> set[str]:
+    """
+    Return the tables a boundary suite queries with ``SELECT ... FROM``.
+
+    Only ``execute`` calls whose SQL selects rows count; a grant statement
+    names a table without proving it.  Bindings are resolved per function, so
+    a grant helper's loop variable cannot credit a table that the test body
+    never queries.  A direct literal and an f-string whose variable resolves
+    to a table binding both count.
+    """
+    tree = _parse(text)
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    module_bindings = _resolve_bindings(_binding_assignments(tree.body), {})
+    function_bindings: dict[ast.AST, dict[str, set[str]]] = {}
+
+    def bindings_for(node: ast.AST) -> dict[str, set[str]]:
+        function = _enclosing_function(node, parents)
+        if function is None:
+            return module_bindings
+        if function not in function_bindings:
+            function_bindings[function] = _resolve_bindings(
+                _binding_assignments(function.body),
+                module_bindings,
+            )
+        return function_bindings[function]
+
+    covered: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        function_name = func.attr if isinstance(func, ast.Attribute) else ""
+        if function_name != "execute" or not node.args:
+            continue
+        sql = node.args[0]
+        fragments = [
+            element.value
+            for element in ast.walk(sql)
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        ]
+        if not fragments:
+            continue
+        rendered = " ".join(fragments)
+        if "from" not in rendered.lower() or "grant" in rendered.lower():
+            continue
+        if isinstance(sql, ast.JoinedStr):
+            bindings = bindings_for(node)
+            for value in sql.values:
+                if isinstance(value, ast.FormattedValue) and isinstance(value.value, ast.Name):
+                    covered.update(bindings.get(value.value.id, set()))
+        covered.update(re.findall(r"quickscale_[a-z0-9_]+", rendered))
+    return covered
+
+
+_WRITE_METHODS = frozenset(
+    {
+        "bulk_create",
+        "bulk_update",
+        "create",
+        "delete",
+        "get_or_create",
+        "update",
+        "update_or_create",
+    }
+)
+
+
+def _call_name(node: ast.Call) -> str:
+    """Return the final attribute or plain name a call targets."""
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return ""
+
+
+def _is_write_access(
+    node: ast.AST,
+    parents: dict[ast.AST, ast.AST],
+) -> bool:
+    """Return whether an ``all_objects`` occurrence is a setup write."""
+    current = parents.get(node)
+    while current is not None and not isinstance(current, ast.Call):
+        current = parents.get(current)
+    return isinstance(current, ast.Call) and _call_name(current) in _WRITE_METHODS
+
+
+def _is_operator_test(test: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a test exercises the operator escape hatch."""
+    parents = {child: parent for parent in ast.walk(test) for child in ast.iter_child_nodes(parent)}
+    for node in ast.walk(test):
+        if isinstance(node, ast.arg) and "superuser" in node.arg:
+            return True
+        if isinstance(node, ast.Name) and node.id == "operator_access":
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == "all_objects":
+            if not _is_write_access(node, parents):
+                return True
+    return False
+
+
+def _is_status_only_assert(node: ast.Assert) -> bool:
+    """Return whether an assert checks only ``<...>.status_code``."""
+    expression = node.test
+    if not isinstance(expression, ast.Compare):
+        return False
+    left = expression.left
+    return (
+        isinstance(left, ast.Attribute)
+        and left.attr == "status_code"
+        and all(isinstance(value, ast.Constant) for value in expression.comparators)
+    )
+
+
+def _proves_tenant_isolation(test: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a non-operator test asserts tenant data or isolation."""
+    if _is_operator_test(test):
+        return False
+    for node in ast.walk(test):
+        if isinstance(node, ast.Assert) and not _is_status_only_assert(node):
+            return True
+        if isinstance(node, ast.Call) and _call_name(node).startswith("assert_"):
+            return True
+    return False
+
+
+def _isolation_has_proof(text: str) -> bool:
+    """Return whether one isolation test proves tenant isolation non-operatively."""
+    tree = _parse(text)
+    tests = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name.startswith("test_")
+    ]
+    return any(_proves_tenant_isolation(test) for test in tests)
+
+
+def _tenant_isolation_violations(module: Module, models: str) -> list[str]:
+    """Rule 11: every tenant table and the non-operator role are evidenced."""
+    violations: list[str] = []
+    boundary = module.tests.get("test_rls_boundary.py")
+    isolation = module.tests.get("test_isolation.py")
+    settings = module.tests.get("settings.py")
+    if boundary is not None:
+        covered = _boundary_table_coverage(boundary)
+        for model_name, table in _tenant_model_tables(
+            models,
+            module.files.get("apps.py"),
+            module.name,
+        ):
+            if table not in covered:
+                violations.append(
+                    f"rule 11: {module.name}: tests/test_rls_boundary.py does not query "
+                    f"tenant table {table} ({model_name})"
+                )
+    if isolation is not None and not _isolation_has_proof(isolation):
+        violations.append(
+            f"rule 11: {module.name}: tests/test_isolation.py has no non-operator isolation proof"
+        )
+    if settings is None or not _RESTRICTED_USER_RE.search(settings):
+        violations.append(
+            f"rule 11: {module.name}: tests/settings.py does not default the database "
+            f"role to {RULE_11_RESTRICTED_TEST_ROLE}"
+        )
+    return violations
+
+
 def _choices_classes(tree: ast.Module) -> list[tuple[tuple[str, ...], ast.ClassDef]]:
     """Return every ``TextChoices``/``IntegerChoices`` class and its enclosing names."""
     found: list[tuple[tuple[str, ...], ast.ClassDef]] = []
@@ -529,5 +855,6 @@ def rule_11_package_files(corpus: Corpus) -> list[str]:
             for name in ("test_isolation.py", "test_rls_boundary.py"):
                 if name not in module.tests:
                     violations.append(f"rule 11: {module.name}: missing tests/{name}")
+            violations.extend(_tenant_isolation_violations(module, models))
         violations.extend(_choice_member_comparison_violations(module))
     return violations

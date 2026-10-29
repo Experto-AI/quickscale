@@ -80,7 +80,7 @@ class TestSocialIsolation:
             )
             assert "Org B Link" not in org_a_titles, (
                 "Org B's link must not be visible to Org A. "
-                "This confirms the cross-tenant isolation gap (Finding 11)."
+                "This confirms cross-tenant isolation."
             )
         finally:
             _reset_org_context()
@@ -129,7 +129,7 @@ class TestSocialIsolation:
             )
             assert "Org B Embed" not in org_a_titles, (
                 "Org B's embed must not be visible to Org A. "
-                "This confirms the cross-tenant isolation gap (Finding 11)."
+                "This confirms cross-tenant isolation."
             )
         finally:
             _reset_org_context()

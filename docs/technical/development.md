@@ -269,9 +269,9 @@ make typecheck -- --cli
 # Unit-test only the core package
 make test-unit -- --core
 
-# Run a single module's test suite (requires a restricted PostgreSQL role; set the
-# module's QS_*_DB_USER environment variable to `quickscale_test_role` or equivalent):
-QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules
+# Run a single module's test suite. Tenant module suites default to the
+# restricted role; QS_<MODULE>_DB_USER overrides it.
+make MODULE=orgs test -- --modules
 ```
 
 **Pre-merge** — before committing:

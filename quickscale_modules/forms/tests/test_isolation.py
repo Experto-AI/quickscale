@@ -3,7 +3,9 @@
 T1.7: org-scoped URL patterns are removed (D1/D5).  The admin submission
 list is now an operator-only path (``all_objects``) that returns all
 submissions cross-tenant.  The isolation test verifies that the operator
-admin path correctly returns submissions from both organizations.
+admin path correctly returns submissions from both organizations, and that
+a regular member with an active organization sees only that organization's
+forms through the full request pipeline.
 
 Rule 19: the admin API authorizes by organization role, so an authenticated
 caller with no active-organization context is refused (403) before it can
@@ -95,4 +97,67 @@ def test_staff_without_org_fails_closed_on_admin_list(
     response = staff_client.get(url)
     assert response.status_code == 403, (
         f"Expected 403 Forbidden without an org context, got {response.status_code}"
+    )
+
+
+@pytest.mark.isolation
+@pytest.mark.django_db
+def test_regular_member_sees_only_own_org_forms(org_a, org_b):
+    """A regular member with an active org sees only that org's forms.
+
+    This is the non-operator view path: a MEMBER signs in through the real
+    session pipeline, ``TenantMiddleware`` primes the request organization,
+    and the admin list returns only the active organization's forms.
+    """
+    from django.contrib.auth import get_user_model
+    from django.urls import reverse
+    from rest_framework.test import APIClient
+
+    from quickscale_modules_forms.models import Form
+    from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
+    from quickscale_modules_orgs.current_org import org_scope
+    from quickscale_modules_orgs.models import OrgRole, OrganizationMembership
+
+    member = get_user_model().objects.create_user(
+        username="forms-member",
+        email="forms-member@example.com",
+        password="testpass123",
+    )
+    OrganizationMembership.objects.create(
+        user=member,
+        organization=org_a,
+        role=OrgRole.MEMBER,
+    )
+    with org_scope(org_a):
+        Form.all_objects.create(
+            title="Org A Member Form",
+            slug="org-a-member-form",
+            organization=org_a,
+        )
+    with org_scope(org_b):
+        Form.all_objects.create(
+            title="Org B Member Form",
+            slug="org-b-member-form",
+            organization=org_b,
+        )
+
+    client = APIClient()
+    client.force_login(member)
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(org_a.pk)
+    session.save()
+
+    url = reverse("quickscale_forms:admin_form_list")
+    response = client.get(url)
+
+    assert response.status_code == 200, (
+        f"Expected 200 OK, got {response.status_code}. "
+        f"Response: {response.content.decode()[:500]}"
+    )
+    slugs = [item["slug"] for item in response.data]
+    assert "org-a-member-form" in slugs, (
+        f"Member must see their own org's form. Got slugs: {slugs}"
+    )
+    assert "org-b-member-form" not in slugs, (
+        f"Member must not see another org's form. Got slugs: {slugs}"
     )

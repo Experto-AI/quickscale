@@ -286,6 +286,7 @@ def _golden_module(name: str = "demo") -> Module:
         tests={
             "settings.py": (
                 "SECRET_KEY = 'test'\n"
+                "DATABASES = {'default': suite_database('demo', user='quickscale_test_role')}\n"
                 "QUICKSCALE_DEMO_ENABLED = True\n"
                 "QUICKSCALE_DEMO_BACKEND = 'local'\n"
                 "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
@@ -306,7 +307,8 @@ def _golden_module(name: str = "demo") -> Module:
                 '"""Tenant isolation behaviour."""\n\n\ndef test_isolation():\n    assert True\n'
             ),
             "test_rls_boundary.py": (
-                '"""RLS boundary behaviour."""\n\n\ndef test_boundary():\n    assert True\n'
+                '"""RLS boundary behaviour."""\n\n\ndef test_boundary(cursor):\n'
+                '    cursor.execute("SELECT COUNT(*) FROM quickscale_demo_widget")\n'
             ),
             "test_widget.py": '"""Widget behaviour."""\n\n\ndef test_widget():\n    assert True\n',
         },

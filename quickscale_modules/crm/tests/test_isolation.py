@@ -1,31 +1,15 @@
 """Cross-tenant isolation tests for the CRM module.
 
-Phase 14.1 of the roadmap introduces this harness to make the current
-cross-tenant data leak observable and verifiable.  CRM models have no
-``organization`` FK and CRM viewsets query ``Model.objects.all()`` with no
-tenant scoping, so data from one organization is visible to every other
-organization today.  These tests document that failure.
+CRM tenant tables carry a NOT NULL organization FK.  ``TenantManager``
+scoping and PostgreSQL FORCE RLS isolate one organization's rows from
+another's on every org-scoped read path.  These tests prove that a request
+scoped to one organization returns only that organization's rows and that
+the operator escape hatch still exposes every organization.
 
-The ``xfail(strict=True)`` marker is applied only to the cross-tenant leak
-assertion itself.  Request-path, authentication, status-code, and
-response-shape regressions fail normally so that infrastructure breakage is
-never masked by the expected-failure marker.  Once structural isolation is
-in place (Finding 11), the marker removal becomes an explicit part of the
-F11 rollout.
-
-F11.5 Phase 1 + 2 update: Primary resource read paths (Tag, Company, Contact,
-Stage, Deal, ContactNote, DealNote) are now org-scoped via OrgScopedReadMixin
-on org-scoped SaaS routes.  Dashboard aggregate/recent queries and serializer
-helper queries (counts, tag names) are also org-scoped.  The cross-tenant
-leak for the tested path (company list) is now fixed, so the xfail marker
-has been removed.  Remaining seams (bulk actions, admin/operator paths) are
-out of scope for F11.5.
-
-Addition: ``test_restricted_role_authenticated_list_view`` exercises the
-full Django request path under the NOBYPASSRLS runtime role without
-presetting the GUC. This is the red-green verification test without
-the ``execute_wrapper`` that sets ``app.current_org_id`` from the ContextVar,
-every RLS-gated query returns zero rows.
+``test_restricted_role_authenticated_list_view`` exercises the full Django
+request path under the NOBYPASSRLS runtime role without presetting the GUC.
+The connection-layer execute wrapper primes ``app.current_org_id`` from the
+ContextVar; without it, every RLS-gated query returns zero rows.
 """
 
 import pytest
@@ -127,9 +111,7 @@ class TestCRMCrossTenantIsolation:
     """Cross-tenant isolation assertions for CRM tenant data.
 
     These tests confirm that one organization's data is not visible to
-    another organization.  The cross-tenant leak assertion is expected to
-    fail today because CRM models lack an ``organization`` FK and viewsets
-    use unscoped ``Model.objects.all()`` queries (Finding 11 / Phase 14.1).
+    another organization through the org-scoped request path.
     """
 
     def test_org_a_request_returns_200(
@@ -140,10 +122,9 @@ class TestCRMCrossTenantIsolation:
     ):
         """A request scoped to Org A returns 200 for an org admin.
 
-        This assertion is NOT expected to fail.  It validates that the
-        org-scoped CRM API request path, TenantMiddleware, and
-        authentication all function correctly.  If this fails, it indicates
-        a request-path or auth regression — not the cross-tenant leak.
+        This assertion validates that the org-scoped CRM API request path,
+        TenantMiddleware, and authentication all function correctly.  A
+        failure indicates a request-path or auth regression.
         """
         from quickscale_modules_crm.models import Company
         from quickscale_modules_orgs.current_org import set_current_org_id
@@ -176,17 +157,11 @@ class TestCRMCrossTenantIsolation:
     ):
         """A request scoped to Org A must not return Org B's companies.
 
-        F11.5 Phase 1 + 2: This assertion now passes because CompanyViewSet
-        uses OrgScopedReadMixin to scope queries to the active organization
-        on org-scoped SaaS routes.  The xfail marker has been removed to
-        reflect the fixed seam state.
-
-        The test exercises a real org-scoped request path through
-        TenantMiddleware, so the assertion validates the full request seam
-        rather than a bare ORM query.
-
-        Only the cross-tenant data assertion is tested here.  The
-        request-path, auth, status, and response-shape checks are in
+        ``OrgScopedReadMixin`` scopes the view to the active organization on
+        org-scoped SaaS routes, so the test exercises the real request path
+        through TenantMiddleware rather than a bare ORM query.  Only the
+        cross-tenant data assertion is tested here; the request-path, auth,
+        status, and response-shape checks are in
         ``test_org_a_request_returns_200`` and fail normally.
         """
         from quickscale_modules_crm.models import Company
@@ -229,12 +204,10 @@ class TestCRMCrossTenantIsolation:
 
         Exercises the full Django request pipeline (middleware, auth, view,
         serializer, ORM) under the NOBYPASSRLS runtime role without
-        presetting the GUC. Without the ``execute_wrapper`` that issues
-        ``SET LOCAL app.current_org_id`` from the ContextVar, every
-        RLS-gated query returns zero rows — turning this test red.
-
-        This is the red-green verification test. It stays RED on
-        v87 until the connection-layer execute_wrapper is implemented.
+        presetting the GUC.  Without the connection-layer execute wrapper
+        that issues ``SET LOCAL app.current_org_id`` from the ContextVar,
+        every RLS-gated query returns zero rows; this is the red-green proof
+        that the wrapper is installed.
         """
         from quickscale_modules_crm.models import Company
         from quickscale_modules_crm.services import ensure_org_default_stages

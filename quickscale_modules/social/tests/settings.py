@@ -3,7 +3,7 @@
 Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 
 * ``QS_SOCIAL_DB_NAME`` (default: ``test_quickscale_social``)
-* ``QS_SOCIAL_DB_USER`` (default: ``postgres``)
+* ``QS_SOCIAL_DB_USER`` (default: ``quickscale_test_role``)
 * ``QS_SOCIAL_DB_PASSWORD`` (default: ``""``)
 * ``QS_SOCIAL_DB_HOST`` (default: ``localhost``)
 * ``QS_SOCIAL_DB_PORT`` (default: ``5432``)
@@ -72,7 +72,7 @@ TEMPLATES = [
 ]
 
 DATABASES = {
-    "default": suite_database("social"),
+    "default": suite_database("social", user="quickscale_test_role"),
 }
 
 USE_TZ = True
