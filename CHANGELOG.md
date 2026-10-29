@@ -210,6 +210,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     members without an owner rolls back, the admin can delete an organization with a sole owner,
     the `new` slug is reserved for the create page, and a failed invitation email keeps the
     invitation and reports its delivery status instead of returning a 500.
+  - **Email changes go through django-allauth.** The profile edit page no longer writes the account
+    email; the profile page links to django-allauth's address management, so a changed address is
+    verified there and the old address stops resetting the password.
+  - **Account-deletion logs carry no identity.** Failure, compensation, and retained-organization
+    skip records name the account and organization by primary key, never by name, username, or
+    address.
   - **Generated deployments run migrations before the new version starts.** `railway.json` runs
     `./predeploy.sh` as the pre-deploy command, `/ready/` gates the deployment on a reached
     database with no pending migrations, and production serving refuses container-local media

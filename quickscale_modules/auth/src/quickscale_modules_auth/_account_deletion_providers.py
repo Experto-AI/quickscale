@@ -227,10 +227,12 @@ class _AccountDeletionProviderMixin:
         except BaseException:
             try:
                 stack.close()
-            except BaseException:
-                logger.exception(
+            except BaseException as cleanup_error:
+                logger.error(
                     "Account deletion provider-lock cleanup failed after an "
-                    "acquisition failure; re-raising the acquisition failure."
+                    "acquisition failure (error type %s); re-raising the "
+                    "acquisition failure.",
+                    type(cleanup_error).__name__,
                 )
             raise
 
@@ -260,13 +262,12 @@ class _AccountDeletionProviderMixin:
                         organization,
                         transition,
                     )
-                except Exception:
-                    logger.exception(
-                        "Account deletion compensation failed for user %s (pk=%s), "
-                        "organization %s (pk=%s). Manual provider reconciliation is "
-                        "required.",
-                        user,
+                except Exception as exc:
+                    logger.error(
+                        "Account deletion compensation failed for user pk=%s, "
+                        "organization pk=%s (error type %s). Manual provider "
+                        "reconciliation is required.",
                         user.pk,
-                        organization.name,
                         organization.pk,
+                        type(exc).__name__,
                     )
