@@ -53,7 +53,7 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA191d (re-proof) | no: 0.89.0 tag re-cut | no: operator gates for (production), (retire) | yes |
+| 2 | SA191d (re-proof) | yes: tag re-cut; split republication pending | no: operator gates for (re-proof push), (production), (retire) | yes |
 | 3 | SA277 (b) | no: SA191d (production) | no: SA191d (production) | yes |
 
 ### Ownership and merge coordination
@@ -116,8 +116,11 @@ conformance check on `properties.PropertyAgent` and siblings.
     green (tenant conformance included) and both dependency audits clean apart from the recorded
     dev-only exception. Check the GitHub Actions run on `develop`; while it fails, fix and push
     again until it passes (a project defect is fixed in `bap-web`, a QuickScale defect follows the
-    release re-entry loop). Known first failure: classify the `properties` models in the tenant
-    contract (Tier 2-full).
+    release re-entry loop). The known `properties` tenant/personal-data declaration failure is
+    fixed and locally validated; the re-cut module adoption is blocked until the split branches
+    are republished from the tag (`make publish-modules`; they still point at their pre-re-cut
+    commits), after which the operator push, hosted CI, and the develop acceptance remain
+    (Tier 2-full).
   - [ ] (production) After re-proof and operator approval, ship the same commit and tag: execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
