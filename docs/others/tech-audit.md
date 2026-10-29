@@ -74,6 +74,16 @@ back a bulk deletion that leaves members without an owner; a deletion whose orig
 organization row itself is exempt from the last-owner receiver, so the documented admin delete
 succeeds; and `new` joins `api` in `RESERVED_ORG_SLUGS`.
 
+**Fix record (2026-10-29).** SA315 (b) closes the two auth findings recorded below; their entries
+keep the audit evidence and now carry `status: fixed`: `auth-profile-email-change-desync` and
+`auth-deletion-logs-pii`. The profile edit form no longer writes the account address; email changes
+run through django-allauth's address-management page, and a regression test completes that flow and
+proves a password reset through the removed old address issues no reset link. Account-deletion failure,
+compensation, and retained-organization skip records name the account and organization by primary
+key only, never by name, username, or address; the failure records also omit the exception message
+and traceback, logging only the exception type, because a deletion failure's exception can embed
+the protected rows' identity.
+
 ## Orientation summary
 
 QuickScale is a Python 3.14 / Django 6.0 **project generator and first-party module platform**: a CLI
@@ -301,12 +311,12 @@ items:
      confidence: High, reality: generated-project,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/_lock.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: auth-profile-email-change-desync, status: open, severity: S3, category: III,
+  - {id: auth-profile-email-change-desync, status: fixed, severity: S3, category: III,
      title: "Profile email change updates User.email but not allauth EmailAddress", effort: Small,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/auth/src/quickscale_modules_auth/forms.py,
                quickscale_modules/auth/src/quickscale_modules_auth/_profile_views.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-29}
   - {id: cli-remove-accepts-path-traversal, status: fixed, severity: S3, category: X,
      title: "quickscale remove joins an unvalidated module argument into modules/ and rmtree()s it",
      effort: Trivial, confidence: High, reality: maintainer-toolchain,
@@ -399,12 +409,12 @@ items:
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py,
                quickscale_modules/billing/src/quickscale_modules_billing/_credits.py],
      depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
-  - {id: auth-deletion-logs-pii, status: open, severity: S4, category: IX,
+  - {id: auth-deletion-logs-pii, status: fixed, severity: S4, category: IX,
      title: "Account-deletion failure paths log the user's name and org names", effort: Trivial,
      confidence: High, reality: generated-project,
      anchors: [quickscale_modules/auth/src/quickscale_modules_auth/views.py,
                quickscale_modules/auth/src/quickscale_modules_auth/_account_deletion_providers.py],
-     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-24}
+     depends_on: [], chain: [], first_seen: 2026-10-24, last_verified: 2026-10-29}
   - {id: beta-migrate-existing-recipient-no-dirty-guard, status: fixed, severity: S4, category: X,
      title: "--existing-recipient overwrites a git-tracked recipient with no dirty-tree check",
      effort: Small, confidence: High, reality: maintainer-toolchain,
@@ -1027,13 +1037,12 @@ machine-readable index above); no S1/S2 finding remains open.
   `backups-restore-not-atomic`, `backups-creation-lock-expires-live`, plus the S4 backup items.
   These share `_capture.py`/`_restore.py`/`_prune.py`/`_lock.py`; the runtime-role fix has landed,
   and the restore-metadata fix still lands before the prune change.
-- **Generator/CLI/release batch:** `media-image-decode-before-dimension-cap`,
-  `auth-profile-email-change-desync`. The README, `.dockerignore`, E2E-contract,
-  publish-resumability, remove-traversal, apply-force and dirty-recipient fixes are closed; the
-  rest ride with the next generator release.
+- **Generator/CLI/release batch:** `media-image-decode-before-dimension-cap`. The README,
+  `.dockerignore`, E2E-contract, publish-resumability, remove-traversal, apply-force, dirty-recipient
+  and auth email-change fixes are closed; the rest ride with the next generator release.
 
-**S4 tail:** batch by file (orgs receivers, backups admin/perms, forms export/options, auth logging,
-three prior S4s). No ordering constraint beyond “restore-metadata before prune”.
+**S4 tail:** batch by file (orgs receivers, backups admin/perms, forms export/options, three prior
+S4s). No ordering constraint beyond “restore-metadata before prune”.
 
 Parallelizable: the billing, orgs, CRM, media, generator-docs, and release-workflow batches touch
 disjoint files. The backup batch and the generator batch both touch `quickscale_core` but different
@@ -1059,8 +1068,9 @@ reviewers.
 - **Backups/DR:** five human-scale S3/S4s; checksum/migration identity, admin upload trusted
   match, and the environment gate verified. The RLS/runtime-role path was reproduced (resolved as
   SA313).
-- **Auth:** `auth-profile-email-change-desync` and `auth-deletion-logs-pii`; allauth config,
-  account-deletion guard, session rotation, and email-verification default (watchlist) verified.
+- **Auth:** `auth-profile-email-change-desync` and `auth-deletion-logs-pii` are fixed; allauth
+  config, account-deletion guard, session rotation, and email-verification default (watchlist)
+  verified.
 - **CRM:** `crm-deal-owner-cross-tenant` is fixed; org-scoped reads, contact/stage/tag/owner
   validation, bulk stage filters, and CSV-free exports verified.
 - **Storage/blog/forms/listings:** `media-s3-fixed-path-overwrite` and
@@ -1382,3 +1392,10 @@ release.
   exempt from the last-owner receiver, so the admin instance and delete-selected paths both work;
   `new` joins `api` in `RESERVED_ORG_SLUGS`; tests cover the bulk rollback, both admin delete paths,
   and the reserved slug).
+- 2026-10-29 — `auth-profile-email-change-desync`, `auth-deletion-logs-pii`: **resolved** (SA315
+  (b): the profile edit form carries no email field, so the only address path is django-allauth's
+  `accounts/email/` management page; its add, verify, primary, and remove steps update `User.email`
+  and the verified `EmailAddress` rows together, and a password reset through the removed old
+  address issues no reset link; account-deletion failure, compensation, and retained-organization
+  skip records log primary keys only, and the failure records omit the exception message and
+  traceback in favor of the exception type because it can embed the protected rows' identity).

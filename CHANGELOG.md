@@ -210,6 +210,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     members without an owner rolls back, the admin can delete an organization with a sole owner,
     the `new` slug is reserved for the create page, and a failed invitation email keeps the
     invitation and reports its delivery status instead of returning a 500.
+  - **Email changes go through django-allauth.** The profile edit page no longer writes the account
+    email; the profile page links to django-allauth's address management, so a changed address is
+    verified there and the old address stops resetting the password.
+  - **Account-deletion logs carry no identity.** Failure, compensation, and retained-organization
+    skip records name the account and organization by primary key, never by name, username, or
+    address.
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
   - **`ClientIdentityMiddleware` in generated projects.** A first-position middleware aligns ordinary DRF request identity with the canonical resolver, so a short forwarded chain cannot be trusted by one consumer and rejected by another. Proxy configuration is validated before mutation and the production proxy count is derived rather than guessed.

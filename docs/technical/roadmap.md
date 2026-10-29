@@ -43,8 +43,7 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA315, SA321, SA323, SA324 | Required |
-| SA315 | Close orgs and auth lifecycle defects | 2 | — | Required |
+| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | SA321, SA323, SA324 | Required |
 | SA321 | Make the generated production deployment contract an artifact | 1 | — | Required |
 | SA323 | Harden module upload, form, export and notification paths | 2 | — | Required |
 | SA324 | Make tenant contract evidence and write services coherent | 2 | — | Required |
@@ -79,7 +78,7 @@ live in the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | SA321 | yes | yes | yes: SA321 |
-| 2 | SA315 (b) | yes | yes | yes: SA315, SA323, SA324 |
+| 2 | SA323 | yes | yes | yes: SA323, SA324 |
 | 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
 
 **Clearing blockers.** Track 1: none. Track 2: SA191d waits for all hardening and the re-cut tag,
@@ -180,19 +179,7 @@ conformance check on `properties.PropertyAgent` and siblings.
 
 - [x] **SA314 — Make billing credits, Checkout and gates idempotent and tenant-correct.**
 
-- [ ] **SA315 — Close orgs and auth lifecycle defects.**
-
-  Closes tech `orgs-bulk-delete-leaves-zero-owners`, `orgs-admin-org-delete-blocked`,
-  `orgs-slug-new-shadows-route`, `auth-profile-email-change-desync`, `auth-deletion-logs-pii`, and
-  coherence `orgs-invitation-notification-failure` (proposal 15). Q2 default: best-effort — the
-  invitation stays, and the send failure is logged and surfaced, never a 500.
-
-  **Slices:**
-  - [x] (a) Orgs: bulk deletion cannot leave an organization ownerless; admin organization
-    deletion passes the last-owner receiver; slug `new` is reserved; the invitation send-failure
-    policy is recorded and tested (Tier 2-full).
-  - [ ] (b) Auth: a profile email change goes through allauth's address flow, and a password reset
-    through the old address fails by test; deletion-failure logs carry no names (Tier 2-full).
+- [x] **SA315 — Close orgs and auth lifecycle defects.**
 
 - [ ] **SA323 — Harden module upload, form, export and notification paths.**
 

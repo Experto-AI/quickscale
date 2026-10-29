@@ -34,7 +34,13 @@ class ProfileView(LoginRequiredMixin, DetailView):
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
-    """Update user profile"""
+    """Update user profile.
+
+    Only the name fields are editable here.  The account's email address is
+    owned by django-allauth's address flow, so the page links to
+    ``account_email`` instead of writing ``User.email`` and desynchronizing the
+    verified ``EmailAddress`` rows that still drive login and password reset.
+    """
 
     model = User
     form_class = ProfileUpdateForm

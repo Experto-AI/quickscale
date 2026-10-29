@@ -42,26 +42,19 @@ class PasswordChangeForm(DjangoPasswordChangeForm):
 
 
 class ProfileUpdateForm(forms.ModelForm):
-    """Form for updating user profile information"""
+    """Form for updating user profile information.
+
+    The account's email address is deliberately absent: django-allauth owns
+    the address identity (``EmailAddress`` rows and verification), so an email
+    change runs through its address-management page instead of writing
+    ``User.email`` directly and leaving the old address usable for login and
+    password reset.
+    """
 
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "email"]
+        fields = ["first_name", "last_name"]
         widgets = {
             "first_name": forms.TextInput(attrs={"class": "form-control"}),
             "last_name": forms.TextInput(attrs={"class": "form-control"}),
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
         }
-
-    def clean_email(self) -> str:
-        """Validate email uniqueness"""
-        email = self.cleaned_data.get("email", "")
-        if email:
-            email = email.lower().strip()
-            # Check if email is already taken by another user
-            existing_user = (
-                User.objects.filter(email=email).exclude(pk=self.instance.pk).first()
-            )
-            if existing_user:
-                raise forms.ValidationError("This email address is already in use.")
-        return str(email)

@@ -162,12 +162,12 @@ class AccountDeleteView(
                         # discovered obligation this boundary never
                         # discharged rolls the account removal back.
                         coordinator.finish()
-                except ProtectedError:
-                    logger.exception(
+                except ProtectedError as exc:
+                    logger.error(
                         "Account deletion was blocked by retained protected data "
-                        "for user %s (pk=%s).",
-                        user,
+                        "for user pk=%s (error type %s).",
                         user.pk,
+                        type(exc).__name__,
                     )
                     messages.error(
                         self.request,
@@ -176,12 +176,12 @@ class AccountDeleteView(
                         "before retrying.",
                     )
                     return self.form_invalid(form)
-                except IntegrityError:
-                    logger.exception(
+                except IntegrityError as exc:
+                    logger.error(
                         "Account deletion rolled back after provider references changed "
-                        "for user %s (pk=%s).",
-                        user,
+                        "for user pk=%s (error type %s).",
                         user.pk,
+                        type(exc).__name__,
                     )
                     messages.error(
                         self.request,
@@ -254,9 +254,8 @@ class AccountDeleteView(
             for organization in retained_organizations:
                 logger.info(
                     "Account deletion deliberately skips organization-removal "
-                    "obligation %s for organization %s (pk=%s): %s",
+                    "obligation %s for organization pk=%s: %s",
                     obligation.name,
-                    organization.name,
                     organization.pk,
                     obligation.anonymize_skip_reason,
                 )

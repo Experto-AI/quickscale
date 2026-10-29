@@ -6,6 +6,14 @@
     <h2>Edit Profile</h2>
     <p class="auth-subtitle">Update your account information</p>
 
+    <div class="profile-info">
+        <p><strong>📧 Email:</strong> {{ user.email }}</p>
+        <p class="auth-subtitle">
+            <a href="{% url 'account_email' %}">Manage email addresses</a>
+            to change your sign-in and password-reset address.
+        </p>
+    </div>
+
     <form method="post" class="auth-form">
         {% csrf_token %}
 
