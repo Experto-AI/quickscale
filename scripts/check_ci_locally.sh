@@ -39,7 +39,7 @@ show_help() {
     echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
     echo "  4. Module-core import linter (check_module_core_imports)"
     echo "  6. Module app declaration and org-context primitives gates"
-    echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, security negative-probes, beta-migration smoke, generated deploy posture, workflow security, generated workflow lint, migration hashes, and tree-and-history secret scanning gates"
+    echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, security negative-probes, website-migration smoke, generated deploy posture, workflow security, generated workflow lint, migration hashes, and tree-and-history secret scanning gates"
     echo "  8. Type check (mypy)"
     echo "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
     echo "     (frontend lint runs when Node.js and pnpm are available)"

@@ -422,8 +422,8 @@ jobs:
       run: |
         make check-security-static-analysis
 
-  beta-migration-smoke-gate:
-    name: Beta Migration Smoke Gate (SA152)
+  website-migration-smoke-gate:
+    name: Website Migration Smoke Gate (SA152)
     runs-on: ubuntu-24.04
 
     steps:
@@ -448,9 +448,9 @@ jobs:
       run: |
         poetry install --with dev
 
-    - name: Run beta migration smoke gate
+    - name: Run website migration smoke gate
       run: |
-        make check-beta-migration-smoke
+        make check-website-migration-smoke
 
   generated-deploy-posture-gate:
     name: Generated Deploy Posture Gate (SA200)
@@ -710,7 +710,7 @@ jobs:
   test:
     name: Run Tests (Unit + Integration)
     # BEGIN GENERATED: needs-test
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate, beta-migration-smoke-gate, generated-deploy-posture-gate, workflow-security-gate, secret-scanning-gate, module-conventions-gate, split-facade-gate, migration-freeze-gate, security-negative-probes-gate, generated-workflow-lint-gate, migration-hashes-gate]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate, website-migration-smoke-gate, generated-deploy-posture-gate, workflow-security-gate, secret-scanning-gate, module-conventions-gate, split-facade-gate, migration-freeze-gate, security-negative-probes-gate, generated-workflow-lint-gate, migration-hashes-gate]
     # END GENERATED: needs-test
     runs-on: ubuntu-latest
     services:

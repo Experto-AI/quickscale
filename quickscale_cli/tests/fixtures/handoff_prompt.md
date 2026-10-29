@@ -1,6 +1,6 @@
-# Beta migration handoff prompt
+# Website migration handoff prompt
 
-This recipient was produced by the fresh-first beta migration (`make beta-migrate-fresh`);
+This recipient was produced by the fresh-first website migration (`make website-migrate-fresh`);
 the deterministic file migration and local verification already ran. Complete the remaining
 work below, then hand the recipient back to the maintainer.
 

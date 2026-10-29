@@ -28,7 +28,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
 - `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of the root and `quickscale_core` Poetry lockfiles plus the generated-project Dockerfile misconfiguration scan.
 - `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
-- `make check-beta-migration-smoke` - Exercise fresh-first beta migration compatibility on isolated generated fixtures.
+- `make check-website-migration-smoke` - Exercise fresh-first website migration compatibility on isolated generated fixtures.
 - `make check-generated-deploy-posture` - Run Django's deployment checks on a freshly generated project in both forwarding cells and fail on a new warning.
 - `make check-security-negative-probes` - Prove the dependency, static-analysis, and Dockerfile-misconfiguration gates still fail closed on known-bad inputs (alias: `make security-negative-probes`).
 - `make check-generated-workflow-lint` - Render a fresh generated project and lint every emitted workflow with the pinned actionlint release.
@@ -240,7 +240,7 @@ Every listed gate runs in each of its declared contexts.
 | `check-gate-suites` | `make check-gate-suites` | local-serial, local-parallel, hosted | 7 | `check-gate-suites` |
 | `check-dependency-vulnerabilities` | `make check-dependency-vulnerabilities` | local-serial, local-parallel, hosted, publish, e2e-trigger | 7 | `dependency-vulnerabilities-gate` |
 | `check-security-static-analysis` | `make check-security-static-analysis` | local-serial, local-parallel, hosted, publish, e2e-trigger | 7 | `security-static-analysis-gate` |
-| `check-beta-migration-smoke` | `make check-beta-migration-smoke` | local-serial, local-parallel, hosted, publish | 7 | `beta-migration-smoke-gate` |
+| `check-website-migration-smoke` | `make check-website-migration-smoke` | local-serial, local-parallel, hosted, publish | 7 | `website-migration-smoke-gate` |
 | `check-generated-deploy-posture` | `make check-generated-deploy-posture` | local-serial, local-parallel, hosted, publish | 7 | `generated-deploy-posture-gate` |
 | `check-generated-project-automation` | `make check-generated-project-automation` | local-serial, local-parallel | 7 | — |
 | `check-workflow-security` | `make check-workflow-security` | local-serial, local-parallel, hosted, publish | 7 | `workflow-security-gate` |

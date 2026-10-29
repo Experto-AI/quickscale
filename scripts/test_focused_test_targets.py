@@ -140,10 +140,10 @@ def test_partial_ci_e2e_does_not_run_privileged_lane(selector: str) -> None:
     assert "make test-bypassrls" not in _recipe("ci-e2e", selector)
 
 
-def test_beta_migration_paths_preserve_literal_make_syntax() -> None:
+def test_website_migration_paths_preserve_literal_make_syntax() -> None:
     """The documented migration entrypoint must transport path syntax as data."""
     recipe = _recipe(
-        "beta-migrate-fresh",
+        "website-migrate-fresh",
         "DONOR=/tmp/$(shell uname -s)",
         "RECIPIENT=/tmp/recipient path",
         "REPORT=/tmp/report's $(HOME).json",
@@ -154,7 +154,7 @@ def test_beta_migration_paths_preserve_literal_make_syntax() -> None:
     assert "/tmp/report'\\''s $(HOME).json" in recipe
 
 
-def test_beta_migration_executes_with_literal_path_arguments(
+def test_website_migration_executes_with_literal_path_arguments(
     tmp_path: Path,
 ) -> None:
     """Make and shell syntax in paths must reach the CLI without evaluation."""
@@ -162,7 +162,7 @@ def test_beta_migration_executes_with_literal_path_arguments(
     fake_bin.mkdir()
     capture_path = tmp_path / "captured-arguments"
     fake_poetry = fake_bin / "poetry"
-    fake_poetry.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$BETA_MIGRATION_CAPTURE"\n')
+    fake_poetry.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$WEBSITE_MIGRATION_CAPTURE"\n')
     fake_poetry.chmod(0o755)
     donor = "/tmp/$(shell printf make-expanded)"
     recipient = "/tmp/$(printf shell-expanded)"
@@ -173,12 +173,12 @@ def test_beta_migration_executes_with_literal_path_arguments(
         if key not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL"}
     }
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
-    environment["BETA_MIGRATION_CAPTURE"] = str(capture_path)
+    environment["WEBSITE_MIGRATION_CAPTURE"] = str(capture_path)
 
     result = subprocess.run(
         [
             "make",
-            "beta-migrate-fresh",
+            "website-migrate-fresh",
             f"DONOR={donor}",
             f"RECIPIENT={recipient}",
             f"REPORT={report}",
@@ -195,7 +195,7 @@ def test_beta_migration_executes_with_literal_path_arguments(
     assert capture_path.read_text().splitlines() == [
         "run",
         "python",
-        "scripts/beta_migrate.py",
+        "scripts/website_migrate.py",
         "fresh-first",
         "--donor",
         donor,
@@ -206,10 +206,10 @@ def test_beta_migration_executes_with_literal_path_arguments(
     ]
 
 
-def test_beta_migration_iterate_paths_preserve_literal_make_syntax() -> None:
+def test_website_migration_iterate_paths_preserve_literal_make_syntax() -> None:
     """The iterate entrypoint must transport path syntax as data."""
     recipe = _recipe(
-        "beta-migrate-iterate",
+        "website-migrate-iterate",
         "DONOR=/tmp/$(shell uname -s)",
         "RECIPIENT=/tmp/recipient path",
         "REPORT=/tmp/report's $(HOME).json",
@@ -220,7 +220,7 @@ def test_beta_migration_iterate_paths_preserve_literal_make_syntax() -> None:
     assert "/tmp/report'\\''s $(HOME).json" in recipe
 
 
-def test_beta_migration_iterate_executes_with_literal_path_arguments(
+def test_website_migration_iterate_executes_with_literal_path_arguments(
     tmp_path: Path,
 ) -> None:
     """Make and shell syntax in paths must reach the iterate CLI without evaluation."""
@@ -228,7 +228,7 @@ def test_beta_migration_iterate_executes_with_literal_path_arguments(
     fake_bin.mkdir()
     capture_path = tmp_path / "captured-arguments"
     fake_poetry = fake_bin / "poetry"
-    fake_poetry.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$BETA_MIGRATION_CAPTURE"\n')
+    fake_poetry.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$WEBSITE_MIGRATION_CAPTURE"\n')
     fake_poetry.chmod(0o755)
     donor = "/tmp/$(shell printf make-expanded)"
     recipient = "/tmp/$(printf shell-expanded)"
@@ -239,12 +239,12 @@ def test_beta_migration_iterate_executes_with_literal_path_arguments(
         if key not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL"}
     }
     environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
-    environment["BETA_MIGRATION_CAPTURE"] = str(capture_path)
+    environment["WEBSITE_MIGRATION_CAPTURE"] = str(capture_path)
 
     result = subprocess.run(
         [
             "make",
-            "beta-migrate-iterate",
+            "website-migrate-iterate",
             f"DONOR={donor}",
             f"RECIPIENT={recipient}",
             f"REPORT={report}",
@@ -261,7 +261,7 @@ def test_beta_migration_iterate_executes_with_literal_path_arguments(
     assert capture_path.read_text().splitlines() == [
         "run",
         "python",
-        "scripts/beta_migrate.py",
+        "scripts/website_migrate.py",
         "iterate",
         "--donor",
         donor,

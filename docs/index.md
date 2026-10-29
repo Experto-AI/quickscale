@@ -19,7 +19,8 @@ rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflic
 - [generated_project_structure.md](technical/generated_project_structure.md) **A**: generated-project layout
 - [repository_layout.md](technical/repository_layout.md) **A**: maintainer-repo layout, naming and imports
 - [module-extension.md](technical/module-extension.md) **A**: module extension contract and authoring checklist
-- [generated_file_ownership.md](technical/generated_file_ownership.md) **A**: beta-migration generated-file ownership rules and inventory
+- [generated_file_ownership.md](technical/generated_file_ownership.md) **A**: website-migration generated-file ownership rules and inventory
+- [migration_upgrade_path.md](technical/migration_upgrade_path.md) **A**: website-migration two-stage upgrade path, boundary rule, revocation triggers
 - [publish_procedure.md](technical/publish_procedure.md) **A**: pre-publish gate, release phases, release-note format
 - [plan-apply-system.md](technical/plan-apply-system.md): plan/apply schemas and execution order
 - [frontend.md](technical/frontend.md): Django/React seam, URL ownership, static pipeline
@@ -44,7 +45,6 @@ rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflic
 ## Operations
 - [deployment/railway.md](deployment/railway.md): deploy to Railway; [operations](deployment/railway-operations.md) (backups, DR, media), [config as code](deployment/railway-config-as-code.md), [troubleshooting](deployment/railway-troubleshooting.md)
 - [planning/beta-site-migration.md](planning/beta-site-migration.md): keep `bap-web` current with releases
-- [planning/migration-upgrade-path-draft.md](planning/migration-upgrade-path-draft.md): draft decision record for the two-stage upgrade path (not policy until it lands in decisions)
 
 ## Audits (open findings only; not authoritative)
 - [arch-audit.md](others/arch-audit.md), [tech-audit.md](others/tech-audit.md), [coherence-audit.md](others/coherence-audit.md)

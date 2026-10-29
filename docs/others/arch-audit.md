@@ -124,7 +124,7 @@ paths, `project_state_hashes.py`, generated settings/Docker/railway/CI/Makefile 
 generated test harness, DR capture/restore/lock/metadata paths, orgs tenancy/checks/admin, and the
 prior audits. Sampled: all twelve module surfaces (census, not full read), release scripts, billing
 and notifications internals. Skipped: full frontend component tree, module migration bodies,
-`beta_migration` internals beyond the upgrade-path boundary, and scripts outside the release gates.
+`website_migration` internals beyond the upgrade-path boundary, and scripts outside the release gates.
 Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII, XV, XVI, XVII, XVIII, XIX, XX, XXI · inert: XIV (no growing hot path with a structural volume assumption) · archetypes: code generator, CLI, library, plugin host, and the generated service`. Findings produced by I, II, III, IV, V, VII, VIII, XII, XIII, XV, XVI, XVIII, XIX, XX. Out-of-repo and unverified: `bap-web-new`'s actual tree, its Railway configuration, current media usage, and whether its backups engine is used. Runtime confirmation is needed for: crash-window frequency, actual restore drills, and whether any generated project has been deployed via the dev Compose path. The report's silence does not clear those.
 
 ## Enforcement census
@@ -264,7 +264,7 @@ items:
 - **Why it compounds:** growth variable = **declared adoption steps × live projects**. Each module
   resource or payload change adds a step (steps are monotonic; the roadmap's stated target is
   "toward zero"); each live project must adopt every step by hand. Built on top: the contract-vintage
-  gate in `apply`, `update`, and `deploy railway`, SA299's beta migration, and SA277's two-stage
+  gate in `apply`, `update`, and `deploy railway`, SA299's website migration, and SA277's two-stage
   prompt. A second live project doubles the operator cost and makes "regenerate and diff" no longer
   sufficient.
 - **Detection signal:** step count per release (61 today; eight added since the prior audit); any

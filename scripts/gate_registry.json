@@ -498,8 +498,8 @@
             ]
         },
         {
-            "id": "check-beta-migration-smoke",
-            "description": "The fresh-first beta migration preserves runtime ownership and rejects incompatible generated fixtures",
+            "id": "check-website-migration-smoke",
+            "description": "The fresh-first website migration preserves runtime ownership and rejects incompatible generated fixtures",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",
@@ -507,27 +507,27 @@
                 "publish"
             ],
             "bindings": {
-                "make_target": "check-beta-migration-smoke",
-                "ci_job": "beta-migration-smoke-gate",
+                "make_target": "check-website-migration-smoke",
+                "ci_job": "website-migration-smoke-gate",
                 "local_ci_stage": 7
             },
             "hosted": {
                 "order": 12,
-                "display_name": "Beta Migration Smoke Gate (SA152)",
-                "check_step_name": "Run beta migration smoke gate",
+                "display_name": "Website Migration Smoke Gate (SA152)",
+                "check_step_name": "Run website migration smoke gate",
                 "full_history": true
             },
             "publish": {
                 "order": 9,
-                "step_name": "Run beta migration smoke gate"
+                "step_name": "Run website migration smoke gate"
             },
             "help": "Exercise fresh-first migration behavior against isolated\ngenerated fixtures without touching a real project or database.",
             "makefile_help": {
                 "order": 10,
-                "text": "make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
+                "text": "make check-website-migration-smoke      - Exercise fresh-first website migration on isolated generated fixtures"
             },
             "make_recipe": [
-                "@$(PYTHON) scripts/check_beta_migration_smoke.py"
+                "@$(PYTHON) scripts/check_website_migration_smoke.py"
             ],
             "depends_on": [],
             "trigger_inputs": []

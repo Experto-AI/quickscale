@@ -186,7 +186,7 @@ the delta (SA253, 2026-10-10); it is not an unreviewed delta change.
   (`generator.py`, emission mapping, manifests, templates), `quickscale_core/runtime`, and the DR
   engine; generated settings, Dockerfile, Compose, `start.sh`, README/OPERATIONS, CI templates;
   `.github/workflows/*.yml`; the security/quality gate scripts named in the tooling section.
-- **Sampled:** the React theme UI, `quickscale_devtools` outside the beta-migration path, the
+- **Sampled:** the React theme UI, `quickscale_devtools` outside the website-migration path, the
   `scripts/module_conventions` harness, migrations beyond constraints/RLS targets, and the docs tree.
 - **Skipped:** `bap-web` (external deployment), real Stripe/S3/Railway services, the full test suite,
   Playwright/E2E, the frontend bundle, and a fresh dependency audit. The prior accepted postcss
@@ -434,7 +434,7 @@ items:
   - {id: beta-migrate-existing-recipient-no-dirty-guard, status: fixed, severity: S4, category: X,
      title: "--existing-recipient overwrites a git-tracked recipient with no dirty-tree check",
      effort: Small, confidence: High, reality: maintainer-toolchain,
-     anchors: [quickscale_devtools/src/quickscale_devtools/beta_migration/execution.py],
+     anchors: [quickscale_devtools/src/quickscale_devtools/website_migration/execution.py],
      depends_on: [], chain: [], first_seen: 2026-10-20, last_verified: 2026-10-24}
   - {id: notifications-message-status-aggregate-race, status: fixed, severity: S4, category: II,
      title: "Concurrent sibling-delivery webhooks leave the message aggregate stale", effort: Trivial,

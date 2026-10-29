@@ -1,4 +1,4 @@
-"""Human-readable beta migration report rendering."""
+"""Human-readable website migration report rendering."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .beta_migration import (
-        BetaMigrationReport,
+    from .website_migration import (
+        WebsiteMigrationReport,
         DiffSummary,
         PendingManualAction,
         VerificationCommandResult,
@@ -84,14 +84,14 @@ def _append_report_detail_lines(
         )
 
 
-def render_report_summary(report: BetaMigrationReport) -> str:
+def render_report_summary(report: WebsiteMigrationReport) -> str:
     """Render the stable readable summary for stdout."""
     verification_passed, verification_failed = _verification_counts(
         report.verification_results
     )
 
     lines = [
-        "Beta migration summary",
+        "Website migration summary",
         f"Mode: {report.mode}",
         f"Status: {report.status}",
         f"Phase: {report.phase}",
@@ -151,12 +151,12 @@ def render_report_summary(report: BetaMigrationReport) -> str:
     return "\n".join(lines)
 
 
-def render_report_json(report: BetaMigrationReport) -> str:
+def render_report_json(report: WebsiteMigrationReport) -> str:
     """Render a JSON report for stdout or file output."""
     return json.dumps(_json_ready(report), indent=2)
 
 
-def write_report_file(report: BetaMigrationReport, report_path: Path) -> Path:
+def write_report_file(report: WebsiteMigrationReport, report_path: Path) -> Path:
     """Write a JSON report to disk and return the resolved path."""
     resolved_path = (
         report_path.resolve()

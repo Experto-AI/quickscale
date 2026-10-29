@@ -46,8 +46,8 @@ covers them: [publish_procedure.md §1.1](publish_procedure.md#11-version-and-ma
 
 - version literals inside test fixtures and assertions
 - `contract_vintage.minimum`, which is an adoption boundary rather than a lockstep field
-- `SUPPORTED_SOURCE_VERSIONS` in `quickscale_devtools/src/quickscale_devtools/beta_migration/source_versions.py`,
-  which the beta-migration smoke gate requires to end at the running release
+- `SUPPORTED_SOURCE_VERSIONS` in `quickscale_devtools/src/quickscale_devtools/website_migration/source_versions.py`,
+  which the website-migration smoke gate requires to end at the running release
 
 > **Updater scope**: Only standalone `.yml`/`.yaml` files are version-tool candidates. Version fields
 > inside Markdown fenced code-block examples are **never** modified by the tool — those examples are

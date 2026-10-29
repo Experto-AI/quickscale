@@ -416,7 +416,8 @@ MUST / MUST NOT (enforced by `quickscale_core/tests/test_doc_phrasing.py`).
 | generated_project_structure.md | generated-project layout, artifact placement, generation guardrails | **A** |
 | repository_layout.md | maintainer-repo layout, naming/import matrix | **A** |
 | module-extension.md | module extension contract, module-authoring checklist | **A** |
-| generated_file_ownership.md | beta-migration generated-file ownership rules and `INTENTIONALLY_UNMANAGED` inventory | **A** |
+| generated_file_ownership.md | website-migration generated-file ownership rules and `INTENTIONALLY_UNMANAGED` inventory | **A** |
+| migration_upgrade_path.md | website-migration two-stage upgrade path, boundary rule, revocation triggers, step count | **A** |
 | publish_procedure.md | pre-publish gate, ordered release phases, release-note format | **A** |
 | ai_hydration_topology.md | `adaptive.rules.md` include graph and its change rules | **A** |
 | GLOSSARY.md | terminology | **A** |
@@ -578,7 +579,7 @@ and the structured-logging helpers.
 - ✅ The privileged-command contract test holds the facade's
   `KNOWN_PRIVILEGED_COMMANDS` declaration in place of the retired template
   copy.
-- ✅ The beta-migration tool checks that effective settings select their
+- ✅ The website-migration tool checks that effective settings select their
   database through `resolve_runtime_database_url`: it rewrites a recognized
   pre-facade block onto the facade and refuses an unrecognized inline copy of
   the contract.
@@ -828,43 +829,42 @@ Implementation detail: [organizations.md §Operator Debug Mode](./organizations.
 
 ---
 
-### Generated-File Ownership (Beta-Migration Taxonomy) {#generated-file-ownership-taxonomy}
+### Generated-File Ownership (Website-Migration Taxonomy) {#generated-file-ownership-taxonomy}
 
 Rules and inventory: [generated_file_ownership.md](generated_file_ownership.md#rules).
 
 ---
 
+### Website Migration Upgrade Path {#website-migration-upgrade-path}
+
+**Decision:** One upgrade path in two stages; the boundary rule, revocation trigger and step count
+are binding in [migration_upgrade_path.md](migration_upgrade_path.md).
+
+---
+
 ### Beta-Site External Verification Scope {#beta-site-external-verification-scope}
 
-**Decision:** Verifying the *deployed* state of `bap-web` — confirming a specific commit's generator/template changes
-actually reached that running site, checking their live Redis
-configuration, or inspecting/patching their donor-owned `settings/production.py`
-— is **permanently out of scope for this monorepo's automated tooling and for
-any coding-agent session operating inside it.** Neither the site's repository nor
-its Railway deployment is reachable from here; this is a structural property
-of the two-repo maintainer workflow (`quickscale_devtools/beta_migration/`,
-[beta-site-migration.md](../planning/beta-site-migration.md)), not a
-credentials gap expected to close.
+**Decision:** Verifying the *deployed* state of `bap-web` — confirming a commit's changes
+reached the running site, checking its live Redis configuration, or patching its donor-owned
+`settings/production.py` — is **permanently out of scope for this monorepo's automated
+tooling and any coding-agent session inside it.** Neither the site's repository nor its
+Railway deployment is reachable from here; this is a structural property of the two-repo
+maintainer workflow (`quickscale_devtools/website_migration/`,
+[beta-site-migration.md](../planning/beta-site-migration.md)).
 
 **Why:** the beta sites are external maintainer-operated repositories; no tooling in this repo can reach their Railway shells or push to them.
 
-**What stays in scope (and is not affected by this decision):** everything
-this repo *can* verify mechanically — the generator templates themselves,
-the beta-migration file taxonomy and its conformance gate,
-and the launcher env-pair contract's correctness in the templates it emits.
-Those are the actual defect classes; this decision
-only scopes out the one step no in-repo mechanism can perform: confirming a
-human maintainer applied the fix to a live external deployment.
+**What stays in scope:** everything this repo verifies mechanically — the generator templates,
+the website-migration file taxonomy and its conformance gate, and the launcher env-pair
+contract's correctness in the templates it emits. This decision scopes out only confirming a
+human maintainer applied a fix to a live external deployment.
 
-**Standing rule for future findings:** any roadmap item, tech-audit finding,
-or arch-audit red flag whose acceptance criteria requires inspecting or
-patching the live `bap-web` deployment (not just this
-repo's generator output) is closed on discovery with a pointer to this
-section, rather than left open as a blocked roadmap item. Record the
-manual-verification ask as a maintainer to-do in
-[beta-site-migration.md](../planning/beta-site-migration.md) instead of a
-roadmap.md checklist entry — the roadmap tracks repo-local implementation
-work, not manual maintainer operations against external infrastructure.
+**Standing rule for future findings:** any roadmap item, tech-audit finding, or arch-audit red
+flag whose acceptance criteria requires inspecting or patching the live `bap-web` deployment is
+closed on discovery with a pointer to this section. Record the manual-verification ask as a
+maintainer to-do in [beta-site-migration.md](../planning/beta-site-migration.md); the roadmap
+tracks repo-local implementation work, not manual maintainer operations against external
+infrastructure.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md live findings](../others/arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
 

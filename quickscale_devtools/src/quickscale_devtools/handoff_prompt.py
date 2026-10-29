@@ -1,4 +1,4 @@
-"""Render the recipient-side beta migration handoff prompt."""
+"""Render the recipient-side website migration handoff prompt."""
 
 from __future__ import annotations
 
@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .beta_migration import BetaMigrationReport, DiffSummary, PendingManualAction
+    from .website_migration import (
+        WebsiteMigrationReport,
+        DiffSummary,
+        PendingManualAction,
+    )
 
 HANDOFF_PROMPT_FILENAME = "MIGRATION_PROMPT.md"
 
@@ -102,13 +106,13 @@ def _render_remaining_action(action: PendingManualAction) -> list[str]:
     return lines
 
 
-def _render_handoff_header(report: BetaMigrationReport) -> list[str]:
+def _render_handoff_header(report: WebsiteMigrationReport) -> list[str]:
     """Render the run-identity header with its verification tallies."""
     lines: list[str] = [
-        "# Beta migration handoff prompt",
+        "# Website migration handoff prompt",
         "",
-        "This recipient was produced by the fresh-first beta migration "
-        "(`make beta-migrate-fresh`);",
+        "This recipient was produced by the fresh-first website migration "
+        "(`make website-migrate-fresh`);",
         "the deterministic file migration and local verification already ran. Complete the "
         "remaining",
         "work below, then hand the recipient back to the maintainer.",
@@ -137,7 +141,7 @@ def _render_handoff_header(report: BetaMigrationReport) -> list[str]:
 
 
 def _render_changed_paths(
-    report: BetaMigrationReport, recipient_root: Path
+    report: WebsiteMigrationReport, recipient_root: Path
 ) -> list[str]:
     """Render the recipient-relative changed-path section."""
     changed_paths = sorted(
@@ -155,7 +159,7 @@ def _render_changed_paths(
     return lines
 
 
-def _render_diff_section(report: BetaMigrationReport) -> list[str]:
+def _render_diff_section(report: WebsiteMigrationReport) -> list[str]:
     """Render the module, path-dependency, and frontend diff summary."""
     lines = ["", "Diff summary:"]
     lines.append(f"- Module diff: {_render_diff_summary(report.module_diff)}")
@@ -175,7 +179,7 @@ def _render_diff_section(report: BetaMigrationReport) -> list[str]:
 
 
 def _render_migrated_section(
-    report: BetaMigrationReport, recipient_root: Path
+    report: WebsiteMigrationReport, recipient_root: Path
 ) -> list[str]:
     """Render the completed steps, changed paths, diffs, and verification."""
     lines = ["", "## What was migrated", "", "Steps completed:"]
@@ -204,7 +208,7 @@ def _render_migrated_section(
     return lines
 
 
-def _render_trailing_sections(report: BetaMigrationReport) -> list[str]:
+def _render_trailing_sections(report: WebsiteMigrationReport) -> list[str]:
     """Render the remaining-work, hard-constraint, and done-criteria sections."""
     lines = ["", "## Remaining work", ""]
     if report.pending_manual_actions:
@@ -220,11 +224,11 @@ def _render_trailing_sections(report: BetaMigrationReport) -> list[str]:
     return lines
 
 
-def render_handoff_prompt(report: BetaMigrationReport) -> str:
+def render_handoff_prompt(report: WebsiteMigrationReport) -> str:
     """Render the handoff prompt document for a completed fresh-first run."""
     if report.recipient is None:
         raise ValueError(
-            "A recipient snapshot is required to render the beta migration handoff prompt."
+            "A recipient snapshot is required to render the website migration handoff prompt."
         )
     recipient_root = report.recipient.path
 
@@ -235,7 +239,7 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_handoff_prompt(report: BetaMigrationReport) -> Path:
+def write_handoff_prompt(report: WebsiteMigrationReport) -> Path:
     """Write the rendered handoff prompt into the recipient and return its path.
 
     The document deliberately never renders the report's mutable ``status``:
@@ -245,7 +249,7 @@ def write_handoff_prompt(report: BetaMigrationReport) -> Path:
     """
     if report.recipient is None:
         raise ValueError(
-            "A recipient snapshot is required to render the beta migration handoff prompt."
+            "A recipient snapshot is required to render the website migration handoff prompt."
         )
     prompt_path = report.recipient.path / HANDOFF_PROMPT_FILENAME
     _write_text_atomically(prompt_path, render_handoff_prompt(report))

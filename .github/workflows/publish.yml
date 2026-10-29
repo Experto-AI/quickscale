@@ -152,9 +152,9 @@ jobs:
         run: |
           make check-security-static-analysis
 
-      - name: Run beta migration smoke gate
+      - name: Run website migration smoke gate
         run: |
-          make check-beta-migration-smoke
+          make check-website-migration-smoke
 
       - name: Run generated deploy posture gate
         run: |

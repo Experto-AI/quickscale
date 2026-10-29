@@ -29,21 +29,21 @@ plan review: their risk is the irreversible operation itself.
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | — | Required |
-| SA277 | Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt | 3 | SA191d | Optional |
+| SA277 | Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt | 3 | SA191d | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: — (portal deferred)
 Track 2: SA191d (re-proof ─► production ─► retire, operator-gated)
-Track 3: SA277 (a) ─► [SA191d (production)] ─► SA277 (b)
+Track 3: SA277 (a) done ─► [SA191d (production)] ─► SA277 (b)
      release path: re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof) ─► SA191d (production)
                    ─► publication ─► SA191d (retire)
      portal (deferred): publication ─► SA153 ─► SA154
 ```
 
-Arrows are queue order; table dependencies gate ticket completion. SA277 (a) can start now; only
-(b) waits for SA191d (production). SA191d (production) ships exactly the tag re-proof passed; a
+Arrows are queue order; table dependencies gate ticket completion. SA277 (a) is complete; only
+(b) remains, waiting for SA191d (production). SA191d (production) ships exactly the tag re-proof passed; a
 defect found there follows the release re-entry loop (fix, re-cut, re-proof). Module migration
 history is frozen: a module schema change ships as a new migration, and SA153's tables live in
 the project-owned extension as `0002+` migrations.
@@ -54,7 +54,7 @@ the project-owned extension as `0002+` migrations.
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
 | 2 | SA191d (re-proof) | no: 0.89.0 tag re-cut | no: operator gates for (production), (retire) | yes |
-| 3 | SA277 (a) | yes | no: SA191d (production) for (b) | yes |
+| 3 | SA277 (b) | no: SA191d (production) | no: SA191d (production) | yes |
 
 ### Ownership and merge coordination
 
@@ -63,7 +63,7 @@ the project-owned extension as `0002+` migrations.
 - Track 2: `bap-web` cutover (SA191d), with joint publication and deployment; dependency
   manifests, locks and advisory disposition; module runtime code and tests in billing, CRM, orgs,
   auth, storage, forms, listings and notifications.
-- Track 3: `beta_migration/`, apply/update state and CLI commands, the contract-vintage gate,
+- Track 3: `website_migration/`, apply/update state and CLI commands, the contract-vintage gate,
   backups and `dr_engine`, module manifests/READMEs, repository gates, supported-version
   fixtures, versioned upgrade prompt, and upgrade decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
@@ -126,10 +126,10 @@ conformance check on `properties.PropertyAgent` and siblings.
 
 ### Track 3 — upgrade path
 
-- [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
+- [ ] **SA277 — Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt.**
 
   One upgrade path in two stages:
-  `beta_migration` does what it can mechanically; the prompt-driven port (`MIGRATION_PROMPT.md`,
+  `website_migration` does what it can mechanically; the prompt-driven port (`MIGRATION_PROMPT.md`,
   `CUTOVER.md`) handles what it reports it could not.
 
   **Acceptance:** decisions record the two-stage path (the gap ledger is the prompt's input, so
@@ -138,13 +138,13 @@ conformance check on `properties.PropertyAgent` and siblings.
   or a template security fix), and the steps-per-release count to watch, trending toward zero
   (58 declared steps on 2026-10-23). Operator docs do not duplicate steps either stage covers.
   Decisions say that supporting further projects meets the "second long-lived project"
-  revocation trigger. "Beta migration" is renamed "website migration" throughout (the
-  `beta_migration` package, CLI commands, docs and tests become `website_migration`).
+  revocation trigger. "Website migration" is the name throughout (the `website_migration`
+  package, CLI commands, docs and tests).
 
   **Slices:**
-  - [ ] (a) Rename "beta migration" to "website migration" (`beta_migration` →
-    `website_migration` in code, CLI, docs and tests); record the two-stage path, boundary rule
-    and revocation triggers in decisions; remove operator steps either stage covers (Tier 2-fast).
+  - [x] (a) Renamed "beta migration" to "website migration" (`website_migration` in code, CLI,
+    docs and tests); recorded the two-stage path, boundary rule and revocation triggers in
+    decisions; removed operator steps either stage covers (Tier 2-fast).
   - [ ] (b) After SA191d (production), confirm them and the steps count against the cutover
     evidence; validate links and smoke instructions (Tier 1).
 

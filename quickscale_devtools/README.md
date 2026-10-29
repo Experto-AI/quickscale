@@ -8,13 +8,13 @@ depends only on `quickscale-core` and never imports from `quickscale-cli`.
 
 ## Contents
 
-- `quickscale_devtools.beta_migration` — Maintainer helper for the fresh-first
+- `quickscale_devtools.website_migration` — Maintainer helper for the fresh-first
   migration execution flow between QuickScale project layouts.
 
 ## Entry Point
 
 This package does not expose console scripts. Maintainers invoke the
-maintainer tooling through the wrapper at `scripts/beta_migrate.py`, which
+maintainer tooling through the wrapper at `scripts/website_migrate.py`, which
 imports the relevant entry point and runs it as a script.
 
 ## Publishing Contract (Maintainer-Only)

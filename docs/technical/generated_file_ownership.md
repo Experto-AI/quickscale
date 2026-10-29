@@ -1,16 +1,16 @@
-# Generated-File Ownership Categories (Beta-Migration Taxonomy)
+# Generated-File Ownership Categories (Website-Migration Taxonomy)
 
 > **Related docs**: [Generated Project Structure](generated_project_structure.md) | [Beta-site migration](../planning/beta-site-migration.md)
 
-**Purpose:** Rules for generated-file ownership during beta migration, and the inventory of the `INTENTIONALLY_UNMANAGED` categories carried by `quickscale_devtools/beta_migration/`. Existing files in these categories are never structurally replaced or merged; a path may still take part in copy-if-missing adoption or the fresh scaffold's one-time identity reconciliation, neither of which overwrites user-owned contents.
+**Purpose:** Rules for generated-file ownership during website migration, and the inventory of the `INTENTIONALLY_UNMANAGED` categories carried by `quickscale_devtools/website_migration/`. Existing files in these categories are never structurally replaced or merged; a path may still take part in copy-if-missing adoption or the fresh scaffold's one-time identity reconciliation, neither of which overwrites user-owned contents.
 
 ## Rules
 
-**Rule:** The beta-migration maintainer tooling
-(``quickscale_devtools/beta_migration/``) carries a file taxonomy that
+**Rule:** The website-migration maintainer tooling
+(``quickscale_devtools/website_migration/``) carries a file taxonomy that
 classifies every generator-emitted file by its migration path. The taxonomy
 combines explicit path tuples with operation-derived directory selectors; a conformance gate
-(``test_beta_migration_ownership_conformance.py``) derives the expected file
+(``test_website_migration_ownership_conformance.py``) derives the expected file
 inventory from the template tree (``quickscale_core/generator/templates/``)
 and asserts every emitted file is classified.
 
@@ -82,9 +82,9 @@ and asserts every emitted file is classified.
 
 7. **``MODE_REQUIRED_SPECS`` entries are classification sources, not mutation
    authority.**
-   The beta-migration preflight validation specs
+   The website-migration preflight validation specs
    (``COMMON_REQUIRED_SPECS`` and ``MODE_REQUIRED_SPECS`` in the
-   ``quickscale_devtools.beta_migration`` package) define files and directories that must exist
+   ``quickscale_devtools.website_migration`` package) define files and directories that must exist
    before a migration step can proceed. Some of these specs (notably
    ``frontend/src/App.tsx``) independently appear in an executor-owned
    replacement or merge disposition, but merely being required does not make
@@ -117,7 +117,7 @@ and asserts every emitted file is classified.
     ``showcase_react`` theme ships ``frontend/design/`` as one folder holding
     the tokens stylesheet, the Tailwind preset, fonts, and brand assets
     (``INTENTIONALLY_UNMANAGED`` directory entry). No QuickScale upgrade or
-    ``quickscale apply`` run replaces or merges its files. The beta-migration
+    ``quickscale apply`` run replaces or merges its files. The website-migration
     tool ports the donor's design into it once (the ``port-donor-design``
     step): every file of a donor that carries its own design layer, or the
     legacy ``frontend/src/index.css`` and ``frontend/tailwind.config.js``
@@ -154,7 +154,7 @@ and asserts every emitted file is classified.
 Entries are organized by category. Add new entries to the appropriate category;
 add a new category only when the existing ones do not fit, with rationale. Every
 generator-emitted file must be explicitly accounted for — the conformance gate
-(`test_beta_migration_ownership_conformance.py`) derives the expected inventory
+(`test_website_migration_ownership_conformance.py`) derives the expected inventory
 from the template tree and fails on any unclassified path.
 
 ### Settings files and the runtime facade
@@ -429,7 +429,7 @@ React host imports), ``tailwind.preset.js`` (consumed by
 webfonts), and ``brand/`` (project-owned brand assets imported by components or
 the stylesheet).
 Rationale: One folder the project owns outright. No QuickScale upgrade or
-``quickscale apply`` run replaces or merges its files; the beta-migration tool
+``quickscale apply`` run replaces or merges its files; the website-migration tool
 copies the donor's design into it once during migration (SA214 slice d), and
 every edit afterwards belongs to the project. ``frontend/src/index.css``
 remains the React entry that imports the layer, and the Django-rendered shell

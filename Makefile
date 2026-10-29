@@ -44,8 +44,8 @@
 #   make ci-e2e               - Run CI checks including E2E tests
 #   make docs                 - Mirror docs/contrib guides into .cursor/rules
 #   make install              - Install QuickScale globally
-#   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
-#   make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first
+#   make website-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first website migration on a throwaway recipient
+#   make website-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first
 #                             BASELINE=1 migrates an existing plan + apply recipient in place instead of regenerating it
 #   make build                - Build all distribution packages
 #   make build-core           - Build the quickscale_core wheel through the one shared core-build step
@@ -70,8 +70,8 @@
         fix check ci ci-e2e release-gate check-module-seals retry retry-show \
         docs \
         build build-core clean \
-		beta-migrate-fresh \
-		beta-migrate-iterate \
+		website-migrate-fresh \
+		website-migrate-iterate \
         publish-build publish-test publish-prod publish-full publish-module publish-modules \
         seal-module seal-modules seal-status \
         legacy-mount legacy-unmount legacy-status \
@@ -257,11 +257,11 @@ help:
 	@echo "  make setup                - Install Poetry dependencies only"
 	@echo "  make bootstrap            - Full bootstrap (Python check + poetry install)"
 	@echo "  make install              - Install QuickScale CLI globally"
-	@echo "  make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first on a throwaway recipient"
+	@echo "  make website-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first on a throwaway recipient"
 	@echo "                             Default: mutate recipient + local verification; DRY_RUN=1 plans only"
 	@echo "                             Optional: REPORT=/abs/path/report.json"
-	@echo "  make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first"
-	@echo "                             Accepts the same DRY_RUN/REPORT options as beta-migrate-fresh"
+	@echo "  make website-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first"
+	@echo "                             Accepts the same DRY_RUN/REPORT options as website-migrate-fresh"
 	@echo "                             BASELINE=1 migrates an existing plan + apply recipient in place (keeps .git)"
 	@echo ""
 	@echo "Inner loop (fast, while coding):"
@@ -351,7 +351,7 @@ help:
 	@echo "  make check-project-contract-vintage - Generated-project contract changes declare a fresh adoption step id"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability and generated Dockerfile misconfiguration scan"
 	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
-	@echo "  make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
+	@echo "  make check-website-migration-smoke      - Exercise fresh-first website migration on isolated generated fixtures"
 	@echo "  make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
 	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
 	@echo "  make check-secret-scanning        - Blocking gitleaks tree and history scan with expiring suppressions"
@@ -404,7 +404,7 @@ install:
 	@scripts/install_global.sh
 
 # Run beta-site migration using the fresh-first workflow on a throwaway recipient.
-beta-migrate-fresh:
+website-migrate-fresh:
 	@set -e; \
 	donor=$(call shell_quote,$(call transport_value,DONOR)); \
 	recipient=$(call shell_quote,$(call transport_value,RECIPIENT)); \
@@ -419,22 +419,22 @@ beta-migrate-fresh:
 		dry_run_args="--dry-run"; \
 	fi; \
 	if [ -n "$$report" ]; then \
-		poetry run python scripts/beta_migrate.py fresh-first \
+		poetry run python scripts/website_migrate.py fresh-first \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
 			$$dry_run_args \
 			--report-path "$$report"; \
 	else \
-		poetry run python scripts/beta_migrate.py fresh-first \
+		poetry run python scripts/website_migrate.py fresh-first \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
 			$$dry_run_args; \
 	fi
 
-# Run one beta-migration iteration: regenerate the recipient from the donor's
+# Run one website-migration iteration: regenerate the recipient from the donor's
 # quickscale.yml through the shipped apply command, then run the fresh-first
 # workflow against the regenerated recipient.
-beta-migrate-iterate:
+website-migrate-iterate:
 	@set -e; \
 	donor=$(call shell_quote,$(call transport_value,DONOR)); \
 	recipient=$(call shell_quote,$(call transport_value,RECIPIENT)); \
@@ -453,13 +453,13 @@ beta-migrate-iterate:
 		iterate_args="$$iterate_args --existing-recipient"; \
 	fi; \
 	if [ -n "$$report" ]; then \
-		poetry run python scripts/beta_migrate.py iterate \
+		poetry run python scripts/website_migrate.py iterate \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
 			$$iterate_args \
 			--report-path "$$report"; \
 	else \
-		poetry run python scripts/beta_migrate.py iterate \
+		poetry run python scripts/website_migrate.py iterate \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
 			$$iterate_args; \

@@ -2,7 +2,7 @@
 # Do not edit by hand; `make check` fails when this file is not current.
 # Refresh with `poetry run python scripts/sync_ci_gate_jobs.py --write`.
 
-.PHONY: check-core-compat check-module-core-imports check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze check-security-negative-probes check-generated-workflow-lint check-migration-hashes release-check-module-seals
+.PHONY: check-core-compat check-module-core-imports check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-website-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze check-security-negative-probes check-generated-workflow-lint check-migration-hashes release-check-module-seals
 
 # Check each module's quickscale_core imports against the current core API.
 # This verifies that every import from quickscale_core in a module's source
@@ -79,8 +79,8 @@ check-security-static-analysis:
 
 # Exercise fresh-first migration behavior against isolated
 # generated fixtures without touching a real project or database.
-check-beta-migration-smoke:
-	@$(PYTHON) scripts/check_beta_migration_smoke.py
+check-website-migration-smoke:
+	@$(PYTHON) scripts/check_website_migration_smoke.py
 
 # Render one fresh generated project and run Django's deployment checks in the
 # proxied and single-host forwarding cells.  A new deploy warning, or an
