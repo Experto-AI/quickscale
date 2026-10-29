@@ -97,27 +97,20 @@ def _validate_upload_through_storage(
     return validated.width, validated.height
 
 
-def _load_uploaded_image(uploaded_file: UploadedFile) -> Image.Image:
-    """Open and fully load an upload, restoring the read position afterwards."""
-    try:
-        uploaded_file.seek(0)
-        image = Image.open(uploaded_file)
-        image.load()
-    except Image.DecompressionBombError as exc:
-        raise BlogMediaUploadValidationError(
-            {"file": IMAGE_BOMB_VALIDATION_ERROR}
-        ) from exc
-    except (UnidentifiedImageError, OSError) as exc:
-        raise BlogMediaUploadValidationError(
-            {"file": "Unsupported or invalid image file"}
-        ) from exc
-    finally:
-        uploaded_file.seek(0)
-    return image
+def _reject_oversized_pixel_budget(*, width: int, height: int) -> None:
+    """Reject a header-only image whose pixel count exceeds Pillow's guard."""
+    max_pixels = Image.MAX_IMAGE_PIXELS
+    if max_pixels is not None and width * height > int(max_pixels):
+        raise BlogMediaUploadValidationError({"file": IMAGE_BOMB_VALIDATION_ERROR})
 
 
 def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
-    """Validate the uploaded image and return its dimensions."""
+    """Validate the uploaded image and return its dimensions.
+
+    The fallback used when storage is absent reads the format and
+    dimensions from the header and applies every cap before ``load()``
+    decodes the payload, matching storage's validator.
+    """
     max_upload_bytes, max_upload_width, max_upload_height, allowed_formats = (
         _image_upload_limits()
     )
@@ -138,26 +131,43 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
     if validated is not None:
         return validated
 
-    image = _load_uploaded_image(uploaded_file)
-    image_format = (image.format or "").upper()
-    if image_format not in allowed_formats:
-        allowed_list = ", ".join(sorted(allowed_formats))
-        raise BlogMediaUploadValidationError(
-            {"file": f"Unsupported image format. Allowed formats: {allowed_list}"}
-        )
+    try:
+        uploaded_file.seek(0)
+        image = Image.open(uploaded_file)
 
-    width = int(image.width)
-    height = int(image.height)
+        image_format = (image.format or "").upper()
+        if image_format not in allowed_formats:
+            allowed_list = ", ".join(sorted(allowed_formats))
+            raise BlogMediaUploadValidationError(
+                {"file": f"Unsupported image format. Allowed formats: {allowed_list}"}
+            )
 
-    if width > max_upload_width:
-        raise BlogMediaUploadValidationError(
-            {"file": f"Image width exceeds maximum of {max_upload_width} pixels"}
-        )
+        width = int(image.width)
+        height = int(image.height)
 
-    if height > max_upload_height:
+        if width > max_upload_width:
+            raise BlogMediaUploadValidationError(
+                {"file": f"Image width exceeds maximum of {max_upload_width} pixels"}
+            )
+
+        if height > max_upload_height:
+            raise BlogMediaUploadValidationError(
+                {"file": f"Image height exceeds maximum of {max_upload_height} pixels"}
+            )
+
+        _reject_oversized_pixel_budget(width=width, height=height)
+
+        image.load()
+    except Image.DecompressionBombError as exc:
         raise BlogMediaUploadValidationError(
-            {"file": f"Image height exceeds maximum of {max_upload_height} pixels"}
-        )
+            {"file": IMAGE_BOMB_VALIDATION_ERROR}
+        ) from exc
+    except (UnidentifiedImageError, OSError) as exc:
+        raise BlogMediaUploadValidationError(
+            {"file": "Unsupported or invalid image file"}
+        ) from exc
+    finally:
+        uploaded_file.seek(0)
 
     return width, height
 
