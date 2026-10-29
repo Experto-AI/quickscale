@@ -21,6 +21,11 @@ from quickscale_modules_forms.models import (
 User = get_user_model()
 
 
+def _streamed_body(response) -> str:
+    """Consume a streaming response's body into text."""
+    return b"".join(response.streaming_content).decode()
+
+
 @pytest.mark.django_db
 class TestFormAdminRegistration:
     """Tests for FormAdmin registration and configuration"""
@@ -194,7 +199,7 @@ class TestAdminCsvExportCoverage:
         response = superuser_client.get(url)
 
         assert response.status_code == 200
-        rows = list(csv.reader(response.content.decode().splitlines()))
+        rows = list(csv.reader(_streamed_body(response).splitlines()))
         assert rows
         header = rows[0]
         assert header[:5] == ["id", "submitted_at", "status", "is_spam", "ip_address"]
@@ -342,7 +347,7 @@ class TestAdminSubmissionExportViewAllObjects:
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
-        content = response.content.decode()
+        content = _streamed_body(response)
         # The field value fixture uses all_objects and explicit org assignment.
         # If the export view relied on the default (RLS-scoped) manager, the
         # contextvar would be None in the admin context and the value would
@@ -432,7 +437,7 @@ class TestAdminSubmissionExportViewAllObjects:
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
-        content = response.content.decode()
+        content = _streamed_body(response)
         assert "Engineering" in content, (
             "Must see org_a's field value — proves all_objects path"
         )
@@ -443,7 +448,7 @@ class TestAdminSubmissionExportViewAllObjects:
         )
         response = superuser_client.get(url)
         assert response.status_code == 200
-        content = response.content.decode()
+        content = _streamed_body(response)
         assert "Marketing" in content, (
             "Must see org_b's field value — proves all_objects path"
         )
@@ -494,7 +499,7 @@ class TestAdminSubmissionExportViewAllObjects:
         response = superuser_client.get(url)
         assert response.status_code == 200, "CSV export should return 200"
 
-        rows = list(csv.reader(response.content.decode().splitlines()))
+        rows = list(csv.reader(_streamed_body(response).splitlines()))
         assert len(rows) >= 2, "Expected at least header + one data row"
 
         header = rows[0]
@@ -587,7 +592,7 @@ class TestAdminSubmissionExportViewAllObjects:
 
         assert response.status_code == 200, "CSV export should return 200 with no org"
 
-        rows = list(csv.reader(response.content.decode().splitlines()))
+        rows = list(csv.reader(_streamed_body(response).splitlines()))
         assert len(rows) >= 2, "Expected at least header + one data row"
 
         header = rows[0]
@@ -725,7 +730,7 @@ class TestAdminSubmissionExportViewAllObjects:
             "CSV export should return 200 even with mismatched org"
         )
 
-        rows = list(csv.reader(response.content.decode().splitlines()))
+        rows = list(csv.reader(_streamed_body(response).splitlines()))
         assert len(rows) >= 2, "Expected at least header + one data row"
 
         header = rows[0]

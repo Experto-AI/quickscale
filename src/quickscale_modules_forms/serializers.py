@@ -17,6 +17,45 @@ from quickscale_modules_forms.models import (
 )
 from quickscale_modules_forms.validators import make_field_validator
 
+_OPTION_FIELD_TYPES = frozenset(
+    {
+        FormField.FieldType.SELECT,
+        FormField.FieldType.RADIO,
+        FormField.FieldType.CHECKBOX,
+    }
+)
+
+#: the literal values the shipped React checkbox control submits
+_BOOLEAN_CHECKBOX_VALUES = frozenset({"true", "false"})
+
+
+def _declared_option_values(field: FormField) -> set[str]:
+    """Return the field's declared option values as submitted-value strings."""
+    options = field.options if isinstance(field.options, list) else []
+    return {
+        str(option["value"])
+        for option in options
+        if isinstance(option, dict) and "value" in option
+    }
+
+
+def _accepts_choice_value(field: FormField, value: str) -> bool:
+    """Return whether *value* is a supported submission for a choice field.
+
+    An option-backed select, radio, or checkbox accepts exactly its
+    declared option values.  A checkbox with no declared options is the
+    shipped React control's boolean toggle, whose renderer submits the
+    literal strings ``"true"`` and ``"false"``; an optionless select or
+    radio has no supported value.
+    """
+    declared_values = _declared_option_values(field)
+    if declared_values:
+        return value in declared_values
+    return (
+        field.field_type == FormField.FieldType.CHECKBOX
+        and value in _BOOLEAN_CHECKBOX_VALUES
+    )
+
 
 class FormFieldSerializer(serializers.ModelSerializer):
     """Read-only serializer for public form schema — omits server-side-only fields"""
@@ -196,6 +235,17 @@ class FormSubmissionCreateSerializer(serializers.Serializer):
                 continue
 
             if not submitted_value:
+                continue
+
+            # Choice fields accept only a supported value: a declared option,
+            # or the optionless checkbox toggle's "true"/"false".
+            if field.field_type in _OPTION_FIELD_TYPES and not _accepts_choice_value(
+                field, submitted_value
+            ):
+                errors[field.name] = [
+                    f"Select a valid choice. {submitted_value} is not one of the "
+                    "available options."
+                ]
                 continue
 
             # Email type validation

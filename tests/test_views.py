@@ -14,9 +14,15 @@ from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
 from quickscale_modules_forms.models import (
+    FormField,
     FormFieldValue,
     FormSubmission,
 )
+
+
+def _streamed_body(response: Any) -> str:
+    """Consume a streaming response's body into text."""
+    return b"".join(response.streaming_content).decode()
 
 
 @pytest.fixture(autouse=True)
@@ -154,6 +160,72 @@ class TestFormSubmitAPIView:
         assert error["code"] == "validation_error"
         assert expected_error in error["fields"]["full_name"][0]
         assert expected_error in error["fields"]["email"][0]
+
+    @pytest.mark.parametrize(
+        "field_type",
+        [
+            FormField.FieldType.SELECT,
+            FormField.FieldType.RADIO,
+            FormField.FieldType.CHECKBOX,
+        ],
+    )
+    def test_returns_400_when_value_is_outside_field_options(
+        self, api_client, form, field_type
+    ):
+        """A select/radio/checkbox value outside the options is a 400."""
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type=field_type,
+                label="Choice",
+                name="choice",
+                required=True,
+                order=1,
+                options=[
+                    {"value": "low", "label": "Low"},
+                    {"value": "high", "label": "High"},
+                ],
+            )
+
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
+
+        rejected = api_client.post(url, data={"choice": "medium"}, format="json")
+        accepted = api_client.post(url, data={"choice": "low"}, format="json")
+
+        assert rejected.status_code == 400
+        assert "choice" in rejected.data["error"]["fields"]
+        assert accepted.status_code == 201
+
+    def test_optionless_checkbox_accepts_the_shipped_boolean_payload(
+        self, api_client, form
+    ):
+        """The shipped React checkbox's "true"/"false" stays a 201; junk is a 400."""
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type=FormField.FieldType.CHECKBOX,
+                label="Subscribe",
+                name="subscribe",
+                required=True,
+                order=1,
+            )
+
+        url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
+
+        for value in ("true", "false"):
+            accepted = api_client.post(url, data={"subscribe": value}, format="json")
+            assert accepted.status_code == 201
+
+        rejected = api_client.post(url, data={"subscribe": "yes"}, format="json")
+
+        assert rejected.status_code == 400
+        assert "subscribe" in rejected.data["error"]["fields"]
 
     @pytest.mark.parametrize(
         "payload,post_kwargs",
@@ -1278,6 +1350,24 @@ class TestAdminSubmissionExportView:
         assert response.status_code == 200
         assert "text/csv" in response["Content-Type"]
 
+    def test_export_returns_a_streamed_body(
+        self, superuser_client, form, submission, field_value
+    ):
+        """The CSV response is a stream of chunks, not one buffered string."""
+        from django.http import StreamingHttpResponse
+
+        url = reverse(
+            "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
+        )
+        response = superuser_client.get(url)
+
+        assert isinstance(response, StreamingHttpResponse)
+        chunks = list(response.streaming_content)
+        assert len(chunks) >= 2, "header and data rows must stream separately"
+        body = b"".join(chunks).decode()
+        assert "full_name" in body
+        assert "Alice" in body
+
     def test_superuser_csv_contains_field_values(
         self, superuser_client, form, submission, field_value
     ):
@@ -1286,7 +1376,7 @@ class TestAdminSubmissionExportView:
             "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = superuser_client.get(url)
-        content = response.content.decode()
+        content = _streamed_body(response)
         assert "full_name" in content
         assert "Alice" in content
 
@@ -1308,10 +1398,72 @@ class TestAdminSubmissionExportView:
 
         assert response.status_code == 200
 
-        rows = list(csv.reader(io.StringIO(response.content.decode())))
+        rows = list(csv.reader(io.StringIO(_streamed_body(response))))
         assert rows[0][0] == "id"
         assert rows[0][-1] == "'=2+2"
         assert rows[1][-1] == "'  +SUM(A1:A2)"
+
+    def test_viewer_session_export_streams_own_org_rows(self, user, api_client, org_a):
+        """A viewer's export streams rows under the target organization's scope."""
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import OrgRole, OrganizationMembership
+
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org_a,
+            role=OrgRole.VIEWER,
+        )
+        with org_scope(org_a):
+            scoped_form = Form.all_objects.create(
+                organization=org_a,
+                title="Viewer Export",
+                slug="viewer-export",
+                is_active=True,
+            )
+            scoped_field = FormField.all_objects.create(
+                form=scoped_form,
+                organization=org_a,
+                field_type=FormField.FieldType.TEXT,
+                label="Name",
+                name="full_name",
+                order=1,
+            )
+            scoped_submission = FormSubmission.all_objects.create(
+                form=scoped_form,
+                organization=org_a,
+                ip_address="10.1.0.1",
+            )
+            FormFieldValue.all_objects.create(
+                submission=scoped_submission,
+                organization=org_a,
+                field=scoped_field,
+                field_name="full_name",
+                field_label="Name",
+                value="Viewer Alice",
+            )
+
+        api_client.force_login(user)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(org_a.pk)
+        session.save()
+
+        url = reverse(
+            "quickscale_forms:admin_submission_export",
+            kwargs={"pk": scoped_form.pk},
+        )
+        response = api_client.get(url)
+
+        assert response.status_code == 200
+        body = _streamed_body(response)
+        assert "full_name" in body
+        assert "Viewer Alice" in body
 
     def test_staff_without_org_is_refused_on_export(self, staff_client, form):
         """View-unit defense-in-depth: force-auth staff without org is refused."""

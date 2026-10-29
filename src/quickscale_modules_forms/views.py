@@ -11,12 +11,14 @@ from __future__ import annotations
 import csv
 import io
 import logging
+from collections.abc import Iterator
+from datetime import date
 from typing import Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Prefetch
-from django.http import Http404, HttpResponse
+from django.db.models import Count, Min, Prefetch
+from django.http import Http404, StreamingHttpResponse
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -537,68 +539,116 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
     * Regular member with active org: scoped to that org via RLS.
     * Regular member without org: refused by the permission (403).
 
+    The row generator reads submissions in fixed-size chunks with
+    ``iterator()`` so the request holds one chunk of values, not the form's
+    whole value table.  ``StreamingHttpResponse`` is iterated after the
+    view returns, so the generator re-establishes the operator or tenant
+    context itself; the form lookup and the 404 stay synchronous.
+
     Child ``FormField`` / ``FormFieldValue`` queries continue to use
     ``all_objects`` (invariants).
     """
 
-    def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
-        # wrap the entire method in operator_access for superuser
+    #: submissions fetched per ``iterator()`` chunk, with their values prefetched
+    csv_chunk_size = 200
+
+    def get(
+        self, request: Request, pk: int, *args: Any, **kwargs: Any
+    ) -> StreamingHttpResponse:
+        # The operator context covers the synchronous form lookup and 404;
+        # the generator below re-enters it while the body streams.
         if is_platform_operator(self.request.user):
             return self._with_superuser_operator_access(
-                self._export_csv, request, pk, *args, **kwargs
+                self._build_export_response, request, pk, *args, **kwargs
             )
-        return self._export_csv(request, pk, *args, **kwargs)
+        return self._build_export_response(request, pk, *args, **kwargs)
 
-    def _export_csv(
+    def _build_export_response(
         self, request: Request, pk: int, *args: Any, **kwargs: Any
-    ) -> HttpResponse:
-        form = self._get_org_bound_queryset(Form).filter(pk=pk).first()
+    ) -> StreamingHttpResponse:
+        form = (
+            self._get_org_bound_queryset(Form)
+            .select_related("organization")
+            .filter(pk=pk)
+            .first()
+        )
         if form is None:
             raise Http404
 
-        submissions = (
-            self._get_org_bound_queryset(FormSubmission)
-            .filter(form=form)
-            .order_by("-submitted_at")
+        response = StreamingHttpResponse(
+            self._iter_csv_rows(
+                form=form,
+                user=request.user,
+                as_operator=is_platform_operator(request.user),
+            ),
+            content_type="text/csv",
         )
+        filename = f"submissions_{pk}_{date.today().isoformat()}.csv"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
-        # Harden batch-load all field values via all_objects to avoid
-        # implicit FK traversal through the default (RLS-scoped) manager.
-        all_values = list(
-            FormFieldValue.all_objects.filter(submission__form=form).values(
-                "submission_id", "field_name", "value"
-            )
-        )
+    def _iter_csv_rows(
+        self,
+        *,
+        form: Form,
+        user: Any,
+        as_operator: bool,
+    ) -> Iterator[str]:
+        """Yield CSV chunks under the context the streaming iteration needs."""
+        if as_operator:
+            with transaction.atomic():
+                with operator_access(
+                    user=user,
+                    reason=f"{self.__class__.__name__}: superuser {user.pk}",
+                ):
+                    yield from self._csv_rows(form=form, as_operator=True)
+            return
 
+        with org_scope(form.organization):
+            yield from self._csv_rows(form=form, as_operator=False)
+
+    def _csv_rows(self, *, form: Form, as_operator: bool) -> Iterator[str]:
+        """Yield the header and one chunk per submission, in CSV order."""
         # CSV column order follows form field definition order, not alphabetical
-        # by field_name — preserves form-designer ordering.
-        # Use all_objects on the operator path to bypass RLS — a staff user with
-        # no org context or a mismatched org must still see the correct columns.
+        # by field_name — preserves form-designer ordering.  Use all_objects on
+        # the operator path to bypass RLS — a staff user with no org context or
+        # a mismatched org must still see the correct columns.
         form_field_names: list[str] = list(
             FormField.all_objects.filter(form=form, is_active=True)
             .order_by("order")
             .values_list("name", flat=True)
         )
-        seen: set[str] = set(form_field_names)
-        extra_field_names: list[str] = []
-        for item in all_values:
-            name = item["field_name"]
-            if name not in seen:
-                seen.add(name)
-                extra_field_names.append(name)
+        extra_field_names: list[str] = list(
+            FormFieldValue.all_objects.filter(submission__form=form)
+            .exclude(field_name__in=form_field_names)
+            .values("field_name")
+            .annotate(first_pk=Min("pk"))
+            .order_by("first_pk")
+            .values_list("field_name", flat=True)
+        )
         all_field_names = form_field_names + extra_field_names
 
-        values_by_submission: dict[int, dict[str, str]] = {}
-        for item in all_values:
-            sub_id = item["submission_id"]
-            values_by_submission.setdefault(sub_id, {})[item["field_name"]] = item[
-                "value"
-            ]
+        submission_queryset = (
+            FormSubmission.all_objects if as_operator else FormSubmission.objects
+        )
+        submissions = (
+            submission_queryset.filter(form=form)
+            .order_by("-submitted_at")
+            .prefetch_related(
+                Prefetch("values", queryset=FormFieldValue.all_objects.all())
+            )
+            .iterator(chunk_size=self.csv_chunk_size)
+        )
 
-        output = io.StringIO()
-        writer = csv.writer(output)
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
 
-        # Write header row
+        def _flush() -> str:
+            data = buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+            return data
+
         header = [
             "id",
             "submitted_at",
@@ -607,10 +657,12 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
             "ip_address",
         ] + all_field_names
         writer.writerow([_neutralize_csv_cell(cell) for cell in header])
+        yield _flush()
 
-        # Write data rows
         for submission in submissions:
-            values_by_name = values_by_submission.get(submission.pk, {})
+            values_by_name = {
+                value.field_name: value.value for value in submission.values.all()
+            }
             row = [
                 submission.pk,
                 submission.submitted_at.isoformat(),
@@ -619,13 +671,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
                 submission.ip_address or "",
             ] + [values_by_name.get(name, "") for name in all_field_names]
             writer.writerow([_neutralize_csv_cell(cell) for cell in row])
-
-        from datetime import date
-
-        filename = f"submissions_{pk}_{date.today().isoformat()}.csv"
-        response = HttpResponse(output.getvalue(), content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
-        return response
+            yield _flush()
 
 
 class FormPagePublicReadMixin:
