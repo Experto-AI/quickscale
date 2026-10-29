@@ -4,25 +4,11 @@
 
 ## Goal and finish line
 
-Fixes first, release on `develop`, ship 0.89.0 to production. Close every 2026-10-23 audit
-ticket, re-cut 0.89.0, update `bap-web` to that tag, prove the release on its `develop`
-environment, then cut over production to the same tag (SA191d) and publish 0.89.0 to PyPI. The
-property portal (SA153, SA154) is deferred: it starts only after all hardening tickets close,
-production runs 0.89.0, and 0.89.0 is on PyPI (see
-[Deferred — property portal](#deferred-property-portal)).
-
-**Release status.** 0.89.0 is unpublished; a live 0.88.0 install moves to it on a fresh
-database. All hardening tickets (SA315, SA320, SA321, SA323, SA324) have landed,
-the tag is re-cut, `bap-web` adopts it, SA191d (re-proof) is the release's final validation on
-`develop`, SA191d (production) ships the same tag, and the operator's Phases 5–6 sealing and PyPI
-publication follow ([publish_procedure.md](publish_procedure.md)).
-
-Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
-[coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence and fix
-detail. Coherence tickets merge the matching coherence proposal into decisions with a harness
-detector (the audit's enforcement gap, with its fixture controls), or record a review-only clause
-without one. Where an audit leaves an operator question open, the ticket states the default it
-ships unless the operator decides otherwise.
+Ship 0.89.0 to production. Re-cut the 0.89.0 tag, update `bap-web` to it, prove it on
+`bap-web` `develop`, cut over production to the same tag (SA191d), and publish 0.89.0 to PyPI
+([publish_procedure.md](publish_procedure.md)). 0.89.0 is unpublished; a live 0.88.0 install moves
+to it on a fresh database. The property portal (SA153, SA154) starts only after production runs
+0.89.0 and it is on PyPI (see [Deferred — property portal](#deferred-property-portal)).
 
 The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
 context, scope, acceptance, and each slice's tier; [CHANGELOG.md](../../CHANGELOG.md) preserves
@@ -33,9 +19,8 @@ history.
 Tier 1 is one bounded low-risk concern within direct context fit; Tier 2-fast is a specified
 change with known targets, acceptance, and checks; Tier 2-full is one whose callers, mechanism,
 or environment still need discovery, or that carries an open strategic choice. Audit work is
-sliced to Tier 2 — preferably Tier 2-full, which holds a related batch in one delivery. Only
-SA191d's production switch and retirement stay Tier 3 with plan review: their risk is the
-irreversible operation itself, which slicing cannot remove; preparation ships separately.
+sliced to Tier 2, preferably Tier 2-full. Only SA191d (production) and (retire) stay Tier 3 with
+plan review: their risk is the irreversible operation itself.
 
 ## Schedule and parallel execution
 
@@ -49,45 +34,32 @@ irreversible operation itself, which slicing cannot remove; preparation ships se
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: — (SA321 closed)
-Track 2: SA315 (a, b) ─► SA323 ─► SA324 (a, b)
-         ─► SA191d (re-proof → production → retire, operator-gated)
-Track 3: [SA191d (production)] SA277
-     release path: all hardening ─► re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof on develop)
-                   ─► SA191d (production, same tag) ─► publication ─► SA191d (retire)
-     portal (deferred): all hardening closed + publication ─► SA153 ─► SA154
+Track 1: — (portal deferred)
+Track 2: SA191d (re-proof ─► production ─► retire, operator-gated)
+Track 3: SA277 (a) ─► [SA191d (production)] ─► SA277 (b)
+     release path: re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof) ─► SA191d (production)
+                   ─► publication ─► SA191d (retire)
+     portal (deferred): publication ─► SA153 ─► SA154
 ```
 
-Arrows are queue order; table dependencies gate ticket completion, with slice exceptions below.
-SA277 waits for SA191d (production).
-SA191d (re-proof) owns the `develop` deployment and the release's final checks; (production) ships
-exactly the tag re-proof passed; a defect found there follows the release re-entry loop (fix,
-re-cut, re-proof). Operator publication of 0.89.0 follows SA191d (production); SA191d (retire)
-closes the ticket. Each slice ships with
-its own checks and handoff.
-
-**Order.** Module migration history is frozen, so a module schema change (SA314's debit
-reference) ships as a new migration. When resumed, SA153's own tables
-live in the project-owned extension as `0002+` migrations.
+Arrows are queue order; table dependencies gate ticket completion. SA277 (a) can start now; only
+(b) waits for SA191d (production). SA191d (production) ships exactly the tag re-proof passed; a
+defect found there follows the release re-entry loop (fix, re-cut, re-proof). Module migration
+history is frozen: a module schema change ships as a new migration, and SA153's tables live in
+the project-owned extension as `0002+` migrations.
 
 ### Track states
 
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
-| 1 | — (SA321 closed; SA153 deferred) | no: SA153 deferred | no: SA153 deferred | yes: — |
-| 2 | SA191d (re-proof) | no: re-cut tag and operator gates | no: SA191d (production) | yes: — |
-| 3 | SA277 | no: SA191d (production) for SA277 | no: SA191d (production) for SA277 | yes: SA326 |
-
-**Clearing blockers.** Track 1: none. Track 2: all hardening is closed; SA191d waits for the
-re-cut tag, then the operator's `develop` push, production-switch, publication and retirement
-approvals. Track 3:
-SA191d (production) clears SA277.
+| 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
+| 2 | SA191d (re-proof) | no: 0.89.0 tag re-cut | no: operator gates for (production), (retire) | yes |
+| 3 | SA277 (a) | yes | no: SA191d (production) for (b) | yes |
 
 ### Ownership and merge coordination
 
-- Track 1: generated-project templates (README, Compose, Docker, CI, Makefile, settings), the
-  theme and its managed hooks, and release workflows. The property extension, React pages,
-  crawler views and journey checks return with the deferred portal.
+- Track 1: generated-project templates, the theme and managed hooks, release workflows, and
+  the deferred portal.
 - Track 2: `bap-web` cutover (SA191d), with joint publication and deployment; dependency
   manifests, locks and advisory disposition; module runtime code and tests in billing, CRM, orgs,
   auth, storage, forms, listings and notifications.
@@ -96,10 +68,7 @@ SA191d (production) clears SA277.
   fixtures, versioned upgrade prompt, and upgrade decision/operator guidance.
 - One delivery candidate per track; serialize merges into `v89`.
 - **Conflict surface:** this roadmap, CHANGELOG, the three audits, `project_contract.yml`,
-  `decisions.md`, `README.md.j2` (SA320 (c), SA321), `settings/base.py.j2` (SA320 (c),
-  SA321), billing `_settings.py`, module manifests (SA320 (c)),
-  `bap-web`'s dependency lock, and `bap-web`'s frontend tests and routes
-  (`App.test.tsx`, `AppRoutes.test.tsx`).
+  `decisions.md`, and `bap-web`'s dependency lock.
   Reconcile after each merge and run the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -113,13 +82,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-### Track 1 — generated project
-
-- [x] **SA320 — Deliver module resource contracts to user-owned pages through managed hooks.**
-
-- [x] **SA321 — Make the generated production deployment contract an artifact.**
-
-### Track 2 — cutover and module runtime defects
+### Track 2 — cutover
 
 **SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
 `bap-web` with no users and no production submissions. The regenerated `bap-web` (`~/code/bap-web`)
@@ -132,8 +95,8 @@ old PostgreSQL 17 service stays as the rollback until acceptance, and DNS is nev
 live in `~/bap-cutover/` (mode 600), never printed or committed. After Railway's 2026-10-21
 incident every old variable is exposed: none is carried, and the old PostgreSQL 17 credentials
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
-defect is fixed in `bap-web`. The module fixes below reach `bap-web` as one update to the re-cut
-0.89.0 tag before re-proof; the cutover waits for all of them. `bap-web` keeps SA153 (h) (public
+defect is fixed in `bap-web`. The module fixes reach `bap-web` as one update to the re-cut
+0.89.0 tag before re-proof. `bap-web` keeps SA153 (h) (public
 property head, crawler summary, sitemap, robots); its `properties` models must be classified in
 the tenant contract, since the 2026-10-26 `develop` CI run failed the tenant isolation
 conformance check on `properties.PropertyAgent` and siblings.
@@ -148,7 +111,7 @@ conformance check on `properties.PropertyAgent` and siblings.
   requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) After all hardening and the re-cut, update `bap-web` to the 0.89.0 tag, push
+  - [ ] (re-proof) After the re-cut, update `bap-web` to the 0.89.0 tag, push
     it to `develop`, and pass the acceptance there as the release's final validation, with CI
     green (tenant conformance included) and both dependency audits clean apart from the recorded
     dev-only exception (Tier 2-full).
@@ -161,32 +124,11 @@ conformance check on `properties.PropertyAgent` and siblings.
     then rename the new service/volume after 48 hours; verify health and the retained dump/refs.
     **Tier 3: plan review required** — deleting the old database irreversibly removes live rollback.
 
-- [x] **SA310 — Fix the subscription Checkout S1 and apply billing webhooks in provider order.**
-
-- [x] **SA311 — Close the S2 tenant-boundary defects in CRM, orgs, storage and forms.**
-
-- [x] **SA314 — Make billing credits, Checkout and gates idempotent and tenant-correct.**
-
-- [x] **SA315 — Close orgs and auth lifecycle defects.**
-
-- [x] **SA323 — Harden module upload, form, export and notification paths.**
-
-- [x] **SA324 — Make tenant contract evidence and write services coherent.**
-
-### Track 3 — upgrade path, generator state and backups
-
-- [x] **SA319 — Update modules as one sealed-tag transaction.**
-
-- [x] **SA322 — Make backup restore safe and its recovery point coherent.**
-
-- [x] **SA325 — Make module settings, defaults, messages and READMEs follow one contract.**
-
-- [x] **SA326 — Wire the unwired release and security gates.**
+### Track 3 — upgrade path
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `beta_migration` code plus a maintained prompt.**
 
-  Addresses the upgrade-path part of arch `generated-file-ownership-unmodeled`; managed
-  resource hooks are SA320's scope (and the deferred SA153's). One path in two stages:
+  One upgrade path in two stages:
   `beta_migration` does what it can mechanically; the prompt-driven port (`MIGRATION_PROMPT.md`,
   `CUTOVER.md`) handles what it reports it could not.
 
@@ -198,9 +140,11 @@ conformance check on `properties.PropertyAgent` and siblings.
   Decisions say that supporting further projects meets the "second long-lived project"
   revocation trigger.
 
-  After SA191d (production), record the two-stage boundary and revocation triggers against the
-  cutover evidence; confirm/amend the upgrade-path draft and remove duplicate operator steps
-  (Tier 2-fast). Validate links and smoke instructions.
+  **Slices:**
+  - [ ] (a) Record the two-stage path, boundary rule and revocation triggers in decisions;
+    remove operator steps either stage covers (Tier 2-fast).
+  - [ ] (b) After SA191d (production), confirm them and the steps count against the cutover
+    evidence; validate links and smoke instructions (Tier 1).
 
 ## Deferred constraints and references
 
@@ -213,8 +157,7 @@ and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 ### Deferred — property portal (Track 1)
 
-Not scheduled. Resumes only when SA315, SA320, SA321, SA323 and SA324 are
-closed, SA191d (production) has passed, and 0.89.0 is published; it is then re-added to the
+Not scheduled. Resumes only when SA191d (production) has passed and 0.89.0 is published; it is then re-added to the
 scheduling table on top of the deployed `bap-web`.
 
 **SA153 — Deliver the first property portal using project-owned extensions.**
@@ -223,7 +166,7 @@ Target `buenosairesproperties.com` with one React public property surface over a
 JSON read API under the [extension contract](module-extension.md), building on the React pages
 and `/api/properties/` the port carried over. No public API in `listings`, no generic property
 behavior in generated projects. Module-coupled data on new pages comes through the generated managed
-hooks (arch `generated-file-ownership-unmodeled`), and project-owned tenant views
+hooks, and project-owned tenant views
 run in the generated isolation lane.
 
 **Acceptance:** the served documents (per-request head and crawler summary), the sitemap and
