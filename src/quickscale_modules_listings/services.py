@@ -6,9 +6,9 @@ surface, public functions take keyword-only parameters after at most one
 leading subject, and a service that cannot do what it was asked raises
 :class:`ListingsError` (rule 10).
 
-The publish operation resolves its organization from the argument or from the
-ambient tenant context (set by ``TenantMiddleware``) and never reads another
-module's settings.
+The publish operation takes its organization explicitly from the caller and
+never resolves the ambient tenant context or the System organization on the
+caller's behalf; it never reads another module's settings.
 """
 
 from __future__ import annotations
@@ -21,9 +21,6 @@ from typing import Any
 from django.conf import settings
 from django.db import DatabaseError, transaction
 from django.utils.text import slugify
-
-from quickscale_modules_orgs.current_org import get_current_org_id
-from quickscale_modules_orgs.models import Organization
 
 from .exceptions import (
     ListingPublishConflictError,
@@ -71,12 +68,14 @@ def _parse_price(price: Any, errors: dict[str, str]) -> Decimal | None:
 def create_published_listing_from_payload(
     payload: Mapping[str, Any],
     *,
-    organization: Any = None,
+    organization: Any,
 ) -> Listing:
     """Create and return a published listing from validated API payload.
 
-    If *organization* is provided it is used directly; otherwise the ambient
-    org is resolved from the ContextVar (set by ``TenantMiddleware``).
+    The caller passes *organization* explicitly (rule 23): the service never
+    resolves the ambient tenant context or the System organization, so a
+    caller that omits the organization is refused rather than writing public
+    content into the System org.
     """
     errors: dict[str, str] = {}
 
@@ -103,13 +102,6 @@ def create_published_listing_from_payload(
     title_text = str(title).strip()
     description_text = str(description).strip()
     generated_slug = slugify(title_text)
-
-    if organization is None:
-        org_id = get_current_org_id()
-        if org_id is not None:
-            organization = Organization.objects.get(pk=org_id)
-        else:
-            organization = Organization.objects.get_system_org()
 
     if Listing.objects.filter(organization=organization, slug=generated_slug).exists():
         raise ListingPublishConflictError("Listing already exists for generated slug")

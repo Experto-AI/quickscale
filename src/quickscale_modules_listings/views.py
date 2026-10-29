@@ -1,7 +1,9 @@
 """Views for QuickScale listings module
 
 Single-URL contract (D1/D5). All views use the flat route tree.
-Org scoping is ambient via the ContextVar set by ``TenantMiddleware``.
+Org scoping is ambient via the ContextVar set by ``TenantMiddleware``;
+the publish write passes the request's organization to its service
+explicitly and fails closed when the request has none.
 Public/anonymous reads resolve the System org (D2).
 """
 
@@ -16,7 +18,7 @@ from django.http import HttpRequest
 from django.utils.html import escape
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -69,10 +71,14 @@ class ListingPublishAPIView(APIView):
         if not isinstance(payload, Mapping):
             raise ValidationError("JSON object payload expected")
 
-        # Resolve the org from the request (set by middleware) or fall back
-        # to the ContextVar inside the publish helper.  The middleware
-        # always sets ``request.org`` for authenticated users.
+        # The publish service takes its organization explicitly (rule 23).
+        # ``TenantMiddleware`` sets ``request.org`` for an ordinary member and
+        # the permission class refuses one without it; a platform operator
+        # passes the role check without org context, so the view fails closed
+        # here instead of letting the service resolve a System org.
         organization = getattr(request, "org", None)
+        if organization is None:
+            raise PermissionDenied("Organization context is required for this route.")
 
         try:
             listing = create_published_listing_from_payload(
