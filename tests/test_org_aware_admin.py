@@ -95,14 +95,22 @@ def test_same_org_form_skips_validation_without_any_org() -> None:
     assert form_class(cleaned).clean() == cleaned
 
 
-def test_same_org_form_tolerates_null_org_related_values() -> None:
-    form_class = _validated_form(["category", "tags"])
-    cleaned: dict[str, Any] = {
-        "organization": _Org("org-1"),
-        "category": _RelatedModel(None),
-        "tags": None,
-    }
-    assert form_class(cleaned).clean() == cleaned
+def test_same_org_form_rejects_a_null_org_fk_value() -> None:
+    form_class = _validated_form(["category"])
+    with pytest.raises(ValidationError) as excinfo:
+        form_class(
+            {"organization": _Org("org-1"), "category": _RelatedModel(None)}
+        ).clean()
+    assert "category must belong to the same organization." in str(excinfo.value)
+
+
+def test_same_org_form_rejects_a_null_org_m2m_value() -> None:
+    form_class = _validated_form(["tags"])
+    with pytest.raises(ValidationError) as excinfo:
+        form_class(
+            {"organization": _Org("org-1"), "tags": [_RelatedModel(None)]}
+        ).clean()
+    assert "All tags must belong to the same organization." in str(excinfo.value)
 
 
 class _OrgInstance(_Org):
@@ -235,6 +243,13 @@ def test_save_model_rejects_foreign_fk_before_delegating() -> None:
     admin = _Admin()
     with pytest.raises(ValidationError):
         admin.save_model(None, _Row("org-1", _RelatedModel("org-2")), None, False)
+    assert admin.saved is False
+
+
+def test_save_model_rejects_a_related_value_without_organization() -> None:
+    admin = _Admin()
+    with pytest.raises(ValidationError):
+        admin.save_model(None, _Row("org-1", _RelatedModel(None)), None, False)
     assert admin.saved is False
 
 

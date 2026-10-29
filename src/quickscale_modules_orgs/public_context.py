@@ -1,11 +1,13 @@
 """Public-context helpers for orgs-owned anonymous/public read operations.
 
-Provides a CBV mixin that generalizes the proven tenant-context
-priming idiom from ``social_manifest.py:444-447`` for public/anonymous
-read paths in other modules.
+Provides the two sanctioned shapes of a module-owned ``*PublicReadMixin``
+(Module Conventions rule 19): :class:`PublicSystemOrgReadMixin` primes the
+tenant context for a public page that reads tenant-scoped rows, and
+:class:`PublicReadPresentationMixin` declares a public page that reads no
+tenant-scoped row at all.
 
-The mixin wraps ``dispatch()`` in :func:`~.current_org.org_scope` which
-opens a ``transaction.atomic()`` block and primes both the Python
+The priming mixin wraps ``dispatch()`` in :func:`~.current_org.org_scope`
+which opens a ``transaction.atomic()`` block and primes both the Python
 ContextVar and the PostgreSQL GUC for the duration of the view.
 """
 
@@ -15,6 +17,22 @@ import contextlib
 import uuid
 from collections.abc import Iterator
 from typing import Any
+
+
+class PublicReadPresentationMixin:
+    """Marker base for a public page that reads no tenant-scoped row.
+
+    A module-owned ``*PublicReadMixin`` declares one of two shapes (Module
+    Conventions rule 19): it inherits :class:`PublicSystemOrgReadMixin`, which
+    primes the public organization's context for a page that reads
+    tenant-scoped rows, or it inherits this marker, which declares that the
+    page performs no tenant-scoped read — a mount page, or a page that reads
+    global rows only.
+
+    The marker primes no context, so a page that later adds a tenant-scoped
+    query must move to :class:`PublicSystemOrgReadMixin` instead; rule 19
+    refuses a ``*PublicReadMixin`` that declares neither shape.
+    """
 
 
 class PublicSystemOrgReadMixin:
