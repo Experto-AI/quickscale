@@ -381,17 +381,17 @@ def test_frontend_workflows_match_maintained_toolchain_pattern() -> None:
     for relative_path in FRONTEND_WORKFLOWS:
         content = (repository_root / relative_path).read_text(encoding="utf-8")
         node_setup = content.index(
-            "uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0"
+            "uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0"
         )
         pnpm_setup = content.index(
-            "uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0"
+            "uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0"
         )
 
         assert node_setup < pnpm_setup
         assert 'node-version: "24.22.1"' in content
         assert "version: 11.18.0" in content
         assert 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV' in content
-        assert "uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0" in content
+        assert "uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0" in content
         assert "path: ${{ env.STORE_PATH }}" in content
         assert (
             "hashFiles('quickscale_core/src/quickscale_core/generator/"
