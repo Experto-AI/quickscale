@@ -124,6 +124,9 @@ def _cell_environment(project: Path, shim_dir: Path, *, use_x_forwarded_for: str
             "SECRET_KEY": ("deploy-posture-probe-secret-0123456789abcdefghijklmnopqrstuvwxyz"),
             "RUNTIME_DATABASE_URL": "postgresql://probe:probe@localhost:5432/probe",
             "USE_X_FORWARDED_FOR": use_x_forwarded_for,
+            # This probe boots production settings without object storage; it
+            # explicitly accepts container-local media as a test deployment.
+            "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
         }
     )
     # The shim comes first so the station behaves identically whether or not an

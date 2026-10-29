@@ -27,6 +27,8 @@ myapp/
 ├── manage.py
 ├── quickscale.yml
 ├── Makefile
+├── start.sh
+├── predeploy.sh
 ├── myapp/
 │   ├── __init__.py
 │   ├── settings/
@@ -131,6 +133,8 @@ myapp/
 ├── manage.py
 ├── quickscale.yml
 ├── Makefile
+├── start.sh
+├── predeploy.sh
 ├── myapp/
 │   ├── __init__.py
 │   ├── settings/
@@ -211,6 +215,24 @@ If you intentionally adopt a manual inheritance or extraction pattern:
 - document the git-subtree workflow clearly
 - avoid introducing extra generated wrapper commands unless they are actually shipped and documented
 
+### Production Deployment Contract {#generated-production-deployment-contract}
+
+Railway is the sole supported production path until an operator decision recorded in
+[decisions.md](./decisions.md#generated-production-deployment-contract) replaces it. The generated
+artifact carries:
+
+- `railway.json` — `deploy.preDeployCommand` runs `./predeploy.sh`; `deploy.healthcheckPath` is
+  `/ready/`; `startCommand` is `./start.sh`.
+- `predeploy.sh` — the privileged pre-deploy bootstrap: `migrate` then `createcachetable` under
+  `QUICKSCALE_PRIVILEGED_COMMAND` with `RUNTIME_DATABASE_URL=""`. Schema work never runs at
+  container boot; a failed pre-deploy step aborts the deployment before it replaces the running one.
+- `start.sh` — provisions the restricted runtime role and execs Gunicorn; it runs no schema work.
+- `/healthcheck/` — DB-free liveness. `/ready/` — readiness: the database is reachable and no
+  migration is pending; Railway gates the deployment on it.
+- Production serving refuses `django.core.files.storage.FileSystemStorage` uploads unless
+  `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` marks a development or test deployment; bootstrap command modes
+  are exempt. `docker-compose.yml` remains local development only.
+
 ## Crosswalk: Requirement to Artifact
 
 | Requirement | Artifact |
@@ -222,5 +244,7 @@ If you intentionally adopt a manual inheritance or extraction pattern:
 | Advisory lock | `.quickscale/<name>.lock` (concurrent-apply serialization) |
 | Legacy compatibility inputs | `.quickscale/config.yml`, `.quickscale/file_hashes.yml` (read-through imported when `state.yml` lacks consolidated sections; ignored when present) |
 | Project generation | `quickscale_core/generator/` templates and generator logic |
+| Production deployment | `railway.json` (`preDeployCommand`, readiness gate), `predeploy.sh`, `start.sh` |
+| Probes | `/healthcheck/` (liveness), `/ready/` (readiness) |
 | Embedded modules | `modules/<name>/` inside the generated project |
 | Starter theme assets | project `frontend/` and `templates/` directories |

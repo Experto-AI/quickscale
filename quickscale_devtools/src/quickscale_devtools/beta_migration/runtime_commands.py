@@ -327,11 +327,11 @@ def _extract_launcher_runtime_commands(
         "QUICKSCALE_PRIVILEGED_COMMAND": set(),
         "QUICKSCALE_NON_DB_COMMAND": set(),
     }
-    if launcher_path.name == "start.sh":
+    if launcher_path.name in {"start.sh", "predeploy.sh"}:
         _validate_start_sh_grammar(launcher_path, launcher_text)
     elif launcher_path.name == "Dockerfile":
         _validate_dockerfile_grammar(launcher_path, launcher_text)
-    if launcher_path.name == "start.sh":
+    if launcher_path.name in {"start.sh", "predeploy.sh"}:
         launcher_lines = _start_sh_reachable_logical_lines(launcher_path, launcher_text)
     else:
         launcher_lines = [

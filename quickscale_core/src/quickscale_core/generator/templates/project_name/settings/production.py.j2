@@ -22,6 +22,9 @@ OPTIONAL ENVIRONMENT VARIABLES:
   deployments. Disabling it also stops ``X-Forwarded-Proto`` from being trusted, so the HTTPS
   redirect and secure cookies cannot be spoofed by a direct plaintext client.
 - TRUSTED_PROXY_COUNT: Defaults to ``1``; the number of reverse proxies in front of the app
+- QUICKSCALE_ALLOW_LOCAL_MEDIA: Defaults to ``False``. Set ``1`` only for a development or
+  test deployment that deliberately accepts container-local media; production serving refuses
+  ``FileSystemStorage`` uploads without it.
 
 COMMAND-MODE ENVIRONMENT VARIABLES (mutually exclusive, one-shot):
 - QUICKSCALE_PRIVILEGED_COMMAND: Set by a launcher to ``migrate`` or
@@ -40,6 +43,7 @@ import dj_database_url
 from decouple import config
 from quickscale_core.runtime.settings import (
     num_proxies_for,
+    require_production_media_backend,
     require_production_secret_key,
     require_redis_cache_client,
     resolve_runtime_database_url,
@@ -77,8 +81,8 @@ ALLOWED_HOSTS = list(
 
 # SECURITY: Require HTTPS in production
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
-# Exempt healthcheck endpoint from HTTPS redirect (Railway healthchecks use HTTP)
-SECURE_REDIRECT_EXEMPT = [r"^healthcheck/$"]
+# Exempt the probe endpoints from HTTPS redirect (Railway healthchecks use HTTP)
+SECURE_REDIRECT_EXEMPT = [r"^healthcheck/$", r"^ready/$"]
 
 # SECURITY: Cookie security
 SESSION_COOKIE_SECURE = True
@@ -174,6 +178,18 @@ _db_url = resolve_runtime_database_url(
     allow_bypass_rls=os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1",
 )
 
+# Media durability: a serving production process MUST NOT write uploads to a
+# container-local filesystem, because a redeploy replaces the container and the
+# files are lost. Configure the storage module (S3) in quickscale.yml, or set
+# QUICKSCALE_ALLOW_LOCAL_MEDIA=1 to mark a development or test deployment that
+# deliberately accepts the loss. Bootstrap command modes (migrations,
+# collectstatic) are exempt because they never serve requests.
+require_production_media_backend(
+    STORAGES,  # noqa: F405
+    allow_local_media=config("QUICKSCALE_ALLOW_LOCAL_MEDIA", default=False, cast=bool),
+    serving=not (_privileged_command or _non_db_command),
+)
+
 DATABASES = {
     "default": cast(
         dict[str, object],
@@ -215,9 +231,11 @@ STORAGES["staticfiles"] = {  # noqa: F405
 }
 {% endif %}
 
-# Media files - consider using cloud storage (S3, GCS) in production
+# Media files - uploaded media must use external object storage in production.
+# The guard above refuses container-local FileSystemStorage while serving; run
+# `quickscale apply` with the storage module (S3) configured instead of
+# overriding MEDIA_ROOT here.
 # MEDIA_URL = config("MEDIA_URL", default="/media/")
-# MEDIA_ROOT = BASE_DIR / "media"  # noqa: F405
 
 # Shared cache backend for production
 #

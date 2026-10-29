@@ -270,9 +270,10 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{{ package_name }}
 
 # Runtime database role (required for production)
 # Restricted NOSUPERUSER/NOBYPASSRLS role connection for runtime queries.
-# The deployment script (start.sh) sets QUICKSCALE_PRIVILEGED_COMMAND=migrate
-# and clears RUNTIME_DATABASE_URL as a one-shot inline prefix for migrations,
-# so the superuser DATABASE_URL is used for schema changes.
+# The pre-deploy bootstrap (predeploy.sh) sets
+# QUICKSCALE_PRIVILEGED_COMMAND=migrate and clears RUNTIME_DATABASE_URL as a
+# one-shot inline prefix for migrations, so the superuser DATABASE_URL is used
+# for schema changes.
 # RUNTIME_DATABASE_URL=postgresql://runtime_user:password@host:5432/{{ package_name }}
 
 # Optional: Sentry error tracking
@@ -325,6 +326,23 @@ environment variables.
 Keep `public_base_url` blank in local development. Set it to the final public
 CDN/media host in staging and production.
 
+### Production Path
+
+**Railway is the supported production path.** The generated `railway.json` runs
+`./predeploy.sh` as its pre-deploy command (migrations and the database cache
+table) and gates the new deployment on the readiness endpoint
+`/ready/`, which answers `200` only while the database is reached and no
+migrations are pending. `/healthcheck/` stays a DB-free liveness probe. A failed
+pre-deploy step aborts promotion and leaves the previous deployment serving;
+migrations must remain backward-compatible because the shared schema may
+already be ahead.
+
+Self-hosted production Compose is not a supported path; `docker-compose.yml` is a
+local development stack. Production serving refuses container-local
+`FileSystemStorage` uploads unless `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` explicitly
+marks a development or test deployment, because a redeploy replaces the
+container and loses those files.
+
 ### Production Checklist
 
 Before deploying to production:
@@ -334,12 +352,13 @@ Before deploying to production:
 - [ ] Set a strong `SECRET_KEY` (the shipped placeholder is rejected by `settings/production.py`; use `python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'`)
 - [ ] Confirm `DATABASE_URL` points to your production PostgreSQL instance
 - [ ] Set `RUNTIME_DATABASE_URL` to your restricted runtime role connection string (the app fails closed if this is unset during runtime serving)
+- [ ] Configure the storage module with S3-compatible object storage for uploaded media (production serving refuses container-local media)
 - [ ] Configure static files serving (WhiteNoise is included)
 - [ ] Set up HTTPS/SSL certificates
 - [ ] Review security settings in `settings/production.py`
 - [ ] Configure email backend for production
 - [ ] Set up error monitoring (e.g., Sentry)
-- [ ] Run migrations: `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate` (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL; the command-mode env var is a one-shot inline prefix only, never persistent configuration)
+- [ ] Run the pre-deploy bootstrap before the serving container: `./predeploy.sh` applies migrations and creates the database cache table under `DATABASE_URL` with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` prefix (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL). Railway runs this automatically from `railway.json`; the command-mode env vars are one-shot inline prefixes only, never persistent configuration.
 - [ ] Collect static files: `QUICKSCALE_NON_DB_COMMAND=collectstatic python manage.py collectstatic` (one-shot inline prefix; supplies a dummy `DATABASE_URL` when the real one is absent)
 
 ### Docker (Local Development)
@@ -357,9 +376,8 @@ docker build -t {{ project_name }}:latest .
 docker compose -f docker-compose.yml up -d
 ```
 
-For production deployment, follow the procedure in `OPERATIONS.md` (Railway or a
-manual deploy of the built image). Do not run the Compose stack as the production
-service.
+For production deployment, follow the Railway procedure in `OPERATIONS.md`. Do not
+run the Compose stack as the production service.
 
 ## 📚 Project Structure
 
@@ -375,6 +393,8 @@ service.
 ├── static/                       # Static files (CSS, JS, images)
 ├── tests/                        # Project-level tests
 ├── manage.py                     # Django management script
+├── start.sh                      # Runtime launcher (role, gunicorn)
+├── predeploy.sh                  # Pre-deploy bootstrap (migrations, cache table)
 ├── pyproject.toml                # Poetry dependencies
 ├── Dockerfile                    # Docker configuration
 ├── docker-compose.yml            # Docker Compose configuration

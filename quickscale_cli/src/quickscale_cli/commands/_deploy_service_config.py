@@ -24,8 +24,9 @@ def runtime_database_url(postgres_service: str, password: str) -> str:
     """Build RUNTIME_DATABASE_URL for the restricted runtime role.
 
     Host, port and database are Railway reference variables on the PostgreSQL
-    service, resolved by Railway at deploy time. The generated start.sh creates
-    the role from RUNTIME_DB_ROLE and RUNTIME_DB_PASSWORD before migrating.
+    service, resolved by Railway at deploy time. The generated predeploy.sh
+    applies the schema first, and start.sh creates the role from
+    RUNTIME_DB_ROLE and RUNTIME_DB_PASSWORD at boot.
     The password is percent-encoded, so an operator-set value containing URL
     metacharacters (``@``, ``:``, ``/``, ``%``, ``#``) keeps the URL valid.
     """
@@ -159,7 +160,9 @@ def _configure_env_vars_step(
 def _deploy_app_step(app_service: str) -> None:
     """Deploy application to Railway."""
     click.echo("💡 Using railway.json for build and deployment configuration")
-    click.echo("💡 Migrations will run automatically at startup (via railway.json)")
+    click.echo(
+        "💡 The pre-deploy command runs ./predeploy.sh (migrations + cache table)"
+    )
     click.echo("This may take a few minutes...")
 
     try:
@@ -183,10 +186,11 @@ def _deploy_app_step(app_service: str) -> None:
             sys.exit(1)
 
         click.secho("✅ Deployment started", fg="green")
-        click.echo("💡 Railway is building and deploying your application...")
-        click.echo("💡 The startCommand in railway.json will:")
-        click.echo("   1. Run database migrations (requires DATABASE_URL)")
-        click.echo("   2. Start Gunicorn server")
+        click.echo("💡 Railway is building and preparing your application...")
+        click.echo("💡 railway.json will:")
+        click.echo("   1. Run ./predeploy.sh (migrations + cache table)")
+        click.echo("   2. Start ./start.sh (runtime role + Gunicorn)")
+        click.echo("   3. Gate the deployment on readiness (/ready/)")
     except TimeoutError:
         click.secho("⚠️  Deployment command timed out", fg="yellow")
 
@@ -300,11 +304,11 @@ def _display_summary(
             f"--service {app_service}"
         )
     click.echo("   • Check healthcheck status in Railway dashboard")
-    click.echo("   • Migrations run automatically on first deploy")
+    click.echo("   • The pre-deploy command runs migrations on first deploy")
     click.echo(
         f"   • start.sh creates the restricted "
-        f"'{_runtime_database.RUNTIME_DB_ROLE}' database role "
-        "before migrating"
+        f"'{_runtime_database.RUNTIME_DB_ROLE}' database role at boot, "
+        "after predeploy.sh applies the schema"
     )
 
     click.echo("\n📖 Documentation:")

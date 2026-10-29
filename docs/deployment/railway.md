@@ -8,8 +8,9 @@ Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying D
 
 **Important**: QuickScale's RLS boot guard requires a dedicated PostgreSQL runtime role with
 ``NOSUPERUSER``/``NOBYPASSRLS`` for production serving. ``quickscale deploy railway`` provisions it:
-it sets the role's credentials as Railway variables, and the generated ``start.sh`` creates the
-role before migrating (see [Runtime Role Setup](#runtime-role-setup)).
+it sets the role's credentials as Railway variables, ``predeploy.sh`` applies migrations before the
+new deployment starts, and the generated ``start.sh`` creates the role at boot (see
+[Runtime Role Setup](#runtime-role-setup)).
 
 ## Prerequisites
 
@@ -76,13 +77,17 @@ The `quickscale deploy railway` command automatically:
 - ✅ Sets DJANGO_SETTINGS_MODULE
 - ✅ **Auto-generates public domain** (e.g., myapp-production-abc123.up.railway.app)
 - ✅ **Auto-configures ALLOWED_HOSTS** with detected domain
-- ✅ Deploys using railway.json config (handles migrations + static files automatically)
+- ✅ Deploys using railway.json config (pre-deploy migrations + static files handled automatically)
 - ✅ Provides deployment URL and next steps
 
 - ✅ Provisions the restricted runtime database role: sets ``RUNTIME_DB_ROLE``,
-  ``RUNTIME_DB_PASSWORD``, and ``RUNTIME_DATABASE_URL``; ``start.sh`` creates the role before migrating
+  ``RUNTIME_DB_PASSWORD``, and ``RUNTIME_DATABASE_URL``; ``predeploy.sh`` migrates before the new
+  deployment starts and ``start.sh`` creates the role at boot
 
-**Config-First Approach**: QuickScale uses Railway's config-as-code (railway.json) for deployment. Generated projects delegate startup to `./start.sh`, which runs migrations at deploy time and then starts Gunicorn; static files are collected during the Docker build.
+**Config-First Approach**: QuickScale uses Railway's config-as-code (railway.json) for deployment.
+Generated projects delegate startup to `./start.sh` and schema work to `./predeploy.sh`
+(`deploy.preDeployCommand`), which runs migrations and the cache table before the new deployment is
+promoted; static files are collected during the Docker build.
 
 **Note**: Railway projects support multiple services (your app + PostgreSQL). The CLI automatically handles service creation and configuration.
 
@@ -102,7 +107,9 @@ quickscale deploy railway --confirm-contract-adoption
 quickscale deploy railway --help
 ```
 
-**Note**: Migrations and static file collection are handled automatically by railway.json on every deployment. The `--skip-migrations` and `--skip-collectstatic` flags have been removed in favor of the config-first approach.
+**Note**: Migrations and static file collection are handled automatically: the Railway pre-deploy
+command runs `./predeploy.sh`, and the Docker build collects static files. The `--skip-migrations`
+and `--skip-collectstatic` flags have been removed in favor of the config-first approach.
 
 For an existing generated project, deploy checks the recorded `project_contract` before any
 Railway preflight or remote operation. Projects older than the CLI's runtime-role contract stop and
@@ -144,10 +151,17 @@ railway variable set 'DJANGO_SETTINGS_MODULE=myapp.settings.production' --servic
 railway variable set 'RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:password@host:port/db' --service myapp --skip-deploys
 
 # 6. Deploy to app service
+#    railway.json's deploy.preDeployCommand runs ./predeploy.sh, then the
+#    platform starts ./start.sh.
 railway up --service myapp
+```
 
-# 7. Run migrations
-railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"
+If the pre-deploy command fails, Railway does not promote the new deployment; the previous version
+stays live. The shared database may already be ahead, so migrations must remain backward-compatible
+until the new deployment is accepted. Run the bootstrap manually only when you deploy outside Railway's pre-deploy path:
+
+```bash
+railway run --service myapp ./predeploy.sh
 ```
 
 ## Configuration
@@ -197,6 +211,10 @@ defaults; a project that configured its own ``*_env_var`` names reads the config
   redirect nor make Django set secure cookies on a plaintext response. This is deliberate: the
   header used to be trusted unconditionally, which let a spoofed `X-Forwarded-Proto: https` mark a
   plaintext request secure.
+- `QUICKSCALE_ALLOW_LOCAL_MEDIA` - Development and test only. Production serving refuses
+  `FileSystemStorage` uploads by default because a redeploy replaces the container and loses them.
+  Configure the storage module with S3-compatible object storage instead of setting this flag on a
+  production service.
 
 ## Railway Multi-Service Architecture
 
@@ -226,11 +244,14 @@ The `quickscale deploy railway` command follows this config-first workflow:
    - Dockerfile builds the image (collectstatic runs at build time via an inline
      ``QUICKSCALE_NON_DB_COMMAND=collectstatic`` prefix — a one-shot command-mode
      env var, never persistent environment configuration)
-   - railway.json delegates startup to ``./start.sh``
-   - ``start.sh`` creates or updates the runtime role with the superuser ``DATABASE_URL``
-   - ``start.sh`` runs migrations at runtime using an inline
-     ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` prefix
-     (also a one-shot command-mode pattern), then starts Gunicorn
+   - railway.json runs ``./predeploy.sh`` as ``deploy.preDeployCommand`` before the new
+     deployment starts; it applies migrations and creates the cache table under the superuser
+     ``DATABASE_URL`` with the one-shot      ``QUICKSCALE_PRIVILEGED_COMMAND`` prefix. A failed pre-deploy step aborts promotion and leaves
+     the previous deployment serving, but the schema may already be ahead, so migrations must
+     remain backward-compatible until the new deployment is accepted.
+   - ``start.sh`` then creates or updates the runtime role and starts Gunicorn
+   - Railway gates the deployment on ``/ready/`` (database reached, no pending migrations);
+     ``/healthcheck/`` stays a DB-free liveness probe
    - Gunicorn defaults to 1 worker for the low-cost baseline unless ``GUNICORN_WORKERS`` or ``WEB_CONCURRENCY`` is set
    - No separate migration or static file steps needed
 
@@ -241,7 +262,7 @@ The `quickscale deploy railway` command follows this config-first workflow:
 - **Project Initialization**: the command checks the live link state with `railway status --json` and runs `railway init` only when the directory is not linked. Railway CLI 5.x keeps directory links in ``~/.railway/config.json`` and writes no ``.railway`` marker, so pre-creating or pre-linking the project with `railway init`/`railway link` is safe: the deploy reuses that link instead of creating a second project (the application service still takes the directory slug as its name). If the link state cannot be read, the command aborts rather than initializing again.
 - Railway CLI v4+ requires explicit service creation with `railway add --service` before deployment.
 - **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
-- **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available. Migrations use the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix so the superuser `DATABASE_URL` is used (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+- **Automatic Migrations**: The generated `./predeploy.sh` runs before the new deployment starts via `deploy.preDeployCommand`, so migrations happen in the deployment environment with `DATABASE_URL` available and a failed migration never reaches serving. Migrations use the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix so the superuser `DATABASE_URL` is used (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
 - **RUNTIME_DATABASE_URL Required**: Production serving fails closed without it. The CLI deploy sets it together with the role credentials; manual deployments must follow [Runtime Role Setup](#runtime-role-setup).
 - **Live State Required**: Re-deploys abort when Railway variables or services cannot be read. The CLI never treats an unreadable environment as empty, and it requires exactly one PostgreSQL service before writing configuration.
 - **DATABASE_URL Validation**: Production settings now validate DATABASE_URL is set and provide clear error messages if missing.
@@ -251,7 +272,7 @@ The `quickscale deploy railway` command follows this config-first workflow:
 
 QuickScale production settings require two database connections:
 
-1. **``DATABASE_URL``** — the superuser connection (auto-provided by Railway). Used only for one-shot privileged work in ``start.sh``: creating the runtime role, ``migrate``, and ``createcachetable``.
+1. **``DATABASE_URL``** — the superuser connection (auto-provided by Railway). Used only for one-shot privileged work: ``predeploy.sh`` runs ``migrate`` and ``createcachetable``, and ``start.sh`` creates the runtime role.
 2. **``RUNTIME_DATABASE_URL``** — a restricted runtime role with ``NOSUPERUSER``/``NOBYPASSRLS`` for production serving. This is the connection Django uses for web requests, background workers, and all normal database operations.
 
 ### Automatic (``quickscale deploy railway``)
@@ -265,10 +286,10 @@ The deploy sets three variables on the app service:
 | ``RUNTIME_DATABASE_URL`` | ``postgresql://quickscale_runtime:<password>@${{<selected-postgres-service>.PGHOST}}:${{<selected-postgres-service>.PGPORT}}/${{<selected-postgres-service>.PGDATABASE}}`` |
 
 Host, port, and database are Railway reference variables on the PostgreSQL service, resolved at
-deploy time. On every boot, when ``RUNTIME_DB_PASSWORD`` is set, ``start.sh`` connects with the
-superuser ``DATABASE_URL`` and creates the role, or updates its password and attributes if it
-already exists, then grants DML on the ``public`` schema. The log line is
-``✅ Runtime role 'quickscale_runtime' created`` (or ``updated``).
+deploy time. The pre-deploy bootstrap applies the schema first; on boot, when ``RUNTIME_DB_PASSWORD``
+is set, ``start.sh`` connects with the superuser ``DATABASE_URL`` and creates the role, or updates
+its password and attributes if it already exists, then grants DML on the ``public`` schema. The log
+line is ``✅ Runtime role 'quickscale_runtime' created`` (or ``updated``).
 
 Re-running the deploy reuses the existing ``RUNTIME_DB_PASSWORD``, so the container still serving
 traffic keeps authenticating during the rollover. If the service has ``RUNTIME_DATABASE_URL`` but no

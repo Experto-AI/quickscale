@@ -67,6 +67,7 @@ FRESH_FIRST_IDENTITY_ROOT_FILES = (
     "docker-compose.yml",
     "pyproject.toml",
     "start.sh",
+    "predeploy.sh",
     "README.md",
     "OPERATIONS.md",
     "db/init.sql",
@@ -609,7 +610,7 @@ _UNCONDITIONAL_RUNTIME_COMMANDS: dict[str, frozenset[str]] = {
 
 
 _RUNTIME_COMMAND_LAUNCHERS = {
-    "QUICKSCALE_PRIVILEGED_COMMAND": "start.sh",
+    "QUICKSCALE_PRIVILEGED_COMMAND": "predeploy.sh",
     "QUICKSCALE_NON_DB_COMMAND": "Dockerfile",
 }
 

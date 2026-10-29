@@ -70,7 +70,7 @@
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
       "poetry.lock is absent from every variant (dynamic artifact, not checked in).",
-      "Executable modes (mode: \"775\") reflect actual os.stat after generation: manage.py and scripts/lint.sh are executable.",
+      "Executable modes (mode: \"775\") reflect actual os.stat after generation: manage.py, scripts/lint.sh, and predeploy.sh are executable.",
       "start.sh is intentionally non-executable (mode: \"664\") \u2014 see _EXECUTABLE_EMITTED exclusion in test_generator.py.",
       "html_default (showcase_html) variant removed in SA94 Phase 4.",
       "SA105: selected_modules no longer filters frontend/src output. All module files are always emitted as dormant. Runtime gating uses window.__QUICKSCALE__ flags."
@@ -100,7 +100,8 @@
     },
     "sa320": "Regenerated 2026-10-24 \u2014 the generated theme gains the managed frontend/src/quickscaleSeam.hooks.ts rendered from each active manifest's frontend_resources declaration; CrmPage.tsx imports CRM_RESOURCE_PATHS and CrmStats from it instead of declaring the five subpaths and the response interface, and the managed seam path list gains the hook file (SA320). All three variants gain 1 path (frontend/src/quickscaleSeam.hooks.ts) and change 1 hash (frontend/src/pages/CrmPage.tsx). All unrelated paths, hashes, and modes remain authoritative.",
     "sa320b": "Regenerated 2026-10-26 \u2014 the remaining theme module payload types and resource paths move onto the managed frontend/src/quickscaleSeam.hooks.ts (SA320 slice b): the manifest frontend_resources grammar gains parameterized paths rendered as typed builders and optional/nullable/array/reference/union type forms; orgs, billing, social and forms declare their contracts; the org, form and social hooks import the generated types and builders, and the social client no longer carries a fallback endpoint literal. 10 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgs.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/quickscaleSeam.hooks.ts, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/useApiErrors.test.ts, frontend/src/test/useOrgs.test.tsx. All unrelated paths, hashes, and modes remain authoritative.",
-    "sa320c": "Regenerated 2026-10-26 \u2014 module-specific generated-project blocks move into module-declared managed regions (SA320 slice c): the Makefile, CI workflow, and docker-compose backend environment carry marker-paired regions rendered from each module declaration, the admin templates render a module-owned shortcut through a generic runtime tag, the notifications adapter writes ANYMAIL instead of the base settings template, and the generated admin templates name no module. All three variants re-hashed for the changed paths (Makefile, .github/workflows/ci.yml, docker-compose.yml, templates/admin/index.html, templates/admin/app_index.html, testproject/settings/base.py, README.md). All unrelated paths, hashes, and modes remain authoritative."
+    "sa320c": "Regenerated 2026-10-26 \u2014 module-specific generated-project blocks move into module-declared managed regions (SA320 slice c): the Makefile, CI workflow, and docker-compose backend environment carry marker-paired regions rendered from each module declaration, the admin templates render a module-owned shortcut through a generic runtime tag, the notifications adapter writes ANYMAIL instead of the base settings template, and the generated admin templates name no module. All three variants re-hashed for the changed paths (Makefile, .github/workflows/ci.yml, docker-compose.yml, templates/admin/index.html, templates/admin/app_index.html, testproject/settings/base.py, README.md). All unrelated paths, hashes, and modes remain authoritative.",
+    "sa321": "Regenerated 2026-10-29 \u2014 the generated production deployment contract becomes an artifact (SA321): railway.json runs ./predeploy.sh as deploy.preDeployCommand and gates on /ready/; start.sh keeps runtime-role provisioning and no longer runs migrations or createcachetable; the new predeploy.sh owns both privileged schema commands. urls.py gains readiness (database reached, no pending migrations), production.py exempts /ready/ from the HTTPS redirect and refuses FileSystemStorage while serving unless QUICKSCALE_ALLOW_LOCAL_MEDIA=1, and README, OPERATIONS, .env.example, Dockerfile, and tests/test_example.py describe the contract. New generated path in all three variants: predeploy.sh. Re-hashed per variant: .env.example, Dockerfile, OPERATIONS.md, README.md, railway.json, start.sh, testproject/settings/production.py, testproject/urls.py, and tests/test_example.py. All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
@@ -117,7 +118,7 @@
     },
     ".env.example": {
       "mode": "644",
-      "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
+      "sha256": "db61e1cd3078c69cf3e207a78f85b8f0249fb35192c4e63e8f00f14cd2ae2fdf"
     },
     ".github/quickscale-ci-env": {
       "mode": "644",
@@ -137,7 +138,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "d0ded80295e2b821ed731e383f38666e9b420cf4aba9082afd903ea93ae136af"
+      "sha256": "feab570cb8e7a56720cc6f74e31eb7a8e80c029de02f4d35008e85bef7181723"
     },
     "Makefile": {
       "mode": "644",
@@ -145,11 +146,11 @@
     },
     "OPERATIONS.md": {
       "mode": "644",
-      "sha256": "cf70987a143a1d3846af31ffaaa9aef113a6ad1dedb366367673ccda1e9dc20c"
+      "sha256": "4f890e6655aa3e32b9f1a7b44af584814ce49f715c90159fe86d6f0e0b3e3754"
     },
     "README.md": {
       "mode": "644",
-      "sha256": "3ba49ce757cf48425cbc0bc4a4981df225a56e3f140793bab6fa259512a4b6f6"
+      "sha256": "24ff63ad35860f0f2eb54e09a263e77044a391bba522f1f084654db24f92005e"
     },
     "db/init.sql": {
       "mode": "644",
@@ -563,6 +564,10 @@
       "mode": "755",
       "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
     },
+    "predeploy.sh": {
+      "mode": "755",
+      "sha256": "52d41d455501ea92a6881e658c5bd002df25b90543830c13be1c54f9b6a02183"
+    },
     "pyproject.toml": {
       "mode": "644",
       "sha256": "e04e2b09a38cdc6a78b066b09bd67be8f8d591c67bcdaf7dcdf08a4cb1858c66"
@@ -573,7 +578,7 @@
     },
     "railway.json": {
       "mode": "644",
-      "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
+      "sha256": "b9f35843544e14076c1b7de3b6f660a1e4a14be806c1ffea12d7f7caf70d535b"
     },
     "scripts/lint.sh": {
       "mode": "755",
@@ -581,7 +586,7 @@
     },
     "start.sh": {
       "mode": "644",
-      "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
+      "sha256": "bfaeafaf060e2d4f108ba7c6d0482f8d3974d3881e1e925b321ffc7e9ef84b13"
     },
     "templates/404.html": {
       "mode": "644",
@@ -633,7 +638,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "45b827ad7564ba83c9607151423db668776a92d74efb0a0178bb0451f45a7f1d"
+      "sha256": "8f51d4c28dabd3862f2c243aa9772333766365871935043c792036570241fb8a"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -645,11 +650,11 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "d61f3136ee46af2b97a86858317fb099640da9c67ad67ec65b182ade19cc5516"
+      "sha256": "58b2127dcfa287f1f9b5ff0980b0ca192996165e7a5c5ef93726b57284e76e6f"
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "1ec00c01c603f699602113ea71fafade52f0b0f20782d94b1a466fd1d169218f"
+      "sha256": "f81f6a564c69b83c37431e7f5e137edb85a2553ed6222b2c3c45b7378d7baf51"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
@@ -673,7 +678,7 @@
     },
     "tests/test_example.py": {
       "mode": "644",
-      "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+      "sha256": "d07b5bca5376ffdd9e9c26e38e3f0f28efad09b743026974b6c436a6e625d359"
     },
     "tests/test_tenant_isolation.py": {
       "mode": "644",
@@ -695,7 +700,7 @@
     },
     ".env.example": {
       "mode": "644",
-      "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
+      "sha256": "db61e1cd3078c69cf3e207a78f85b8f0249fb35192c4e63e8f00f14cd2ae2fdf"
     },
     ".github/quickscale-ci-env": {
       "mode": "644",
@@ -715,7 +720,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "d0ded80295e2b821ed731e383f38666e9b420cf4aba9082afd903ea93ae136af"
+      "sha256": "feab570cb8e7a56720cc6f74e31eb7a8e80c029de02f4d35008e85bef7181723"
     },
     "Makefile": {
       "mode": "644",
@@ -723,11 +728,11 @@
     },
     "OPERATIONS.md": {
       "mode": "644",
-      "sha256": "cf70987a143a1d3846af31ffaaa9aef113a6ad1dedb366367673ccda1e9dc20c"
+      "sha256": "4f890e6655aa3e32b9f1a7b44af584814ce49f715c90159fe86d6f0e0b3e3754"
     },
     "README.md": {
       "mode": "644",
-      "sha256": "3ba49ce757cf48425cbc0bc4a4981df225a56e3f140793bab6fa259512a4b6f6"
+      "sha256": "24ff63ad35860f0f2eb54e09a263e77044a391bba522f1f084654db24f92005e"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1141,6 +1146,10 @@
       "mode": "755",
       "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
     },
+    "predeploy.sh": {
+      "mode": "755",
+      "sha256": "52d41d455501ea92a6881e658c5bd002df25b90543830c13be1c54f9b6a02183"
+    },
     "pyproject.toml": {
       "mode": "644",
       "sha256": "e04e2b09a38cdc6a78b066b09bd67be8f8d591c67bcdaf7dcdf08a4cb1858c66"
@@ -1151,7 +1160,7 @@
     },
     "railway.json": {
       "mode": "644",
-      "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
+      "sha256": "b9f35843544e14076c1b7de3b6f660a1e4a14be806c1ffea12d7f7caf70d535b"
     },
     "scripts/lint.sh": {
       "mode": "755",
@@ -1159,7 +1168,7 @@
     },
     "start.sh": {
       "mode": "644",
-      "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
+      "sha256": "bfaeafaf060e2d4f108ba7c6d0482f8d3974d3881e1e925b321ffc7e9ef84b13"
     },
     "templates/404.html": {
       "mode": "644",
@@ -1211,7 +1220,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "45b827ad7564ba83c9607151423db668776a92d74efb0a0178bb0451f45a7f1d"
+      "sha256": "8f51d4c28dabd3862f2c243aa9772333766365871935043c792036570241fb8a"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1223,11 +1232,11 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "d61f3136ee46af2b97a86858317fb099640da9c67ad67ec65b182ade19cc5516"
+      "sha256": "58b2127dcfa287f1f9b5ff0980b0ca192996165e7a5c5ef93726b57284e76e6f"
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "1ec00c01c603f699602113ea71fafade52f0b0f20782d94b1a466fd1d169218f"
+      "sha256": "f81f6a564c69b83c37431e7f5e137edb85a2553ed6222b2c3c45b7378d7baf51"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
@@ -1251,7 +1260,7 @@
     },
     "tests/test_example.py": {
       "mode": "644",
-      "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+      "sha256": "d07b5bca5376ffdd9e9c26e38e3f0f28efad09b743026974b6c436a6e625d359"
     },
     "tests/test_tenant_isolation.py": {
       "mode": "644",
@@ -1273,7 +1282,7 @@
     },
     ".env.example": {
       "mode": "644",
-      "sha256": "e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265"
+      "sha256": "db61e1cd3078c69cf3e207a78f85b8f0249fb35192c4e63e8f00f14cd2ae2fdf"
     },
     ".github/quickscale-ci-env": {
       "mode": "644",
@@ -1293,7 +1302,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "d0ded80295e2b821ed731e383f38666e9b420cf4aba9082afd903ea93ae136af"
+      "sha256": "feab570cb8e7a56720cc6f74e31eb7a8e80c029de02f4d35008e85bef7181723"
     },
     "Makefile": {
       "mode": "644",
@@ -1301,11 +1310,11 @@
     },
     "OPERATIONS.md": {
       "mode": "644",
-      "sha256": "cf70987a143a1d3846af31ffaaa9aef113a6ad1dedb366367673ccda1e9dc20c"
+      "sha256": "4f890e6655aa3e32b9f1a7b44af584814ce49f715c90159fe86d6f0e0b3e3754"
     },
     "README.md": {
       "mode": "644",
-      "sha256": "3ba49ce757cf48425cbc0bc4a4981df225a56e3f140793bab6fa259512a4b6f6"
+      "sha256": "24ff63ad35860f0f2eb54e09a263e77044a391bba522f1f084654db24f92005e"
     },
     "db/init.sql": {
       "mode": "644",
@@ -1719,6 +1728,10 @@
       "mode": "755",
       "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
     },
+    "predeploy.sh": {
+      "mode": "755",
+      "sha256": "52d41d455501ea92a6881e658c5bd002df25b90543830c13be1c54f9b6a02183"
+    },
     "pyproject.toml": {
       "mode": "644",
       "sha256": "e04e2b09a38cdc6a78b066b09bd67be8f8d591c67bcdaf7dcdf08a4cb1858c66"
@@ -1729,7 +1742,7 @@
     },
     "railway.json": {
       "mode": "644",
-      "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
+      "sha256": "b9f35843544e14076c1b7de3b6f660a1e4a14be806c1ffea12d7f7caf70d535b"
     },
     "scripts/lint.sh": {
       "mode": "755",
@@ -1737,7 +1750,7 @@
     },
     "start.sh": {
       "mode": "644",
-      "sha256": "871bcff1ba5fb63930b8bfaf2965410794d22577ef22320e76b811c7980a8c3d"
+      "sha256": "bfaeafaf060e2d4f108ba7c6d0482f8d3974d3881e1e925b321ffc7e9ef84b13"
     },
     "templates/404.html": {
       "mode": "644",
@@ -1789,7 +1802,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "45b827ad7564ba83c9607151423db668776a92d74efb0a0178bb0451f45a7f1d"
+      "sha256": "8f51d4c28dabd3862f2c243aa9772333766365871935043c792036570241fb8a"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1801,11 +1814,11 @@
     },
     "testproject/settings/production.py": {
       "mode": "644",
-      "sha256": "d61f3136ee46af2b97a86858317fb099640da9c67ad67ec65b182ade19cc5516"
+      "sha256": "58b2127dcfa287f1f9b5ff0980b0ca192996165e7a5c5ef93726b57284e76e6f"
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "1ec00c01c603f699602113ea71fafade52f0b0f20782d94b1a466fd1d169218f"
+      "sha256": "f81f6a564c69b83c37431e7f5e137edb85a2553ed6222b2c3c45b7378d7baf51"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
@@ -1829,7 +1842,7 @@
     },
     "tests/test_example.py": {
       "mode": "644",
-      "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+      "sha256": "d07b5bca5376ffdd9e9c26e38e3f0f28efad09b743026974b6c436a6e625d359"
     },
     "tests/test_tenant_isolation.py": {
       "mode": "644",

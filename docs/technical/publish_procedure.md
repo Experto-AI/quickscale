@@ -337,9 +337,17 @@ quickscale deploy railway
 
 It must finish with `✅ Deployment process completed successfully!` and no `⚠️ Warning` lines. The
 deploy also provisions the restricted runtime database role: it sets `RUNTIME_DB_ROLE`,
-`RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`, and the generated `start.sh` creates the role
-before migrating ([railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup)).
+`RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`. The generated `railway.json` runs
+`./predeploy.sh` (migrations and the cache table) before the new deployment starts, and the
+generated `start.sh` creates or updates the role at boot
+([railway.md §Runtime Role Setup](../deployment/railway.md#runtime-role-setup)).
 There is no manual database step.
+
+The verification deployment must also satisfy the production media contract: a project whose
+`storage` module still uses its default `local` backend refuses to serve, because container-local
+media is lost on redeploy. Configure S3-compatible object storage for this deployment, or set
+`QUICKSCALE_ALLOW_LOCAL_MEDIA=1` on this test service only; a production service uses external
+storage and never sets that flag.
 
 The deploy's variable batch covers the core variables only. For a selection with vendor-backed
 modules, expect the first boot to fail its module startup checks until the Phase 4a test-only
@@ -356,8 +364,9 @@ names it automatically; record the created project for cleanup. A directory alre
 railway logs --service myapp
 ```
 
-Pass: `✅ Runtime role 'quickscale_runtime' created`, then migrations, then `Booting worker` with no
-traceback, and `/healthcheck/` green in the dashboard. The first deploy takes 5–10 minutes.
+Pass: pre-deploy migrations complete, then `✅ Runtime role 'quickscale_runtime' created`, then
+`Booting worker` with no traceback, and `/healthcheck/` plus `/ready/` green in the dashboard. The
+first deploy takes 5–10 minutes.
 
 **Step 3 — Create a superuser.**
 

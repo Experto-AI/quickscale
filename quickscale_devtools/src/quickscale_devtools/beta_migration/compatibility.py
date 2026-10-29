@@ -296,7 +296,7 @@ def _launcher_package_mismatch(
 
 def _select_effective_runtime_files(
     report: BetaMigrationReport,
-) -> tuple[Path, tuple[Path, Path]]:
+) -> tuple[Path, tuple[Path, ...]]:
     """Record provenance and return effective settings and launcher source paths."""
     if report.donor is None or report.recipient is None:
         raise ValueError(
@@ -313,6 +313,7 @@ def _select_effective_runtime_files(
         (
             report.recipient.path / "start.sh",
             report.recipient.path / "Dockerfile",
+            report.recipient.path / "predeploy.sh",
         ),
     )
 
@@ -355,7 +356,7 @@ def _resolve_runtime_command_contract(
 
 def _collect_launcher_command_mismatches(
     report: BetaMigrationReport,
-    launcher_paths: tuple[Path, Path],
+    launcher_paths: tuple[Path, ...],
     *,
     known_commands: dict[str, set[str]],
     expected_package: str,

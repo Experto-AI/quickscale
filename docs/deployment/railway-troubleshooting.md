@@ -111,20 +111,23 @@ Problem processing request
 - Large projects may take longer than expected (first deploy: 5-10 minutes)
 - Check deployment status: `railway status`
 - View build logs: `railway logs --service <app-name>`
-- Migrations run automatically via railway.json startCommand
+- Migrations run automatically through railway.json's `deploy.preDeployCommand` (`./predeploy.sh`)
 
 **Migration Failures**:
 
-**Manual deployment**: migrations run in the container through `./start.sh`. To run them by hand:
+**Pre-deploy command**: migrations run in the pre-deploy container through `./predeploy.sh`
+before the new deployment starts. A failure aborts the deployment and leaves the previous version
+serving; check the deployment logs for the failed step. To run migrations by hand against the
+deployed environment:
 
 ```bash
 # Check deployment status first
 railway status --service <app-name>
 
-# Once deployed, run migrations in the Railway container
+# Run the bootstrap command with the deployment's environment
 # Use the one-shot env-pair prefix so the superuser DATABASE_URL is used
 # (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
-railway run --service <app-name> /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"
+railway run --service <app-name> ./predeploy.sh
 ```
 
 **Other migration issues**:
@@ -203,7 +206,7 @@ guard in the orgs module raises ``ImproperlyConfigured``.
 step failing, check that ``DATABASE_URL`` is linked to the superuser PostgreSQL service. The guard has two narrow
 exemptions:
 1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned DB command (``migrate``,
-   ``createcachetable``) — used by ``start.sh`` for one-shot privileged operations.
+   ``createcachetable``) — used by ``predeploy.sh`` for one-shot privileged operations.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` — non-serving escape hatch for development/test only. It must
    never be set persistently or used while serving production requests.
 

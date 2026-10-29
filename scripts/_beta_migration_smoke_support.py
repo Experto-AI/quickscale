@@ -314,9 +314,10 @@ def _install_verification_shims(root: Path, spy_log: Path) -> Path:
 def _probe_generated_runtime(project: Path) -> None:
     package = resolve_project_identity(project).package
     start_script = project / "start.sh"
+    predeploy_script = project / "predeploy.sh"
     settings_path = project / package / "settings" / "production.py"
     dockerfile = project / "Dockerfile"
-    for required_path in (start_script, settings_path, dockerfile):
+    for required_path in (start_script, predeploy_script, settings_path, dockerfile):
         _require(required_path.is_file(), f"generated runtime file is missing: {required_path}")
 
     syntax_check = subprocess.run(
@@ -329,6 +330,21 @@ def _probe_generated_runtime(project: Path) -> None:
     _require(
         syntax_check.returncode == 0,
         f"generated start.sh failed bash -n: {syntax_check.stderr.strip()}",
+    )
+    predeploy_syntax_check = subprocess.run(
+        ["bash", "-n", str(predeploy_script)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    _require(
+        predeploy_syntax_check.returncode == 0,
+        f"generated predeploy.sh failed bash -n: {predeploy_syntax_check.stderr.strip()}",
+    )
+    _require(
+        "python manage.py migrate" in predeploy_script.read_text(),
+        f"generated predeploy.sh does not run migrations: {predeploy_script}",
     )
     probe_environment = dict(os.environ)
     for variable in (

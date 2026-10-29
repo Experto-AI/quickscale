@@ -35,6 +35,7 @@ class TestFacadePublicSurface:
             "compose_rest_framework",
             "correlation_id_var",
             "num_proxies_for",
+            "require_production_media_backend",
             "require_production_secret_key",
             "require_redis_cache_client",
             "resolve_runtime_database_url",
@@ -89,6 +90,60 @@ class TestRedisCacheClientGuard:
         facade.require_redis_cache_client(None)
 
         assert probed == []
+
+
+class TestProductionMediaBackendGuard:
+    """Serving production traffic refuses container-local media."""
+
+    def test_serving_refuses_filesystem_storage(self) -> None:
+        with pytest.raises(ImproperlyConfigured, match="FileSystemStorage"):
+            facade.require_production_media_backend(
+                {"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}},
+                allow_local_media=False,
+                serving=True,
+            )
+
+    def test_serving_refuses_a_filesystem_subclass(self) -> None:
+        from django.core.files.storage import FileSystemStorage
+
+        class ProjectLocalStorage(FileSystemStorage):
+            """A project subclass inherits the container-local loss path."""
+
+        with pytest.raises(ImproperlyConfigured, match="FileSystemStorage"):
+            facade.require_production_media_backend(
+                {"default": {"BACKEND": ProjectLocalStorage}},
+                allow_local_media=False,
+                serving=True,
+            )
+
+    def test_explicit_dev_flag_allows_local_media(self) -> None:
+        facade.require_production_media_backend(
+            {"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}},
+            allow_local_media=True,
+            serving=True,
+        )
+
+    def test_bootstrap_command_is_exempt(self) -> None:
+        facade.require_production_media_backend(
+            {"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}},
+            allow_local_media=False,
+            serving=False,
+        )
+
+    def test_object_storage_passes(self) -> None:
+        facade.require_production_media_backend(
+            {"default": {"BACKEND": "django.core.files.storage.InMemoryStorage"}},
+            allow_local_media=False,
+            serving=True,
+        )
+
+    def test_missing_backend_fails_closed(self) -> None:
+        with pytest.raises(ImproperlyConfigured, match="must declare a BACKEND"):
+            facade.require_production_media_backend(
+                {"default": {}},
+                allow_local_media=False,
+                serving=True,
+            )
 
 
 class TestProxyTrustDerivation:

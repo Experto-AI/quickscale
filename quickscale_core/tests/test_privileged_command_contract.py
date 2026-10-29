@@ -47,26 +47,32 @@ def test_privileged_command_station_names_exact_reduced_set(
     assert observed == EXPECTED_PRIVILEGED_COMMANDS
 
 
-def test_start_sh_names_exact_reduced_set() -> None:
-    """The launcher emits privileged prefixes for exactly the sanctioned set."""
-    template = (
+def test_launchers_name_exact_reduced_set() -> None:
+    """The privileged prefix set lives only in the pre-deploy launcher."""
+    predeploy = (
+        ROOT / "quickscale_core/src/quickscale_core/generator/templates/predeploy.sh.j2"
+    ).read_text()
+    start_sh = (
         ROOT / "quickscale_core/src/quickscale_core/generator/templates/start.sh.j2"
     ).read_text()
 
     observed = frozenset(
-        re.findall(r"QUICKSCALE_PRIVILEGED_COMMAND=([a-z_]+)", template)
+        re.findall(r"QUICKSCALE_PRIVILEGED_COMMAND=([a-z_]+)", predeploy)
     )
 
     assert observed == EXPECTED_PRIVILEGED_COMMANDS
+    assert "QUICKSCALE_PRIVILEGED_COMMAND" not in start_sh
 
 
-def test_start_sh_rejects_supplied_argv(tmp_path: Path) -> None:
+@pytest.mark.parametrize("launcher_name", ["start.sh", "predeploy.sh"])
+def test_launchers_reject_supplied_argv(launcher_name: str, tmp_path: Path) -> None:
     """A supplied argv exits 2 before any privileged path can run."""
     template = (
-        ROOT / "quickscale_core/src/quickscale_core/generator/templates/start.sh.j2"
+        ROOT
+        / f"quickscale_core/src/quickscale_core/generator/templates/{launcher_name}.j2"
     ).read_text()
     rendered = Environment().from_string(template).render(package_name="testproject")
-    launcher = tmp_path / "start.sh"
+    launcher = tmp_path / launcher_name
     launcher.write_text(rendered)
 
     result = subprocess.run(
@@ -79,5 +85,5 @@ def test_start_sh_rejects_supplied_argv(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert result.stdout == ""
     assert result.stderr == (
-        "ERROR: unsupported start.sh command: some_unsupported_command\n"
+        f"ERROR: unsupported {launcher_name} command: some_unsupported_command\n"
     )

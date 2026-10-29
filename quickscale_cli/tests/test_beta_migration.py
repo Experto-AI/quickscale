@@ -235,10 +235,15 @@ def _write_project(
         json.dumps({"marker": f"{marker}-railway-marker"}, indent=2) + "\n"
     )
     (root / "start.sh").write_text(
+        f"#!/usr/bin/env bash\nset -e\nexec gunicorn {package}.wsgi:application\n"
+    )
+    (root / "predeploy.sh").write_text(
         "#!/usr/bin/env bash\n"
+        "set -e\n"
         'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate --noinput\n'
-        'QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL="" python manage.py createcachetable\n'
-        f"exec gunicorn {package}.wsgi:application\n"
+        'if [[ -z "${REDIS_URL:-}" ]]; then\n'
+        '  QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL="" python manage.py createcachetable\n'
+        "fi\n"
     )
 
     frontend_src = root / "frontend" / "src"
@@ -1767,7 +1772,7 @@ def test_required_migrate_invocation_cannot_disappear(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     start_script.write_text(
         start_script.read_text().replace(
             'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
@@ -1810,14 +1815,16 @@ def test_required_command_after_final_exec_is_not_counted_as_reachable(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     migrate_line = (
         'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
         "python manage.py migrate --noinput\n"
     )
     start_text = start_script.read_text()
     assert migrate_line in start_text
-    start_script.write_text(start_text.replace(migrate_line, "") + migrate_line)
+    start_script.write_text(
+        start_text.replace(migrate_line, "") + "exec true\n" + migrate_line
+    )
 
     report = run_beta_migration(
         BetaMigrationInput(
@@ -1854,7 +1861,7 @@ def test_required_migrate_invocation_must_be_unconditional(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     migrate_line = (
         'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
         "python manage.py migrate --noinput\n"
@@ -1901,7 +1908,7 @@ def test_compound_exit_before_required_migrate_blocks(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     migrate_line = (
         'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
         "python manage.py migrate --noinput\n"
@@ -1943,7 +1950,7 @@ def test_errexit_failure_before_required_migrate_blocks(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     migrate_line = (
         'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
         "python manage.py migrate --noinput\n"
@@ -1987,7 +1994,7 @@ def test_required_startup_command_cannot_move_to_docker_build(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     migrate_line = (
         'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
         "python manage.py migrate --noinput\n"
@@ -2017,8 +2024,8 @@ def test_required_startup_command_cannot_move_to_docker_build(
     assert report.status == "blocked"
     assert report.changed_files == []
     assert any(
-        "only supported in start.sh" in blocker
-        or "missing from the effective start.sh" in blocker
+        "only supported in predeploy.sh" in blocker
+        or "missing from the effective predeploy.sh" in blocker
         for blocker in report.blockers
     )
 
@@ -2073,7 +2080,7 @@ def test_required_manage_command_without_selector_blocks_before_mutation(
         marker="recipient",
     )
     launcher_root = recipient
-    start_script = launcher_root / "start.sh"
+    start_script = launcher_root / "predeploy.sh"
     start_script.write_text(
         start_script.read_text().replace(
             'QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" '
@@ -2113,7 +2120,7 @@ def test_later_unguarded_manage_command_on_same_line_blocks_before_mutation(
         marker="recipient",
     )
     launcher_root = recipient
-    with (launcher_root / "start.sh").open("a") as start_script:
+    with (launcher_root / "predeploy.sh").open("a") as start_script:
         start_script.write("python manage.py check && python manage.py migrate\n")
 
     report = run_beta_migration(
@@ -2280,8 +2287,9 @@ def test_python_package_identity_preserves_launcher_executables(
 
     assert report.status == "ready", report.blockers
     start_text = (recipient / "start.sh").read_text()
-    assert "python manage.py migrate" in start_text
-    assert "python manage.py createcachetable" in start_text
+    predeploy_text = (recipient / "predeploy.sh").read_text()
+    assert "python manage.py migrate" in predeploy_text
+    assert "python manage.py createcachetable" in predeploy_text
     assert "target_site.wsgi:application" in start_text
     pyproject_text = (recipient / "pyproject.toml").read_text()
     assert 'python = "^3.14"' in pyproject_text
@@ -5103,3 +5111,60 @@ def test_handoff_prompt_never_claims_readiness_when_report_write_fails(
     prompt_text = (recipient / "MIGRATION_PROMPT.md").read_text()
     assert "## Remaining work" in prompt_text
     assert "- Status: ready" not in prompt_text
+
+
+def test_migrated_old_deployment_surfaces_report_the_contract_adoption(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A donor that predates the deployment contract gets a bounded adoption step."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    # The donor predates the readiness view and the media guard; fresh-first
+    # copies both donor files over the fresh scaffold's versions. The fresh
+    # scaffold's recipient-managed railway.json carries the current contract.
+    (donor / "fresh_donor" / "urls.py").write_text(
+        "from django.urls import path\n\nurlpatterns = []\n"
+    )
+    (recipient / "railway.json").write_text(
+        json.dumps(
+            {
+                "deploy": {
+                    "startCommand": "./start.sh",
+                    "preDeployCommand": ["./predeploy.sh"],
+                    "healthcheckPath": "/ready/",
+                }
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    _install_verification_success_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    action = next(
+        pending
+        for pending in report.pending_manual_actions
+        if pending.action == "adopt-production-deployment-contract"
+    )
+    assert "the /ready/ route in urls.py" in action.detail
+    assert "the production media refusal in settings/production.py" in action.detail

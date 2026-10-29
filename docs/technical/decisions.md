@@ -131,12 +131,9 @@ Branch and generated-project layouts:
 - ❌ Vertical themes (CRM and similar) are not part of the shipped generator
   surface until a release note and this file explicitly add them
 
-Theme-owned scaffolding that only fresh generations receive — the dormant PostHog
-analytics helper and the Django-owned public `/social` and `/social/embeds`
-entrypoints — is enumerated in
-[generated_project_structure.md §React Starter Output](./generated_project_structure.md#react-starter-output).
-Existing projects adopt equivalents manually; the backend-managed social transport
-endpoints and settings wiring stay theme-agnostic.
+Theme-owned fresh-generation scaffolding is enumerated in
+[generated_project_structure.md §React Starter Output](./generated_project_structure.md#react-starter-output);
+existing projects adopt equivalents manually; social transport stays theme-agnostic.
 
 The approved frontend stack (React 19+, TypeScript, Vite, pnpm, shadcn/ui,
 Tailwind, React Router v7, TanStack Query, Zustand, React Hook Form + Zod,
@@ -157,13 +154,10 @@ Adding or swapping a frontend dependency requires a decision entry here.
   teams ships as a valid public `quickscale plan` / `quickscale.yml` /
   `quickscale apply` selection
 
-**Teams tie-breaker:** `teams` is not a shipped module and nothing is committed
-— no timeline, no kickoff date, and no planning note in the repo.
-Any [arch-audit.md](../others/arch-audit.md) finding whose horizon keys off "teams
-kickoff" describes a condition that applies *if and when* teams is scheduled. Treat
-every such finding as open-ended and deferred — not a roadmap item on a clock —
-until a scheduling decision is recorded here. This rule is stated by trigger, not by
-finding ID, so it survives audit regeneration.
+**Teams tie-breaker:** `teams` is not a shipped module and nothing is committed: no timeline,
+kickoff date, or planning note. An [arch-audit.md](../others/arch-audit.md) finding keyed to a
+"teams kickoff" is open-ended and deferred until a scheduling decision is recorded here; the rule
+survives audit regeneration by trigger, not by finding ID.
 
 #### Multi-org membership and org-switch
 
@@ -499,6 +493,12 @@ Which gate a given change owes is decided by tier, not by habit:
 
 ---
 
+### Generated Production Deployment Contract {#generated-production-deployment-contract}
+
+**Rule:** Railway is the sole supported production path unless an operator decision recorded here
+replaces it; the generated artifact (pre-deploy migrations, `/ready/` readiness, `/healthcheck/`
+liveness, media refusal) is in [Generated Project Structure](./generated_project_structure.md#generated-production-deployment-contract).
+
 ### Launcher One-Shot Command-Env Contract {#launcher-one-shot-command-env-contract}
 
 **Rule:** Generated project startup scripts
@@ -542,7 +542,7 @@ set as inline command prefixes — never as persistent environment configuration
 
 | Variable | Values | Set by | Connection selected |
 |---|---|---|---|
-| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``start.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
+| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``predeploy.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
 | ``QUICKSCALE_NON_DB_COMMAND`` | ``collectstatic``, ``compilemessages`` | ``Dockerfile`` build step (inline prefix) | Dummy ``postgresql://`` URL |
 
 The sanctioned privileged set is exactly the two Django built-ins above. Each of
@@ -708,9 +708,9 @@ disappears or a privacy-first/EU-only default becomes policy: Plausible, then Ma
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
 - **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_ORGS_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies. Its `pg_roles` read is the one deliberate database access from `ready()`: no later hook is guaranteed before a gunicorn/WSGI process serves, so the eager guard stays and Django's generic app-initialization `RuntimeWarning` is suppressed around that single read:
-  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `orgs` module guard (`_PRIVILEGED_COMMANDS` in `checks.py`), the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `predeploy.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `orgs` module guard (`_PRIVILEGED_COMMANDS` in `checks.py`), the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `predeploy.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — non-serving environment-variable escape hatch for intentional single-tenant/development use. Generated production settings refuse it while serving; it remains a development and test allowance only.
-- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; supplied argv exits 2 without a privileged path; `runserver`/`gunicorn` must still use the restricted runtime role
+- `predeploy.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable` and runs no serving process; supplied argv exits 2 without a privileged path. `start.sh` provisions the runtime role, runs no schema work, and `runserver`/`gunicorn` must still use the restricted runtime role
 - `quickscale manage` clears `RUNTIME_DATABASE_URL` only for those two sanctioned commands; every other management command (for example `createsuperuser`) runs under the restricted runtime role, which the boot guard requires
 - Runtime-role provisioning is not a third privileged Django command: when `RUNTIME_DB_PASSWORD` is set (as `quickscale deploy railway` does), `start.sh` creates or updates the `NOSUPERUSER/NOBYPASSRLS` role with a direct superuser `DATABASE_URL` connection *before* Django boots, so the guard and the two-command contract are untouched. It refuses a role that is the superuser login or an existing superuser
 

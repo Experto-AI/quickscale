@@ -22,6 +22,9 @@ Public API (SA206):
   manifest-declared module throttle scopes, the module-contributed keys, and
   the proxy-derived ``NUM_PROXIES``.
 * :func:`require_production_secret_key` — the production SECRET_KEY guard.
+* :func:`require_production_media_backend` — the production media-durability
+  guard: serving production traffic refuses container-local
+  ``FileSystemStorage`` unless an explicit development flag permits it.
 * :func:`require_redis_cache_client` — the production Redis-cache client guard.
 * :data:`KNOWN_PRIVILEGED_COMMANDS`, :data:`KNOWN_NON_DB_COMMANDS`, and
   :func:`resolve_runtime_database_url` — the launcher one-shot command-mode
@@ -58,6 +61,7 @@ __all__ = [
     "compose_rest_framework",
     "correlation_id_var",
     "num_proxies_for",
+    "require_production_media_backend",
     "require_production_secret_key",
     "require_redis_cache_client",
     "resolve_runtime_database_url",
@@ -358,6 +362,55 @@ def require_production_secret_key(secret_key: object) -> str:
     return normalized_secret_key
 
 
+# ── Production media backend guard ───────────────────────────────────
+
+
+def require_production_media_backend(
+    storage_backends: Mapping[str, object],
+    *,
+    allow_local_media: bool,
+    serving: bool,
+) -> None:
+    """Reject container-local media while a production process serves traffic.
+
+    ``docker-compose.yml`` is a local development stack; production serving
+    must write uploads to durable object storage. The configured backend is
+    resolved to a class, so a project subclass of ``FileSystemStorage`` is
+    refused as well. Bootstrap command modes (migrations, ``collectstatic``)
+    never serve requests and pass ``serving=False``.
+    """
+    if not serving or allow_local_media:
+        return
+
+    default_storage = storage_backends.get("default")
+    backend = (
+        default_storage.get("BACKEND") if isinstance(default_storage, Mapping) else None
+    )
+    if not backend:
+        raise ImproperlyConfigured(
+            "STORAGES['default'] must declare a BACKEND while serving production "
+            "traffic."
+        )
+
+    from django.core.files.storage import FileSystemStorage
+    from django.utils.module_loading import import_string
+
+    try:
+        backend_class = import_string(backend) if isinstance(backend, str) else backend
+    except ImportError as exc:
+        raise ImproperlyConfigured(
+            f"STORAGES['default'] names an unimportable backend {backend!r}: {exc}"
+        ) from exc
+
+    if isinstance(backend_class, type) and issubclass(backend_class, FileSystemStorage):
+        raise ImproperlyConfigured(
+            "Production serving refuses django.core.files.storage.FileSystemStorage: "
+            "container-local media is lost on every redeploy. Configure the storage "
+            "module (S3) in quickscale.yml, or set QUICKSCALE_ALLOW_LOCAL_MEDIA=1 "
+            "only for a development or test deployment that accepts the loss."
+        )
+
+
 # ── Production Redis-cache client guard ──────────────────────────────
 
 
@@ -465,7 +518,7 @@ def resolve_runtime_database_url(
         "string must be provided when serving requests. "
         "Set RUNTIME_DATABASE_URL in your environment to the runtime role's "
         "PostgreSQL connection string. "
-        "For privileged commands, the deployment script (start.sh) "
-        "automatically sets QUICKSCALE_PRIVILEGED_COMMAND and clears "
+        "For privileged commands, the pre-deploy bootstrap (predeploy.sh) "
+        "sets QUICKSCALE_PRIVILEGED_COMMAND and clears "
         "RUNTIME_DATABASE_URL so the superuser DATABASE_URL is used instead."
     )

@@ -44,7 +44,7 @@ from .current_org import (
 from .models import Organization, OrganizationMembership
 from .permissions import is_platform_operator
 
-EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
+EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/", "/ready/")
 
 GetResponse = Callable[[HttpRequest], HttpResponse]
 

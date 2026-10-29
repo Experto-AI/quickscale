@@ -132,8 +132,8 @@ role; atomic org purge with a tombstone; once-only webhook processing per Stripe
 notification delivery status; retention anonymization; PostgreSQL 18 custom-format backup/restore with
 migration-content compatibility; Python 3.14, Django 6.0, PostgreSQL 18; `WEB_CONCURRENCY`/`GUNICORN_WORKERS`
 may exceed one (supported mode). Unknowns: production `WEB_CONCURRENCY`, whether the live generated
-project uses the backups engine, and whether self-hosted Compose is a supported production path; these
-are named in the Questions section.
+project uses the backups engine; these are named in the Questions section. Railway is the sole
+supported production path (SA321), and generated production serving refuses container-local media.
 
 **Hotspot measurements.** The 12-month churn query returned 3,787 non-merge commits and 681
 fix-message commits. After filtering merges, subtree-split replays, lockfiles, generated output, and
@@ -423,7 +423,7 @@ items:
   - {id: orgs-role-mixin-checks-request-org, status: watchlist}
   - {id: backups-upload-restore-by-model-permission, status: watchlist}
   - {id: single-sync-worker-vendor-calls, status: watchlist}
-  - {id: migrate-runs-per-replica, status: watchlist}
+  - {id: migrate-runs-per-replica, status: resolved}
   - {id: social-config-error-served-200, status: watchlist}
   - {id: account-deletion-hook-exception-text, status: watchlist}
   - {id: deploy-existing-settings-module-never-corrected, status: watchlist}
@@ -441,8 +441,8 @@ items:
   - {id: billing-refunds-disputes, status: watchlist}
   - {id: auth-email-verification-none, status: watchlist}
   - {id: auth-account-deletion-no-reauth, status: watchlist}
-  - {id: templates-local-media-production, status: watchlist}
-  - {id: templates-healthcheck-liveness, status: watchlist}
+  - {id: templates-local-media-production, status: resolved}
+  - {id: templates-healthcheck-liveness, status: resolved}
   - {id: notifications-pre-signature-db-read, status: watchlist}
   - {id: media-storage-orphans, status: watchlist}
   - {id: backups-artifact-path-trust, status: watchlist}
@@ -996,8 +996,8 @@ Compact; each cell names the layer that supplies the safeguard, the finding ID f
 
 | Population | Authentication | Authorization / scope | Input & limits | Durability / atomicity | Notes |
 |---|---|---|---|---|---|
-| Generated boot (`start.sh`, Dockerfile) | n/a | non-root image, `SECRET_KEY` guard, runtime-role split | healthcheck is liveness only | migrations at every boot (watchlist) | compose debug |
-| Generated HTTP (base/production settings) | Django session | `ALLOWED_HOSTS`, CSRF, secure cookies, HSTS, conditional proxy trust | no request-size tuning | n/a | verified; no readiness probe |
+| Generated boot (`start.sh`, Dockerfile) | n/a | non-root image, `SECRET_KEY` guard, runtime-role split | readiness `/ready/` gates on DB + migrations; `/healthcheck/` is liveness | pre-deploy migrations (`predeploy.sh`); boot provisions the role only | compose debug |
+| Generated HTTP (base/production settings) | Django session | `ALLOWED_HOSTS`, CSRF, secure cookies, HSTS, conditional proxy trust | no request-size tuning | n/a | verified; readiness `/ready/`; local media refused unless the dev flag is set |
 | Module content APIs (CRM/blog/listings/forms/orgs) | session + allauth | org role + RLS + object filters | DRF serializers, throttles | transactions on writes | `crm-deal-owner-cross-tenant`; `orgs-admin-can-demote-owner` |
 | Public endpoints (forms submit, blog/listing public, social) | anonymous by design | System-org scope / published filter | forms 5/hour, blog/listing 5/hour | atomic submission | `forms-null-optional-field-500`; `forms-option-values-not-validated` |
 | Webhooks (Stripe, Svix) | signature over raw body | event-type allowlist | no throttle on Svix | event-id dedup + advisory lock | `billing-webhook-status-applied-out-of-order`; `notifications-pre-signature-db-read` |
@@ -1127,9 +1127,11 @@ reviewers.
 
 ## Structural smells
 
-- **Generated production topology is prose, not an artifact** (arch F4): media is container-local
-  by default and schema changes at boot. The README's production claim is corrected; the structural
-  form is arch `generated-deploy-topology-unmodeled`.
+- **Generated production topology is an artifact** (arch F4, closed by SA321): `railway.json` runs
+  `predeploy.sh` as the pre-deploy step (migrations and the cache table), `/ready/` gates the
+  deployment on a reached database with no pending migrations while `/healthcheck/` stays DB-free
+  liveness, and production serving refuses `FileSystemStorage` unless
+  `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` marks a development or test deployment.
 - **Backups hold a coherent recovery point** (arch F6, closed by SA322): media is captured into the
   versioned snapshot and restored from it, project migration identity is enforced, and a restore
   lease serializes destructive runs.
@@ -1200,7 +1202,6 @@ trigger. The chain pass reads this list.
 | `orgs-role-mixin-checks-request-org` | `OrgRoleMixin.dispatch` checks `resolve_request_org()` while `get_organization()` prefers the URL slug | a new path sets `request.org` on `/orgs/<slug>/` for a non-superuser | not fired: the only setters remain `current_org.py`/`_api_views.py` (unchanged in the delta) |
 | `backups-upload-restore-by-model-permission` | uploaded-dump restore needs `change_backuppolicy` + `QUICKSCALE_BACKUPS_ALLOW_RESTORE=true` | that permission granted to non-superuser staff while restore is enabled | not fired: no permission change in the delta; with the runtime-role fix, revisit the trust model |
 | `single-sync-worker-vendor-calls` | one sync worker plus Stripe's default stalls all requests | `WEB_CONCURRENCY` > 1 in production or a vendor latency incident | not fired: `start.sh` still defaults to 1; it now amplifies `billing-webhook-status-applied-out-of-order` |
-| `migrate-runs-per-replica` | `start.sh` migrates on every boot | more than one replica | not fired: still the single-replica path |
 | `social-config-error-served-200` | DRF payload views return 200 with `str(exc)` | a new raise of `SocialConfigurationError` | not fired: 0 raises |
 | `account-deletion-hook-exception-text` | undeclared reconcile hooks flash `str(exc)` | a documented host extension point for that hook | not fired: module-extension.md still limits it to module declarations |
 | `deploy-existing-settings-module-never-corrected` | deploy keeps an existing `DJANGO_SETTINGS_MODULE` | an older Railway service fails to boot | not fired: unchanged |
@@ -1218,8 +1219,6 @@ trigger. The chain pass reads this list.
 | `billing-refunds-disputes` | `charge.refunded`, `charge.dispute.created`, `invoice.voided` are ignored; credits are not reversed | the product adds refunds/disputes to the billing contract | not fired: refunds are an explicit non-goal; the `REFUND` enum is unused |
 | `auth-email-verification-none` | the auth module ships `ACCOUNT_EMAIL_VERIFICATION="none"` with open registration | a capability is granted on an unverified email match | not fired: default is explicit and configurable; org invites require the token as a second secret |
 | `auth-account-deletion-no-reauth` | the account-delete POST needs only the session + CSRF (empty `Form`) | a threat model requires elevation for irreversible self-service deletion | not fired: the confirmation page is deliberate; password/MFA re-auth is a policy choice |
-| `templates-local-media-production` | production defaults to `FileSystemStorage` under the ephemeral container; `/media/` is not served outside DEBUG | a media-bearing project deploys without the storage module | not fired: the operations doc warns and blog/listings require `storage`; the storage module's default backend is still `local` |
-| `templates-healthcheck-liveness` | the healthcheck is DB-free; a broken DB still reports healthy | a deployment with a misconfigured runtime URL is routed traffic | not fired: liveness vs readiness is a deliberate choice; add a readiness probe |
 | `notifications-pre-signature-db-read` | `ingest_webhook_event` loads the settings snapshot (DB) before verifying the Svix signature | sustained unauthenticated traffic to the webhook endpoint | not fired: one cheap `exists()` per request; add a throttle or verify the signature before the read |
 | `media-storage-orphans` | blog/listing media and avatars are deleted with the row only; no storage cleanup | an erasure/retention obligation covers media objects | not fired: the public-media contract defers this; add a cleanup job |
 | `backups-artifact-path-trust` | download/restore/purge treat a restored row's `local_path`/`snapshot.local_root_path` as authoritative | a crafted/restored DB row reaches the backup admin | not fired: the trusted-match upload path is the intended boundary; treat post-restore rows as data |
@@ -1237,9 +1236,6 @@ release.
 - **Does any generated project run `quickscale_backups_create` rather than a manual `pg_dump`?** A no
   makes the backup findings latent for that deployment (S4 watchlist) but does not fix the shipped
   engine; a yes keeps S2.
-- **Is self-hosted Compose a supported production path, or only a dev convenience?** This decides
-  the generated production deployment artifact: a supported path needs a production Compose profile;
-  a dev-only path needs one documented production path (architectural audit F4).
 - **Does the project use Stripe Invoicing or one-off invoices on the same customer?** A no demotes
   `billing-invoice-payment-failed-unscoped` to S4; a yes keeps S3.
 - **Are all `/admin/` staff accounts superusers, with no tenant user ever granted `is_staff`?** A yes
@@ -1382,3 +1378,10 @@ release.
   exempt from the last-owner receiver, so the admin instance and delete-selected paths both work;
   `new` joins `api` in `RESERVED_ORG_SLUGS`; tests cover the bulk rollback, both admin delete paths,
   and the reserved slug).
+- 2026-10-29 — `migrate-runs-per-replica`, `templates-local-media-production`,
+  `templates-healthcheck-liveness`: **resolved** (SA321: `migrate`/`createcachetable` run once in
+  `predeploy.sh` as Railway's pre-deploy command instead of on every boot, `/ready/` gates the
+  deployment on a reached database with no pending migrations while `/healthcheck/` stays DB-free
+  liveness, and production serving refuses `FileSystemStorage` unless `QUICKSCALE_ALLOW_LOCAL_MEDIA=1`
+  marks a development or test deployment. The self-hosted-Compose question is answered: Railway is
+  the sole supported production path.)

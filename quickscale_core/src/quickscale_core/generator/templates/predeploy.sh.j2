@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# QuickScale pre-deploy database bootstrap
+#
+# Runs the privileged one-shot schema work BEFORE a new deployment starts:
+# migrations run under the superuser DATABASE_URL, and the database cache
+# table is created when REDIS_URL is unset. Railway invokes this through
+# railway.json's deploy.preDeployCommand. A manual deployment runs it once
+# against the target database before the serving container starts.
+#
+# Never put migrations at container boot: a failed or rolled-back deployment
+# leaves the schema ahead of the old image. A failed pre-deploy command aborts
+# the deployment before it replaces the running one.
+
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+
+# Disable Python output buffering to see logs immediately
+export PYTHONUNBUFFERED=1
+
+# The pre-deploy launcher accepts no argv command modes. Privileged bootstrap
+# commands stay explicit inline steps below; any supplied argv fails closed.
+if [[ "$#" -gt 0 ]]; then
+  echo "ERROR: unsupported predeploy.sh command: $*" >&2
+  exit 2
+fi
+
+echo "========================================"
+echo "🚀 Running pre-deploy database bootstrap..."
+echo "========================================"
+echo ""
+
+echo "📋 Step 1/3: Environment check"
+echo "Checking critical environment variables..."
+critical_vars=(DATABASE_URL SECRET_KEY DJANGO_SETTINGS_MODULE ALLOWED_HOSTS)
+missing_critical_var=0
+
+for var_name in "${critical_vars[@]}"; do
+  if [[ -n "${!var_name:-}" ]]; then
+    echo "${var_name}: set"
+  else
+    echo "${var_name}: MISSING"
+    missing_critical_var=1
+  fi
+done
+
+if [[ "$missing_critical_var" -eq 1 ]]; then
+  echo "⚠️  Some variables may be missing"
+fi
+echo ""
+
+echo "📋 Step 2/3: Database migrations"
+echo "Running migrations..."
+# Set QUICKSCALE_PRIVILEGED_COMMAND and clear RUNTIME_DATABASE_URL so
+# migrations use the superuser DATABASE_URL (the runtime role has
+# NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
+echo "✅ Migrations completed successfully"
+echo ""
+
+echo "📋 Step 3/3: Cache table setup"
+# Only needed for DatabaseCache — RedisCache is managed automatically.
+# Set QUICKSCALE_PRIVILEGED_COMMAND and clear RUNTIME_DATABASE_URL so
+# createcachetable uses the superuser DATABASE_URL (the runtime role has
+# NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+if [[ -z "${REDIS_URL:-}" ]]; then
+    echo "REDIS_URL not set — creating database cache table via superuser DATABASE_URL..."
+    QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL="" python manage.py createcachetable
+    echo "✅ Cache table ready"
+else
+    echo "REDIS_URL set — skipping database cache table (using Redis)"
+fi
+echo ""
+
+echo "✅ Pre-deploy bootstrap complete."

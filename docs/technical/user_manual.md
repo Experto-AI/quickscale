@@ -195,7 +195,7 @@ first.
 | Managed wiring and generated pages — `<package>/settings/modules.py`, `<package>/urls_modules.py`, `<package>/quickscale_managed/`, `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, `frontend/src/quickscaleSeam.hooks.ts`, `.github/quickscale-ci-env`, and `quickscale-operations.md` | Yes | QuickScale-owned; never edit them. `quickscale status` reports a local edit as managed-file drift. |
 | `frontend/` — the React app | Never, except the managed `frontend/src/quickscaleSeam.d.ts`, `frontend/src/quickscaleSeam.keys.ts`, and `frontend/src/quickscaleSeam.hooks.ts` above | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
 | `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, which loads the token source from Vite in DEBUG and the compiled React stylesheet otherwise; shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |
-| Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
+| Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, `predeploy.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
 | Project-owned apps (for example a `properties` app) | Never | Yours entirely. |
 
 **Contract-vintage enforcement.** Before `quickscale update`, an existing-project `quickscale

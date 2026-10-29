@@ -900,8 +900,8 @@ mapping that mirrors this section.
   declares social's `_quickscale/social/` transport include. The three reservations ship in the
   versioned runtime URLconf (`quickscale_core.runtime.urls`), composed into the managed
   `<package>/urls_modules.py`; `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`,
-  `/healthcheck/`) are not orgs paths; and the generated 404 hint's path tests are diagnostics
-  against a requested path, not route declarations.
+  `/healthcheck/`, `/ready/`) are not orgs paths; and the generated 404 hint's path tests are
+  diagnostics against a requested path, not route declarations.
 **42. Settings snapshots.**
 - ✅ A module that needs one consistent view of several of its own settings builds it in its private
   `_settings.py` as a frozen dataclass with a `from_settings()` classmethod, reading each setting

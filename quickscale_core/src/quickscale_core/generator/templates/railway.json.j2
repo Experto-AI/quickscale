@@ -6,9 +6,10 @@
   },
   "deploy": {
     "startCommand": "./start.sh",
+    "preDeployCommand": ["./predeploy.sh"],
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/healthcheck/",
+    "healthcheckPath": "/ready/",
     "healthcheckTimeout": 100
   }
 }

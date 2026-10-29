@@ -48,6 +48,7 @@ from .toml_editing import _validate_fresh_first_path_dependency_targets
 from ..handoff_prompt import HANDOFF_PROMPT_FILENAME
 from pathlib import Path
 from typing import Literal
+import json
 import re
 
 
@@ -343,6 +344,79 @@ def _module_divergence_action(
     )
 
 
+def _deployment_contract_action(
+    report: BetaMigrationReport,
+) -> PendingManualAction | None:
+    """Name the production-deployment adoption a migrated project still needs.
+
+    The fresh scaffold's ``railway.json`` is recipient-managed and keeps the
+    SA321 pre-deploy/readiness contract, while fresh-first copies the donor's
+    ``settings/production.py`` and router unchanged. A donor that predates the
+    contract therefore leaves the deployment artifact pointing at a readiness
+    route (and a media guard) the copied code does not provide.
+    """
+    if report.recipient is None:
+        return None
+
+    railway_path = report.recipient.path / "railway.json"
+    try:
+        config = json.loads(railway_path.read_text())
+    except OSError, ValueError:
+        return None
+    deploy = config.get("deploy") if isinstance(config, dict) else None
+    if not isinstance(deploy, dict):
+        return None
+
+    pre_deploy = deploy.get("preDeployCommand")
+    references_predeploy = pre_deploy == "./predeploy.sh" or (
+        isinstance(pre_deploy, list) and "./predeploy.sh" in pre_deploy
+    )
+    uses_readiness = deploy.get("healthcheckPath") == "/ready/"
+    if not (references_predeploy or uses_readiness):
+        return None
+
+    package_dir = report.recipient.package_dir
+    production_path = package_dir / "settings" / "production.py"
+    urls_path = package_dir / "urls.py"
+    try:
+        production_text = production_path.read_text()
+    except OSError:
+        production_text = ""
+    try:
+        urls_text = urls_path.read_text()
+    except OSError:
+        urls_text = ""
+
+    missing: list[str] = []
+    if uses_readiness and "readiness" not in urls_text:
+        missing.append("the /ready/ route in urls.py")
+    if uses_readiness and not (
+        "SECURE_REDIRECT_EXEMPT" in production_text and "ready" in production_text
+    ):
+        missing.append("the /ready/ HTTPS-redirect exemption in settings/production.py")
+    if "require_production_media_backend" not in production_text:
+        missing.append("the production media refusal in settings/production.py")
+    if not missing:
+        return None
+
+    return PendingManualAction(
+        action="adopt-production-deployment-contract",
+        detail=(
+            "Adopt the generated production deployment contract before deploying: "
+            + "; ".join(missing)
+            + ". Copy the current /ready/ view and SECURE_REDIRECT_EXEMPT entry from "
+            "the fresh scaffold, and add require_production_media_backend(...) to the "
+            "donor production settings (or configure the storage module with S3)."
+        ),
+        paths=["railway.json", "settings/production.py", "urls.py"],
+        rule=(
+            "The generated Railway config runs predeploy.sh and gates on /ready/; a "
+            "migrated donor whose router or production settings predate that contract "
+            "must adopt the bounded readiness/media guard before deployment."
+        ),
+    )
+
+
 def _build_pending_manual_actions(
     report: BetaMigrationReport,
 ) -> list[PendingManualAction]:
@@ -441,6 +515,10 @@ def _build_pending_manual_actions(
     )
     if module_divergence_action is not None:
         actions.append(module_divergence_action)
+
+    deployment_contract_action = _deployment_contract_action(report)
+    if deployment_contract_action is not None:
+        actions.append(deployment_contract_action)
 
     actions.extend(
         [

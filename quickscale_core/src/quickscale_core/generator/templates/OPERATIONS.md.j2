@@ -32,7 +32,7 @@ NOCREATEROLE     — cannot create other roles
 
 The generated settings support two database connection URLs:
 
-- **`DATABASE_URL`** — superuser connection (used for migrations). The deployment script (`start.sh`) sets ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` as a one-shot inline prefix so schema changes use the superuser role.
+- **`DATABASE_URL`** — superuser connection (used for migrations). The pre-deploy bootstrap (`predeploy.sh`) sets ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` as a one-shot inline prefix so schema changes use the superuser role.
 - **`RUNTIME_DATABASE_URL`** — restricted runtime role connection (required for runtime serving). When set, the app uses this URL for all runtime queries. If unset during runtime serving, the app raises a clear error instead of falling back to the privileged superuser `DATABASE_URL` (fail-closed). During one-shot privileged commands, `RUNTIME_DATABASE_URL` is cleared so the superuser `DATABASE_URL` is used (schema changes require elevated privileges).
 
 ### Development (Docker Compose)
@@ -43,21 +43,34 @@ When you start the project with Docker Compose:
 2. It creates the `{{ runtime_db_role }}` role with `NOSUPERUSER` and `NOBYPASSRLS`.
 3. Both `DATABASE_URL` (superuser) and `RUNTIME_DATABASE_URL` (runtime role) are set in the backend service environment.
 
-Migrations continue to work because the startup script (`start.sh`) sets the
-one-shot ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` inline
-prefix, so the superuser ``DATABASE_URL`` is used for schema changes.
+Migrations do not run when the Compose stack boots. Apply them explicitly
+before the first boot (the same command the pre-deploy bootstrap uses):
+
+```bash
+docker compose run --rm backend ./predeploy.sh
+```
+
+`docker compose run` starts the backend's database dependency for the one-off
+container, so this works with the stack stopped. The script sets the one-shot
+``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` inline prefix,
+so the superuser ``DATABASE_URL`` is used for schema changes.
 
 ### Production (Railway / Manual Deploy)
 
 On Railway, the platform auto-injects `DATABASE_URL` with a superuser connection.
 
 **With `quickscale deploy railway` (automatic):** the deploy sets `RUNTIME_DB_ROLE`
-(`{{ runtime_db_role }}`), a generated `RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`. On every boot,
-`start.sh` connects with `DATABASE_URL` and creates or updates that `NOSUPERUSER`/`NOBYPASSRLS` role
-before migrating. No manual step is needed.
+(`{{ runtime_db_role }}`), a generated `RUNTIME_DB_PASSWORD`, and `RUNTIME_DATABASE_URL`. Railway runs
+`./predeploy.sh` (from `railway.json`'s `deploy.preDeployCommand`) before the new deployment
+starts: it applies migrations and creates the database cache table under the superuser
+`DATABASE_URL`. When the deployment boots, `start.sh` connects with `DATABASE_URL` and creates or
+updates that `NOSUPERUSER`/`NOBYPASSRLS` runtime role before serving. A failed pre-deploy step
+aborts promotion and leaves the previous deployment live, but the shared schema may already be
+ahead, so migrations must remain backward-compatible until the new deployment is accepted.
 
 **Manual deploy:** leave `RUNTIME_DB_PASSWORD` unset (`start.sh` then skips role creation) and
-enable RLS enforcement yourself:
+enable RLS enforcement yourself. Run `./predeploy.sh` once against the target database before
+the serving container starts, because the serving container never applies migrations.
 
 1. Connect to your Railway PostgreSQL database:
    ```bash
@@ -85,7 +98,17 @@ enable RLS enforcement yourself:
    RUNTIME_DATABASE_URL=postgresql://{{ runtime_db_role }}:<password>@<host>:<port>/<database>
    ```
 
-4. The app's `start.sh` automatically uses `DATABASE_URL` (superuser) for migrations (with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix) and the app uses `RUNTIME_DATABASE_URL` for runtime requests.
+4. The app's `predeploy.sh` automatically uses `DATABASE_URL` (superuser) for migrations (with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix), and the app uses `RUNTIME_DATABASE_URL` for runtime requests.
+
+## Probes
+
+The generated project serves two separate probes:
+
+- `/healthcheck/` — **liveness**. Returns `200 OK` without touching the database, so a process
+  that is alive but waiting for its database is not restarted.
+- `/ready/` — **readiness**. Returns `200 OK` only while the database is reachable and every
+  migration is applied, and `503 NOT READY` otherwise. Railway uses it as the deployment
+  healthcheck, so a deployment that skipped `./predeploy.sh` is never promoted to serve traffic.
 
 > **Note:** If you change `RUNTIME_DATABASE_URL` after deploying, restart the app services so the new connection takes effect.
 
@@ -126,9 +149,22 @@ The runtime role needs `USAGE` on `public`. If you revoke and recreate the role,
 
 `ALTER DEFAULT PRIVILEGES` must be run as the role that will own future tables (typically the superuser). The init SQL handles this automatically in Docker Compose; for manual deploys, run it as the superuser.
 
+### "Production serving refuses FileSystemStorage"
+
+Uploaded media would live inside the container and disappear on the next redeploy. Configure the
+storage module with an S3-compatible backend in `quickscale.yml` and run `quickscale apply`, or
+set `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` only for a development or test deployment that accepts the
+loss.
+
+### "/ready/ returns 503"
+
+The database is unreachable or at least one migration is unapplied. Run `./predeploy.sh` against
+the target database, then restart the deployment. A liveness failure is separate: `/healthcheck/`
+touches no database.
+
 ### Migrations fail with "permission denied"
 
-Ensure you are running migrations with `DATABASE_URL` (superuser), not `RUNTIME_DATABASE_URL`. The generated `start.sh` handles this automatically with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate` inline prefix. If you run migrations manually:
+Ensure you are running migrations with `DATABASE_URL` (superuser), not `RUNTIME_DATABASE_URL`. The generated `predeploy.sh` handles this automatically with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate` inline prefix. If you run migrations manually:
 
 ```bash
 # Override the runtime URL to use the superuser connection

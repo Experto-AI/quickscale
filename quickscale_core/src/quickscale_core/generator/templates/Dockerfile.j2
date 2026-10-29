@@ -164,9 +164,9 @@ RUN echo "📋 Copying application code..."
 COPY --chown=django:django . .
 RUN echo "✅ Application code copied"
 
-# Make start.sh executable
-RUN chmod +x /app/start.sh && \
-    echo "✅ Startup script configured"
+# Make the launchers executable
+RUN chmod +x /app/start.sh /app/predeploy.sh && \
+    echo "✅ Startup scripts configured"
 
 # Create necessary directories with correct permissions
 RUN echo "📁 Creating application directories..." && \
@@ -203,20 +203,22 @@ RUN echo "📦 Collecting static files..." && \
 # Expose port
 EXPOSE ${PORT}
 
-# Health check - verify the app answers on the healthcheck route.
+# Health check - liveness only. The probe verifies that the process answers on
+# the DB-free /healthcheck/ route. Readiness (/ready/, the database is reached
+# and no migrations are pending) is Railway's healthcheckPath, so a deployment
+# whose pre-deploy bootstrap failed is never promoted to serve traffic.
 # The probe connects over loopback but presents the Host
 # ``healthcheck.railway.app``, which the generated production settings always
 # admit, so it stays valid no matter what ALLOWED_HOSTS a deployment sets.
 # ``urlopen`` raises on error responses and on a refused or stalled
-# connection -- exactly the unhealthy cases -- and the healthcheck route never
-# touches the database.
+# connection -- exactly the unhealthy cases.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:%s/healthcheck/' % os.environ.get('PORT', '8000'), headers={'Host': 'healthcheck.railway.app'}), timeout=5)"
 
-# Run start.sh: it creates the restricted runtime database role, runs
-# migrations, then execs gunicorn. It is the CMD rather than only the
+# Run start.sh: it provisions the restricted runtime database role and execs
+# gunicorn. Schema work runs in ./predeploy.sh before the deployment starts
+# (railway.json deploy.preDeployCommand). It is the CMD rather than only the
 # railway.json startCommand because Railway does not reliably apply
-# Config-as-Code startCommand to newly created services; without start.sh the
-# app boots as a runtime role that was never created. Local docker-compose
-# overrides this command with runserver.
+# Config-as-Code startCommand to newly created services; the readiness endpoint
+# fails closed when a deployment skipped the pre-deploy step.
 CMD ["./start.sh"]

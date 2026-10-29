@@ -635,6 +635,9 @@ class ProjectGenerator:
             {
                 "manage.py",
                 "scripts/lint.sh",
+                # predeploy.sh is a standalone launcher: a manual deployment
+                # runs it directly, so it ships executable.
+                "predeploy.sh",
                 # Note: start.sh is intentionally excluded from executable
                 # mode to preserve backward-compatible generated-output
                 # behavior (it was False in the original file_mappings).

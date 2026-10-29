@@ -379,6 +379,9 @@ def _verify_healthcheck(project: Path, database_url: str) -> None:
             # refuse QUICKSCALE_ALLOW_BYPASSRLS while serving.
             "RUNTIME_DATABASE_URL": database_url,
             "DATABASE_URL": database_url,
+            # The probe boots a test deployment without object storage; it
+            # explicitly accepts container-local media.
+            "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
             "PYTHONPATH": str(project),
         }
     )

@@ -28,11 +28,11 @@ Railway supports infrastructure-as-code through `railway.json` or `railway.toml`
 
 All QuickScale projects generated with `quickscale apply` include a railway.json file that:
 - Uses Dockerfile for consistent builds
-- Delegates runtime startup to `./start.sh`
-- Runs migrations automatically on deployment
+- Runs `./predeploy.sh` as the pre-deploy command (migrations + cache table)
+- Delegates runtime startup to `./start.sh` (runtime role + Gunicorn)
 - Collects static files during the Docker build
 - Starts Gunicorn with environment-driven worker defaults
-- Implements health checks via `/healthcheck/`
+- Gates the deployment on readiness (`/ready/`); `/healthcheck/` stays DB-free liveness
 - Configures restart policy for reliability
 
 #### Benefits of Config as Code
@@ -56,20 +56,21 @@ QuickScale generates this railway.json configuration automatically:
   },
   "deploy": {
     "startCommand": "./start.sh",
+    "preDeployCommand": ["./predeploy.sh"],
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/healthcheck/",
+    "healthcheckPath": "/ready/",
     "healthcheckTimeout": 100
   }
 }
 ```
 
 **Key Features**:
-- **Automatic Migrations**: `./start.sh` runs on every deployment before Gunicorn starts
-- **Static Files**: The Docker build runs `collectstatic`, so runtime startup stays focused on migrations and app boot
+- **Pre-Deploy Migrations**: `./predeploy.sh` runs before the new deployment starts; a failure aborts promotion and leaves the previous deployment live, so migrations must stay backward-compatible
+- **Static Files**: The Docker build runs `collectstatic`, so runtime startup stays focused on role provisioning and app boot
 - **Low-Cost Baseline**: Generated projects default to one Gunicorn worker unless you set `GUNICORN_WORKERS` or `WEB_CONCURRENCY`
 - **Worker Precedence**: `GUNICORN_WORKERS` overrides `WEB_CONCURRENCY`; if neither is set, the generated startup uses `1`
-- **Health Checks**: Railway monitors `/healthcheck/` for service health
+- **Readiness Gate**: Railway monitors `/ready/`, which answers 200 only while the database is reached and no migrations are pending; `/healthcheck/` remains a DB-free liveness probe
 - **Auto-Restart**: Restarts up to 10 times on failure
 
 `numReplicas` is a separate Railway platform setting. If you add it later, it changes how many containers Railway runs, not how many Gunicorn workers each container starts.
@@ -84,9 +85,10 @@ QuickScale generates this railway.json configuration automatically:
 
 **Deploy Configuration**:
 - `startCommand`: Command to start your service
+- `preDeployCommand`: Command(s) to run after build and before the new deployment starts (QuickScale runs `./predeploy.sh` for migrations and the cache table)
 - `restartPolicyType`: `"ON_FAILURE"` (recommended), `"ALWAYS"`, or `"NEVER"`
 - `restartPolicyMaxRetries`: Max restart attempts (default: 10)
-- `healthcheckPath`: Health check endpoint (e.g., `"/health/"`)
+- `healthcheckPath`: Readiness endpoint (QuickScale uses `"/ready/"`; `/healthcheck/` is liveness)
 - `healthcheckTimeout`: Health check timeout in seconds
 - `numReplicas`: Number of replicas (default: 1). QuickScale does not generate this field today; replicas scale container count and are separate from Gunicorn worker count inside each container.
 
@@ -129,13 +131,14 @@ printf '%s' '<value>' | railway variable set DEBUG --stdin --service myapp --ski
 ```bash
 railway up --service myapp        # Uses railway.json automatically
 # Dockerfile: collectstatic runs at build time
-# railway.json startCommand: ./start.sh runs migrations + gunicorn starts
+# railway.json preDeployCommand: ./predeploy.sh runs migrations + cache table
+# railway.json startCommand: ./start.sh provisions the runtime role + gunicorn starts
 ```
 
 **Phase 5: Runtime Role - Automated**
 ```bash
 # Set in the Phase 3 batch: RUNTIME_DB_ROLE, RUNTIME_DB_PASSWORD, RUNTIME_DATABASE_URL.
-# start.sh creates the role with the superuser DATABASE_URL before migrating.
+# predeploy.sh applies the schema first; start.sh creates the role at boot.
 ```
 
 **Benefits**:
@@ -148,36 +151,42 @@ railway up --service myapp        # Uses railway.json automatically
 
 #### Migration Strategies
 
-**QuickScale Approach: In startCommand** ✅ Recommended
+**QuickScale Approach: In preDeployCommand** ✅ Recommended
 ```json
 {
   "deploy": {
+    "preDeployCommand": ["./predeploy.sh"],
     "startCommand": "./start.sh"
   }
 }
 ```
-- ✅ No separate migration step needed
-- ✅ Runs in container environment (not locally)
-- ✅ Migrations guaranteed to run before server starts
+- ✅ Runs after the image is built and before the new deployment is promoted
+- ✅ Runs in the deployment environment with `DATABASE_URL` available
+- ✅ A failed migration aborts promotion and leaves the previous deployment serving; migrations must stay backward-compatible because the shared schema may already be ahead
+- ✅ Keeps schema changes out of the container boot path, so a restarted or replaced container does not replay migrations; rolling back the database is a separate, explicit operation
 - ✅ Generated startup keeps the low-cost baseline at 1 Gunicorn worker unless `GUNICORN_WORKERS` or `WEB_CONCURRENCY` is set
 - ✅ Handles redeployments automatically
-- ⚠️  May delay server start for large migrations (acceptable for most use cases)
+- ⚠️  Holds the deployment (not serving traffic) while a large migration runs
 
-**Alternative: Separate railway run** (Manual control)
+**Alternative: In startCommand** ❌ Not used
 ```json
 {
   "deploy": {
-    "startCommand": "gunicorn myapp.wsgi --bind 0.0.0.0:$PORT"
+    "startCommand": "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput && ./start.sh"
   }
 }
 ```
-Then run: `railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"`
-- ✅ Can monitor migration output directly
-- ✅ Doesn't block server start
-- ❌ Requires manual CLI command after each deployment
-- ❌ Easy to forget migration step
+- ❌ Every boot mutates the schema, including restarts and rollbacks
+- ❌ A failed migration crash-loops the service instead of preserving the previous deployment
+- ❌ Multiple replicas race the same migration
 
-**QuickScale uses the first approach** because it ensures migrations always run and eliminates manual steps.
+**QuickScale uses the first approach** because it makes the schema transition an explicit deployment
+step with a promotion boundary. It does not provide a database rollback: migrations must remain
+backward-compatible until the new deployment is accepted.
+
+**Readiness gate:** the deployment's `healthcheckPath` is `/ready/`. It answers 200 only while the
+database is reached and no migrations are pending, so a deployment that skipped or failed the
+pre-deploy step is never promoted. `/healthcheck/` stays a DB-free liveness probe.
 
 #### Public Domain Generation
 

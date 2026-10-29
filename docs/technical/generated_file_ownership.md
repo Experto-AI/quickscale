@@ -36,12 +36,13 @@ and asserts every emitted file is classified.
    database-selection contract moves to the tool, which re-expresses it
    versioned rather than copying it forward.
 
-2. **``start.sh`` follows the recipient scaffold's identity.**  The fresh
-   scaffold's ``start.sh`` is the effective launcher and is reconciled in
-   place: its embedded slug/package references follow the reconciled
-   identity, so the createcachetable env-pair fix reaches the migrated
-   project through the fresh-first path.  Classified under
-   ``FRESH_FIRST_IDENTITY_ROOT_FILES``.
+2. **``start.sh`` and ``predeploy.sh`` follow the recipient scaffold's
+   identity.** The fresh scaffold's launchers are the effective launchers and
+   are reconciled in place: their embedded slug/package references follow the
+   reconciled identity, so the createcachetable env-pair fix and the
+   pre-deploy schema split reach the migrated project through the fresh-first
+   path. Classified under ``FRESH_FIRST_IDENTITY_ROOT_FILES``; the privileged
+   command contract is read from ``predeploy.sh``.
 
 3. **``INTENTIONALLY_UNMANAGED`` is an explicit-only replacement/merge
    ownership class.** Existing files listed there are deliberately outside

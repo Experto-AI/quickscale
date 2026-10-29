@@ -94,7 +94,8 @@ def railway(
 
     This command uses a config-first approach:
     - railway.json defines build and deployment configuration
-    - Migrations and static files run automatically via startCommand
+    - ./predeploy.sh runs migrations and the cache table before the deployment
+    - ./start.sh provisions the runtime role and starts Gunicorn
     - Public domain is auto-generated and ALLOWED_HOSTS is auto-configured
     """
     project_path = Path.cwd()

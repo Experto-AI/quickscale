@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Railway deployment startup script
-# This script runs migrations and starts the Gunicorn server
+# This script provisions the restricted runtime role and starts Gunicorn.
+# Schema work (migrations and the database cache table) runs in
+# ./predeploy.sh before the deployment starts; railway.json invokes it as
+# deploy.preDeployCommand, and the readiness endpoint fails closed while
+# migrations are pending.
 
 set -e  # Exit on error
 set -u  # Exit on undefined variable
@@ -20,9 +24,9 @@ echo "🚀 Starting deployment..."
 echo "========================================"
 echo ""
 
-echo "📋 Step 1/8: Environment check"
+echo "📋 Step 1/6: Environment check"
 echo "Checking critical environment variables..."
-critical_vars=(DATABASE_URL SECRET_KEY DEBUG DJANGO_SETTINGS_MODULE ALLOWED_HOSTS PORT)
+critical_vars=(DATABASE_URL SECRET_KEY DEBUG DJANGO_SETTINGS_MODULE ALLOWED_HOSTS PORT RUNTIME_DATABASE_URL)
 missing_critical_var=0
 
 for var_name in "${critical_vars[@]}"; do
@@ -39,7 +43,7 @@ if [[ "$missing_critical_var" -eq 1 ]]; then
 fi
 echo ""
 
-echo "📋 Step 2/8: Python environment"
+echo "📋 Step 2/6: Python environment"
 python --version
 echo "Python location: $(which python)"
 echo "Installed packages:"
@@ -49,7 +53,7 @@ echo "Django configuration check:"
 python -c "from django.conf import settings; print(f'ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}')" || echo "⚠️  Could not load Django settings"
 echo ""
 
-echo "📋 Step 3/8: Runtime database role"
+echo "📋 Step 3/6: Runtime database role"
 # When RUNTIME_DB_PASSWORD is set (quickscale deploy railway sets it), create or
 # update the restricted NOSUPERUSER/NOBYPASSRLS role that RUNTIME_DATABASE_URL
 # logs in as, using the superuser DATABASE_URL. Idempotent: every boot re-syncs
@@ -100,30 +104,7 @@ else
 fi
 echo ""
 
-echo "📋 Step 4/8: Database migrations"
-echo "Running migrations..."
-# Set QUICKSCALE_PRIVILEGED_COMMAND and clear RUNTIME_DATABASE_URL so
-# migrations use the superuser DATABASE_URL (the runtime role has
-# NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
-QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
-echo "✅ Migrations completed successfully"
-echo ""
-
-echo "📋 Step 5/8: Cache table setup"
-# Only needed for DatabaseCache — RedisCache is managed automatically.
-# Set QUICKSCALE_PRIVILEGED_COMMAND and clear RUNTIME_DATABASE_URL so
-# createcachetable uses the superuser DATABASE_URL (the runtime role has
-# NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
-if [[ -z "${REDIS_URL:-}" ]]; then
-    echo "REDIS_URL not set — creating database cache table via superuser DATABASE_URL..."
-    QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL="" python manage.py createcachetable
-    echo "✅ Cache table ready"
-else
-    echo "REDIS_URL set — skipping database cache table (using Redis)"
-fi
-echo ""
-
-echo "📋 Step 6/8: Superuser setup"
+echo "📋 Step 4/6: Superuser setup"
 DJANGO_SUPERUSER_USERNAME="${DJANGO_SUPERUSER_USERNAME:-}"
 DJANGO_SUPERUSER_EMAIL="${DJANGO_SUPERUSER_EMAIL:-}"
 DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD:-}"
@@ -145,13 +126,13 @@ else
 fi
 echo ""
 
-echo "📋 Step 7/8: WSGI application check"
+echo "📋 Step 5/6: WSGI application check"
 python -c "from {{ package_name }}.wsgi import application; print(f'✅ WSGI app loaded: {type(application).__name__}')"
 echo ""
 
 gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}"
 
-echo "📋 Step 8/8: Starting Gunicorn"
+echo "📋 Step 6/6: Starting Gunicorn"
 echo "Binding to 0.0.0.0:${PORT:-8000} with ${gunicorn_workers} workers"
 echo "Gunicorn will log all requests below..."
 echo "========================================"

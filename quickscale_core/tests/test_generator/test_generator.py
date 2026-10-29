@@ -322,19 +322,19 @@ class TestGeneratedProjectSa63RegenerationEvidence:
 
     CR-SA63-002/003 regression: verify that a fresh ``quickscale plan/apply``
     (simulated via ``ProjectGenerator``) emits the correct env pairs and
-    bridge code in the generated project's ``start.sh``, ``production.py``,
-    and ``local.py``.
+    bridge code in the generated project's ``predeploy.sh``, ``production.py``,
+    and ``local.py``. Schema work lives in ``predeploy.sh`` (SA321), not in the
+    serving launcher.
     """
 
-    def test_emitted_start_sh_has_createcachetable_env_pair(
+    def test_emitted_predeploy_sh_has_createcachetable_env_pair(
         self, generated_project_path: Path
     ) -> None:
-        """The emitted start.sh must have QUICKSCALE_PRIVILEGED_COMMAND=createcachetable
-        on createcachetable (SA68 Phase 1)."""
-        start_sh = generated_project_path / "start.sh"
-        assert start_sh.exists(), "Generated start.sh not found"
+        """The emitted predeploy.sh must carry the createcachetable env pair."""
+        predeploy_sh = generated_project_path / "predeploy.sh"
+        assert predeploy_sh.exists(), "Generated predeploy.sh not found"
 
-        content = start_sh.read_text()
+        content = predeploy_sh.read_text()
 
         createcachetable_line = next(
             line
@@ -344,11 +344,16 @@ class TestGeneratedProjectSa63RegenerationEvidence:
         assert (
             "QUICKSCALE_PRIVILEGED_COMMAND=createcachetable" in createcachetable_line
         ), (
-            "start.sh createcachetable must carry QUICKSCALE_PRIVILEGED_COMMAND=createcachetable"
+            "predeploy.sh createcachetable must carry "
+            "QUICKSCALE_PRIVILEGED_COMMAND=createcachetable"
         )
         assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
-            "start.sh createcachetable must clear RUNTIME_DATABASE_URL"
+            "predeploy.sh createcachetable must clear RUNTIME_DATABASE_URL"
         )
+
+        start_sh = (generated_project_path / "start.sh").read_text()
+        assert "python manage.py createcachetable" not in start_sh
+        assert "python manage.py migrate" not in start_sh
 
     def test_emitted_production_py_has_explicit_command_contract(
         self, generated_project_path: Path
@@ -759,7 +764,8 @@ class TestSa90MappingDrivenGeneration:
     # Known executable files at emitted-project paths.
     # Note: start.sh is intentionally NOT included to preserve backward
     # compat (original file_mappings had start.sh executable=False).
-    _EXECUTABLE_EMITTED = frozenset({"manage.py", "scripts/lint.sh"})
+    # predeploy.sh has no such history and is a directly runnable launcher.
+    _EXECUTABLE_EMITTED = frozenset({"manage.py", "scripts/lint.sh", "predeploy.sh"})
 
     @staticmethod
     def _get_template_dir() -> Path:
@@ -899,7 +905,7 @@ class TestSa90MappingDrivenGeneration:
     # ------------------------------------------------------------------
 
     def test_executable_files_have_correct_mode(self, tmp_path: Path) -> None:
-        """manage.py and scripts/lint.sh must be executable.
+        """manage.py, scripts/lint.sh, and predeploy.sh must be executable.
 
         Note: start.sh is intentionally NOT executable — see
         ``_EXECUTABLE_EMITTED`` exclusion comment above.  This test

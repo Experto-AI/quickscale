@@ -2182,6 +2182,9 @@ def test_older_settings_updated_to_facade_boot(tmp_path: Path) -> None:
                 "RUNTIME_DATABASE_URL": "postgresql://runtime:pass@localhost:5432/app",
                 "SECRET_KEY": secret_key,
                 "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                # This boot proves the settings contract, not media durability;
+                # a test deployment explicitly accepts container-local media.
+                "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
             }
         )
         return subprocess.run(
@@ -2367,6 +2370,7 @@ def test_legacy_settings_updated_to_facade_boot(tmp_path: Path) -> None:
                 "RUNTIME_DATABASE_URL": "postgresql://runtime:pass@localhost:5432/app",
                 "SECRET_KEY": "legacy-adopted-boot-secret-0123456789abcdef",
                 "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
                 **overrides,
             }
         )
@@ -2572,9 +2576,12 @@ class TestGeneratedProjectRuntimeSmoke:
         The launcher runs with ``RUNTIME_DB_PASSWORD`` set, so its runtime-role
         step executes exactly as a deployment runs it: the privileged URL
         provisions the restricted role and grants, and the server itself serves
-        under that restricted URL. The station then asserts the role really
-        landed with its non-privileged attributes instead of trusting the boot
-        log.
+        under that restricted URL. The station runs ``./predeploy.sh`` first,
+        exactly as railway.json's ``deploy.preDeployCommand`` does, then asserts
+        ``/healthcheck/`` (liveness) and ``/ready/`` (database reached, no
+        pending migrations) both answer ``200 text/plain OK``. The station then
+        asserts the role really landed with its non-privileged attributes
+        instead of trusting the boot log.
         """
         from quickscale_core.generator import ProjectGenerator
 
@@ -2610,11 +2617,31 @@ class TestGeneratedProjectRuntimeSmoke:
                 "SECRET_KEY": (
                     "smoke-boot-probe-secret-0123456789abcdefghijklmnopqrstuvwxyz"
                 ),
+                # This station proves the artifact boots with local media in a
+                # test deployment; production serving refuses it by default.
+                "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
             }
         )
         # A stale ambient service pointer would silently change the cache and
         # role cells the launcher exercises; this station owns its environment.
         environment.pop("REDIS_URL", None)
+
+        # The deployment contract runs the schema bootstrap before the
+        # serving container starts, exactly as railway.json's
+        # deploy.preDeployCommand does.
+        predeploy_result = subprocess.run(
+            ["poetry", "run", "bash", "predeploy.sh"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=environment,
+            timeout=180,
+        )
+        assert predeploy_result.returncode == 0, (
+            "predeploy.sh failed:\n"
+            f"stdout:\n{predeploy_result.stdout}\nstderr:\n{predeploy_result.stderr}"
+        )
+
         server_process = _start_start_sh(project_path, environment)
 
         try:
@@ -2624,6 +2651,8 @@ class TestGeneratedProjectRuntimeSmoke:
                 server_process=server_process,
             )
             _assert_healthcheck_ok(f"http://localhost:{server_port}/healthcheck/")
+            # Readiness proves the pre-deploy migrations reached this database.
+            _assert_healthcheck_ok(f"http://localhost:{server_port}/ready/")
         finally:
             _stop_start_sh(server_process)
 
@@ -3167,7 +3196,7 @@ class TestGeneratedProjectRuntimeSmoke:
         the ``QUICKSCALE_PRIVILEGED_COMMAND`` contract (no bypass hatch,
         CR-SA68-001).
 
-        This e2e test follows the actual generated ``start.sh.j2`` no-Redis
+        This e2e test follows the actual generated ``predeploy.sh.j2`` no-Redis
         path: it sets ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable``
         (not the ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape hatch) alongside
         ``RUNTIME_DATABASE_URL=""``, proving that the orgs boot guard now
@@ -3175,7 +3204,7 @@ class TestGeneratedProjectRuntimeSmoke:
         command and skips the RLS role check without requiring the escape
         hatch.
 
-        This matches the start.sh.j2 invocation at lines 59-61:
+        This matches the predeploy.sh.j2 invocation:
         ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL=""
         python manage.py createcachetable``
         """
@@ -3260,7 +3289,7 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 6: Use the per-test database (already created by the
         # postgres_url fixture).
 
-        # Phase 7: Run createcachetable with the actual start.sh.j2
+        # Phase 7: Run createcachetable with the actual predeploy.sh.j2
         # privileged-command bridge — no QUICKSCALE_ALLOW_BYPASSRLS.
         # Build subprocess env from a copy so we can strip ambient REDIS_URL.
         # The test must prove DatabaseCache/no-Redis path via privileged
@@ -3423,6 +3452,9 @@ class TestGeneratedProjectRuntimeSmoke:
                     "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
+                # This station proves the production CSRF flow; it deliberately
+                # serves a test deployment with container-local media.
+                "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
             }
         )
         production_environment.pop("REDIS_URL", None)

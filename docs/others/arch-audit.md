@@ -70,7 +70,7 @@ test harness now runs under the RLS runtime role.
 | apply → managed files (`settings/modules.py`, `urls_modules.py`, seam `.d.ts`/`.keys.ts`, CI env, operations page, `quickscale_managed/*`) | shared state / hashes | `project_state_hashes.py` + module manifests | every managed output hash-tracked (SA316) |
 | apply → `.quickscale/state.yml` (applied state) and `.quickscale/apply-recovery.yml` (resume pointer) | shared state | `state.yml` | one applied-state owner; the ledger records progress only |
 | `quickscale update` → split branch head → `git subtree pull` → `pyproject.toml` | call / VCS | CLI + remote branch | branch tree proven equal to the seal before pull; lock refreshed once; per-module commits remain |
-| generated boot → `start.sh` → superuser migrate → runtime role → gunicorn | call / privilege | `start.sh` + runtime settings | migrations at every boot; no pre-deploy/rollback |
+| generated boot → `predeploy.sh` (pre-deploy) → `start.sh` (role) → gunicorn | call / privilege | `predeploy.sh` + `start.sh` + runtime settings | migrations once per deployment; readiness gates pending schema; no boot DDL |
 | generated request → `ClientIdentityMiddleware` → RLS GUC → module views | call / trust boundary | orgs + runtime settings | RLS only under runtime role; generated tests run under it |
 | `pg_dump` + captured media → local/remote artifact + sidecars → restore | shared state / external effect | DR engine | DB+media freeze; live env at restore; restore advisory lock |
 | release → split tag/branch + PyPI wheel | build / supply chain | publish/seal scripts | tag is immutable; update reads branch |
@@ -95,8 +95,8 @@ records.
 12 split branches and 12 immutable tags, then an existing project updates from the branch tip,
 regenerates managed wiring, and adopts contract steps. Code at N must read state written by N−1:
 the desired-state schema stays `"1"`, applied state carries the release version plus per-module
-versions, and contract ids union forward. In-flight work: generated project requests during a rolling deploy see `start.sh` migrate
-first (F2); in-flight backups are local files with a 300 s stale heuristic (F3); queued work is
+versions, and contract ids union forward. In-flight work: generated project requests during a rolling deploy see `predeploy.sh` migrate
+first (F2, closed by SA321); in-flight backups are local files with a 300 s stale heuristic (F3); queued work is
 external cron, not an in-process queue. Restore is the other lifecycle branch: it restores a
 database dump under a dedicated advisory lease, and its captured media is restored by the separate
 media-sync surface, while the environment is read live (F3). No claim of safe in-flight upgrade
@@ -142,8 +142,8 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Generated-project tenant isolation | two-organization isolation lane under the restricted runtime role | gated | **closed** (SA318) |
 | Apply state single-writer | `StateManager` + `LedgerManager` + update journal, advisory lock | structural | **strengthened** (SA319 (b): one state write per update set; the journal carries intent only) |
 | Apply resume preserves state | `ApplyExecutor` checkpoint + fault harness | gated, content not asserted | gap |
-| Production migration safety | `start.sh` boot migration | convention | unchanged |
-| Production media durability | docs only; storage module optional | convention | unchanged |
+| Production migration safety | `predeploy.sh` pre-deploy command; `/ready/` refuses pending migrations | gated | **closed** (SA321: schema work leaves boot) |
+| Production media durability | production settings refuse `FileSystemStorage` unless `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` | gated | **closed** (SA321) |
 | DR recovery point | dump + captured media + module/project migration identity; restore advisory lock | gated | **closed** (SA322: captured media restored from the snapshot, project identity enforced, restore serialized) |
 | Tenant removal obligations | app-declared `removal_obligations` | convention (4 of 12 apps declare) | unchanged |
 | CLI public/private surface | split-facade gate | gated, one-directional | stable |
@@ -153,7 +153,7 @@ Lens activation: `active: I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII
 | Rank | ID | Title | Horizon | Conf. | Size | Rev. | Problem |
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module contracts live in user-owned generated files | now | High | M | two-way | Each module API change becomes a manual adoption step recorded by a bulk flag. **Resolved 2026-10-26 by SA320 (c).** |
-| 2 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. |
+| 2 | `generated-deploy-topology-unmodeled` | Generated production topology is prose, not an artifact | now | High | M | two-way | Media is container-local, and schema changes at boot. **Resolved 2026-10-29 by SA321.** |
 
 ## Machine-readable index
 
@@ -170,15 +170,15 @@ items:
                quickscale_core/src/quickscale_core/data/project_contract.yml,
                quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/pages/CrmPage.tsx],
      first_seen: 2026-07-10, last_verified: 2026-10-23}
-  - {id: generated-deploy-topology-unmodeled, status: open, rank: 2,
+  - {id: generated-deploy-topology-unmodeled, status: resolved, rank: 2,
      title: "Generated production topology is prose, not an artifact",
      lenses: [IV, VI, XVI, XIX], horizon: now, confidence: High, size: M,
      reversibility: two-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/README.md.j2,
-               quickscale_core/src/quickscale_core/generator/templates/docker-compose.yml.j2,
-               quickscale_core/src/quickscale_core/generator/templates/start.sh.j2,
-               quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2],
-     first_seen: 2026-10-23, last_verified: 2026-10-23}
+     anchors: [quickscale_core/src/quickscale_core/generator/templates/railway.json.j2,
+               quickscale_core/src/quickscale_core/generator/templates/predeploy.sh.j2,
+               quickscale_core/src/quickscale_core/generator/templates/project_name/urls.py.j2,
+               quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2],
+     first_seen: 2026-10-23, last_verified: 2026-10-29}
 
   - {id: core-holds-module-vocabulary, status: watchlist}
   - {id: manifest-dsl-vocabulary-growth, status: watchlist}
@@ -378,6 +378,16 @@ items:
   gunicorn with `DEBUG=False`, one migrate job, and uploaded files survive a redeploy. **First step:**
   split the Compose file into a dev and a production service definition.
 
+- **Post-snapshot (2026-10-29):** SA321 delivered option 2. `railway.json` runs `./predeploy.sh`
+  as `deploy.preDeployCommand` (migrations then cache table under the superuser URL) and gates the
+  deployment on `/ready/`, which answers 200 only when the database is reached and no migration is
+  pending; `/healthcheck/` stays DB-free liveness. `start.sh` keeps runtime-role provisioning and
+  runs no schema work. Production serving refuses `FileSystemStorage` unless
+  `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` marks a development or test deployment, and the README and
+  decisions name Railway as the one production path. A generated-project test boots production
+  settings and fails closed on local media without the flag; a smoke station runs `predeploy.sh`
+  then `start.sh` and asserts both probes. The finding is closed.
+
 ### Finding 3: Backups cover the database, not a coherent recovery point
 
 ## Change-cost probe
@@ -404,8 +414,8 @@ rendering works.
 ## Fix order and interactions
 
 - **F2 and F3 share media:** F2's production storage backend reduces F3's media gap but does not
-  close it; SA322 captured media and added the restore lease, so F3's remaining exposure is the
-  deploy topology, not the artifact.
+  close it; SA322 captured media and added the restore lease, and SA321 closed the deploy topology
+  with a pre-deploy schema step, a readiness gate, and a local-media refusal.
 - **Ranking already reflects amplification:** F1 is High × High; F2/F3 are High × Medium.
 
 ## Sound load-bearing decisions
@@ -590,6 +600,12 @@ watchlist **6**.
   their resource paths (parameterized paths as typed builders) and payload types; the theme hooks
   import the generated declarations; and the closed-world check rejects a hand-written builder path
   or union alias. The core-template module branches remain for SA320 (c).
+- 2026-10-29 — `generated-deploy-topology-unmodeled`: **resolved** by SA321. `predeploy.sh` owns
+  `migrate` and `createcachetable` as Railway's `deploy.preDeployCommand`; `start.sh` only
+  provisions the runtime role and serves. `/ready/` gates the deployment on a reached database with
+  no pending migrations, `/healthcheck/` stays DB-free liveness, and production serving refuses
+  `FileSystemStorage` unless `QUICKSCALE_ALLOW_LOCAL_MEDIA=1`. README and decisions name Railway as
+  the one production path, and `sa321-production-deploy-contract` carries the adoption step.
 - 2026-10-24 — `generated-file-ownership-unmodeled`: **still-open, slice (a) landed**. SA320 (a)
   generates `frontend/src/quickscaleSeam.hooks.ts` from each active manifest's `frontend_resources`
   section (CRM declares five subpaths and `CrmStats`), moves `CrmPage.tsx` onto it, and extends the

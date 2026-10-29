@@ -22,6 +22,9 @@ from typing import Any, cast
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.db import Error as DatabaseError
+from django.db import connections
+from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpRequest, HttpResponse
 from django.urls import include, path, re_path
 
@@ -29,7 +32,7 @@ from {{ package_name }}.views import react_shell_view
 
 
 def healthcheck(request: HttpRequest) -> HttpResponse:
-    """Simple healthcheck endpoint for Railway and other monitoring services.
+    """Liveness endpoint for Railway and other monitoring services.
 
     Returns HTTP 200 OK without requiring database access or HTTPS redirect.
     This endpoint is exempt from SECURE_SSL_REDIRECT in production settings.
@@ -37,8 +40,30 @@ def healthcheck(request: HttpRequest) -> HttpResponse:
     return HttpResponse("OK", content_type="text/plain", status=200)
 
 
+def readiness(request: HttpRequest) -> HttpResponse:
+    """Readiness endpoint for Railway and other deployment gates.
+
+    Returns HTTP 200 only while the database is reachable and every migration
+    is applied. Returns HTTP 503 otherwise, so a deployment whose pre-deploy
+    ``./predeploy.sh`` step was skipped or failed is never promoted to serve
+    traffic against an outdated schema. This endpoint is exempt from
+    SECURE_SSL_REDIRECT in production settings.
+    """
+    try:
+        connection = connections["default"]
+        connection.ensure_connection()
+        executor = MigrationExecutor(connection)
+        pending_plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    except DatabaseError:
+        return HttpResponse("NOT READY", content_type="text/plain", status=503)
+    if pending_plan:
+        return HttpResponse("NOT READY", content_type="text/plain", status=503)
+    return HttpResponse("OK", content_type="text/plain", status=200)
+
+
 urlpatterns = [
     path("healthcheck/", healthcheck, name="healthcheck"),
+    path("ready/", readiness, name="readiness"),
     path("admin/", admin.site.urls),
     # The managed URLconf holds every module-facing route and include: the
     # theme's shell routes and each installed and enabled module's URLs and

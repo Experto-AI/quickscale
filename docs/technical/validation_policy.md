@@ -316,7 +316,7 @@ depth; fetch a full-history clone before running the gate locally.
 - Stable content-addressed backend image identity across unchanged runs, with measured cold-versus-warm reuse coverage.
 - Run-scoped container, port, volume, and network identity with exact QuickScale owner/lifecycle/scope labels; normal cleanup must remove matching disposable resources and untagged variable images without broad pruning, while `--no-cleanup` preserves diagnostic state.
 - A source-free installed-wheel lifecycle from an external working directory that applies current artifacts for all twelve shipped modules and proves collectstatic, migrations, HTTP service, and exact-label cleanup.
-- A generated artifact boots through its shipped `start.sh` under the shipped production settings and answers `/healthcheck/` with a plain-text `OK`, so a template regression that survives rendered-template assertions still fails the lane.
+- A generated artifact runs its shipped `predeploy.sh` and then boots through its shipped `start.sh` under the shipped production settings, answering `/healthcheck/` (liveness) and `/ready/` (readiness) with a plain-text `OK`, so a template regression that survives rendered-template assertions still fails the lane.
 - Separate from fast CI using `@pytest.mark.e2e`.
 
 **When Required:** each trigger below escalates the work to the `release` tier

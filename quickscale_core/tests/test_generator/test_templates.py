@@ -2860,6 +2860,7 @@ class TestProductionSettingsServingBypassRefusal:
                 "SECRET_KEY": "a-valid-production-secret-key",
                 "DATABASE_URL": db_url,
                 "RUNTIME_DATABASE_URL": runtime_url,
+                "QUICKSCALE_ALLOW_LOCAL_MEDIA": "1",
             },
         )
 
@@ -3924,34 +3925,32 @@ class TestDevOpsTemplateRendering:
         assert len(output) > 0
         assert "#!/usr/bin/env bash" in output
         assert "testproject" in output
-        assert "Step 1/8" in output
-        assert "Step 2/8" in output
-        assert "Step 3/8" in output
-        assert "Step 4/8" in output
-        assert "Step 5/8" in output
-        assert "Step 6/8" in output
-        assert "Step 7/8" in output
-        assert "Step 8/8" in output
+        assert "Step 1/6" in output
+        assert "Step 2/6" in output
+        assert "Step 3/6" in output
+        assert "Step 4/6" in output
+        assert "Step 5/6" in output
+        assert "Step 6/6" in output
 
     def test_start_sh_migration_clears_runtime_url(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """start.sh should clear RUNTIME_DATABASE_URL during migration (CR-T14-004).
+        """predeploy.sh must clear RUNTIME_DATABASE_URL during migration (CR-T14-004).
 
         The deployment environment has RUNTIME_DATABASE_URL set for the
         restricted runtime role.  Running ``migrate`` under that role would
-        fail because the runtime role cannot run DDL.  start.sh must unset
-        RUNTIME_DATABASE_URL for the migration step so that local.py falls
-        back to the superuser DATABASE_URL.
+        fail because the runtime role cannot run DDL.  The pre-deploy script
+        must unset RUNTIME_DATABASE_URL for the migration step so that the
+        superuser DATABASE_URL is used.
         """
-        template = jinja_env.get_template("start.sh.j2")
+        template = jinja_env.get_template("predeploy.sh.j2")
         output = template.render(test_context)
 
         assert 'RUNTIME_DATABASE_URL="" python manage.py migrate' in output, (
-            "start.sh should unset RUNTIME_DATABASE_URL for migrations"
+            "predeploy.sh should unset RUNTIME_DATABASE_URL for migrations"
         )
         assert "cannot run DDL" in output, (
-            "start.sh should explain why RUNTIME_DATABASE_URL is cleared"
+            "predeploy.sh should explain why RUNTIME_DATABASE_URL is cleared"
         )
 
     def test_start_sh_superuser_setup(
@@ -4204,8 +4203,9 @@ class TestDockerfileContent:
         """Dockerfile CMD must run start.sh, not gunicorn directly.
 
         Railway does not reliably apply railway.json's startCommand to new
-        services; a direct gunicorn CMD skips runtime-role creation and
-        migrations, and the app fails password auth as the runtime role.
+        services; a direct gunicorn CMD skips runtime-role provisioning, and
+        the app fails password auth as the runtime role. Schema work stays in
+        the pre-deploy step, which the readiness endpoint enforces.
         """
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)

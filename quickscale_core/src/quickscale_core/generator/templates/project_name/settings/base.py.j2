@@ -154,15 +154,15 @@ DATABASES = {
 # The app can connect with a restricted role (NOSUPERUSER, NOBYPASSRLS) so that
 # per-table Row-Level Security policies are enforced at the database level.
 #
-# - DATABASE_URL: Superuser connection used for migrations (the startup script
-#   temporarily unsets RUNTIME_DATABASE_URL during migrate so schema changes use
-#   the superuser role).
+# - DATABASE_URL: Superuser connection used for migrations (the pre-deploy
+#   bootstrap temporarily clears RUNTIME_DATABASE_URL during migrate so schema
+#   changes use the superuser role).
 # - RUNTIME_DATABASE_URL: Restricted role URL for normal app queries.
 #
 # When RUNTIME_DATABASE_URL is set (runtime role), the app uses it for the
 # default database connection. When unset during runtime serving, production.py
 # raises a clear error instead of silently falling back to the superuser
-# DATABASE_URL (fail-closed). During migrations, the deployment script unsets
+# DATABASE_URL (fail-closed). During migrations, predeploy.sh clears
 # RUNTIME_DATABASE_URL so the superuser DATABASE_URL is used instead.
 # See local.py and production.py for the implementation.
 #
