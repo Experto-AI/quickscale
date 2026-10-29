@@ -2,9 +2,9 @@
 
 T1.13 — DB-level RLS isolation proof under a restricted PostgreSQL role.
 
-These tests verify that ``FORCE ROW LEVEL SECURITY`` on the Form table
-correctly enforces org isolation at the DB layer when
-``app.current_org_id`` is set / unset.
+These tests verify that ``FORCE ROW LEVEL SECURITY`` on all four Forms tenant
+tables correctly enforces org isolation at the DB layer when
+``app.current_org_id`` is set, set to a non-matching value, or unset.
 
 Skipped on non-PostgreSQL databases (SQLite during CI unit tests).
 """
@@ -16,19 +16,31 @@ import uuid
 import pytest
 from django.db import connection
 
-from quickscale_modules_forms.models import Form
+from quickscale_modules_forms.models import (
+    Form,
+    FormField,
+    FormFieldValue,
+    FormSubmission,
+)
 
 # ---------------------------------------------------------------------------
 # Restricted role helpers (mirror the social module pattern)
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
-_FORMS_TABLES = (
-    "quickscale_forms_form",
-    "quickscale_forms_formfield",
-    "quickscale_forms_formsubmission",
-    "quickscale_forms_formfieldvalue",
-)
+_FORMS_TABLE_BY_MODEL = {
+    Form: "quickscale_forms_form",
+    FormField: "quickscale_forms_formfield",
+    FormSubmission: "quickscale_forms_formsubmission",
+    FormFieldValue: "quickscale_forms_formfieldvalue",
+}
+_FORMS_TENANT_MODELS = tuple(_FORMS_TABLE_BY_MODEL)
+_FORMS_TABLES = tuple(_FORMS_TABLE_BY_MODEL.values())
+
+
+def _model_id(model: type) -> str:
+    """Return the model name as a pytest parameter id."""
+    return model.__name__
 
 
 def _ensure_rls_test_role() -> None:
@@ -77,6 +89,54 @@ def _ensure_rls_test_role() -> None:
                 pass
 
 
+def _create_tenant_row(model: type, *, organization: object, suffix: str) -> object:
+    """Create one row of *model* with its parents under the org context."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    set_current_org_id(organization.id)
+    try:
+        form = Form.objects.create(
+            title=f"{suffix} Form",
+            slug=f"{suffix}-form-{organization.slug}",
+            organization=organization,
+        )
+        if model is Form:
+            return form
+        field = FormField.objects.create(
+            form=form,
+            field_type=FormField.FieldType.TEXT,
+            label=f"{suffix} Field",
+            name=f"{suffix}-field",
+            order=1,
+            organization=organization,
+        )
+        if model is FormField:
+            return field
+        submission = FormSubmission.objects.create(
+            form=form,
+            organization=organization,
+        )
+        if model is FormSubmission:
+            return submission
+        return FormFieldValue.objects.create(
+            submission=submission,
+            field=field,
+            field_name=field.name,
+            field_label=field.label,
+            value=f"{suffix} value",
+            organization=organization,
+        )
+    finally:
+        set_current_org_id(None)
+
+
+def _reset_restricted_session(cursor) -> None:
+    """Return the connection to the test role and clear the RLS GUCs."""
+    cursor.execute("RESET ROLE")
+    cursor.execute("RESET app.current_org_id")
+    cursor.execute("RESET app.operator_access")
+
+
 # ---------------------------------------------------------------------------
 # Boundary tests
 # ---------------------------------------------------------------------------
@@ -86,8 +146,9 @@ def _ensure_rls_test_role() -> None:
 class TestFormsRlsBoundaryRestrictedRole:
     """RLS boundary tests under a restricted PostgreSQL role (T1.13).
 
-    Proves that FORCE RLS on the Form table correctly enforces org isolation
-    when ``app.current_org_id`` is set / unset under a non-superuser role.
+    Proves that FORCE RLS on every Forms tenant table correctly enforces org
+    isolation when ``app.current_org_id`` is set, set to a non-matching value,
+    or unset under a non-superuser role.
 
     Skipped on SQLite.
     """
@@ -97,115 +158,70 @@ class TestFormsRlsBoundaryRestrictedRole:
         if connection.vendor != "postgresql":
             pytest.skip("RLS boundary testing requires PostgreSQL")
 
+    @pytest.mark.parametrize("model", _FORMS_TENANT_MODELS, ids=_model_id)
     def test_restricted_role_sees_nothing_with_non_matching_org_context(
-        self, org_a, org_b
+        self, model, org_a
     ) -> None:
-        """With ``app.current_org_id`` set to a bogus UUID, RLS returns zero
-        rows on the Form table (fail-closed at the DB level)."""
+        """A bogus org context returns zero rows on every tenant table."""
         _ensure_rls_test_role()
-
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(org_a.id)
-        try:
-            Form.objects.create(
-                title="Org A Form",
-                slug="org-a-form",
-                organization=org_a,
-            )
-        finally:
-            set_current_org_id(None)
+        _create_tenant_row(model, organization=org_a, suffix="org-a")
+        table = _FORMS_TABLE_BY_MODEL[model]
 
         bogus_org = uuid.uuid4()
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("SET app.current_org_id = %s", [str(bogus_org)])
-                cursor.execute("SELECT COUNT(*) FROM quickscale_forms_form")
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
-                    "RLS should block all forms with a non-matching org context"
+                    f"RLS should block all {table} rows with a non-matching org context"
                 )
             finally:
-                cursor.execute("RESET ROLE")
-                cursor.execute("RESET app.current_org_id")
-                cursor.execute("RESET app.operator_access")
+                _reset_restricted_session(cursor)
 
-    def test_restricted_role_sees_only_own_org_forms(self, org_a, org_b) -> None:
-        """With ``app.current_org_id`` set, a restricted role sees only the
-        owning org's forms and cannot see another org's forms."""
+    @pytest.mark.parametrize("model", _FORMS_TENANT_MODELS, ids=_model_id)
+    def test_restricted_role_sees_only_own_org_rows(self, model, org_a, org_b) -> None:
+        """With the context set, the restricted role sees only that org's row."""
         _ensure_rls_test_role()
-
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(org_a.id)
-        try:
-            Form.objects.create(
-                title="Org A Form",
-                slug="org-a-form",
-                organization=org_a,
-            )
-        finally:
-            set_current_org_id(None)
-
-        set_current_org_id(org_b.id)
-        try:
-            Form.objects.create(
-                title="Org B Form",
-                slug="org-b-form",
-                organization=org_b,
-            )
-        finally:
-            set_current_org_id(None)
+        _create_tenant_row(model, organization=org_a, suffix="org-a")
+        _create_tenant_row(model, organization=org_b, suffix="org-b")
+        table = _FORMS_TABLE_BY_MODEL[model]
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
-                cursor.execute("SET app.current_org_id = %s", [str(org_a.id)])
-                cursor.execute("SELECT title FROM quickscale_forms_form ORDER BY title")
-                titles = [r[0] for r in cursor.fetchall()]
-                assert titles == ["Org A Form"], (
-                    f"Expected only Org A Form, got {titles}"
-                )
-
-                cursor.execute("SET app.current_org_id = %s", [str(org_b.id)])
-                cursor.execute("SELECT title FROM quickscale_forms_form ORDER BY title")
-                titles = [r[0] for r in cursor.fetchall()]
-                assert titles == ["Org B Form"], (
-                    f"Cross-org: expected only Org B Form, got {titles}"
-                )
+                for organization in (org_a, org_b):
+                    cursor.execute(
+                        "SET app.current_org_id = %s", [str(organization.id)]
+                    )
+                    cursor.execute(
+                        f"SELECT organization_id FROM {table} ORDER BY organization_id"
+                    )
+                    org_ids = [str(row[0]) for row in cursor.fetchall()]
+                    assert org_ids == [str(organization.id)], (
+                        f"Cross-org: expected only {organization.slug} rows in "
+                        f"{table}, got {org_ids}"
+                    )
             finally:
-                cursor.execute("RESET ROLE")
-                cursor.execute("RESET app.current_org_id")
-                cursor.execute("RESET app.operator_access")
+                _reset_restricted_session(cursor)
 
-    def test_unset_org_context_returns_zero_rows(self, org_a) -> None:
-        """With no ``app.current_org_id`` set (NULL from current_setting), RLS
-        returns zero rows — fail-closed behavior."""
+    @pytest.mark.parametrize("model", _FORMS_TENANT_MODELS, ids=_model_id)
+    def test_unset_org_context_returns_zero_rows(self, model, org_a) -> None:
+        """No org context returns zero rows on every tenant table."""
         _ensure_rls_test_role()
-
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(org_a.id)
-        try:
-            Form.objects.create(
-                title="Org A Form",
-                slug="org-a-form",
-                organization=org_a,
-            )
-        finally:
-            set_current_org_id(None)
+        _create_tenant_row(model, organization=org_a, suffix="org-a")
+        table = _FORMS_TABLE_BY_MODEL[model]
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
             try:
                 cursor.execute("RESET app.current_org_id")
-                cursor.execute("SELECT COUNT(*) FROM quickscale_forms_form")
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
                 (count,) = cursor.fetchone()
                 assert count == 0, (
-                    "RLS should block all forms when org context is unset (fail-closed)"
+                    f"RLS should block all {table} rows when the org context is "
+                    "unset (fail-closed)"
                 )
             finally:
-                cursor.execute("RESET ROLE")
-                cursor.execute("RESET app.current_org_id")
-                cursor.execute("RESET app.operator_access")
+                _reset_restricted_session(cursor)
