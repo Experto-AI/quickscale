@@ -53,7 +53,7 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA191d (re-proof) | yes: splits sealed; project updated | no: operator gates for (re-proof push), (production), (retire) | yes |
+| 2 | SA191d (production) — Tier 3, plan review required | yes: re-proof passed; operator gate | no: operator gate for (production), (retire) | yes |
 | 3 | SA277 (b) | no: SA191d (production) | no: SA191d (production) | yes |
 
 ### Ownership and merge coordination
@@ -111,15 +111,13 @@ conformance check on `properties.PropertyAgent` and siblings.
   requires (retire), after which the dump and legacy refs remain as recovery artifacts.
 
   **Slices:**
-  - [ ] (re-proof) After the re-cut, update `bap-web` to the 0.89.0 tag, push
-    it to `develop`, and pass the acceptance there as the release's final validation, with CI
-    green (tenant conformance included) and both dependency audits clean apart from the recorded
-    dev-only exception. Check the GitHub Actions run on `develop`; while it fails, fix and push
-    again until it passes (a project defect is fixed in `bap-web`, a QuickScale defect follows the
-    release re-entry loop). The `properties` tenant/personal-data declarations are fixed, the
-    re-cut module splits are republished and sealed, and `bap-web` is updated to them with the
-    refreshed contract adoption; the operator push, hosted CI, and the develop acceptance remain
-    (Tier 2-full).
+  - [x] (re-proof) `bap-web` adopted the re-cut splits and pushed `main` `34551d4f`
+    to `develop` (operator gate); CI `41103839564` passed the test, frontend-lint and
+    tenant-isolation jobs, and the develop acceptance passed. The 2026-10-30 advisory
+    refresh required `89da9a17` (`zod` 4.6.7, dev `undici` and
+    `postcss-selector-parser` patched); CI `41108598169` passed, the audits are clean
+    (the hosted CI has no audit jobs), and the acceptance re-passed with no W007.
+    `develop` runs `89da9a17` (Tier 2-full).
   - [ ] (production) After re-proof and operator approval, ship the same commit and tag: execute `CUTOVER.md` § S4 steps 1–5;
     pass the production acceptance above, retaining the old database and legacy refs.
     **Tier 3: plan review required** — the production database/credential switch can lose data
