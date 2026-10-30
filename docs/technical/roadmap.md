@@ -4,9 +4,10 @@
 
 ## Goal and finish line
 
-Ship 0.89.0 to production. Re-cut the 0.89.0 tag, update `bap-web` to it, prove it on
-`bap-web` `develop`, cut over production to the same tag (SA191d), and publish 0.89.0 to PyPI
-([publish_procedure.md](publish_procedure.md)). 0.89.0 is unpublished; a live 0.88.0 install moves
+Ship 0.89.0 to production. The re-cut 0.89.0 is proven on `bap-web` `develop` (SA191d); fix
+the orgs pins (SA328), review the cutover plan (SA329), cut over production (SA330), publish
+0.89.0 to PyPI (SA331, [publish_procedure.md](publish_procedure.md)), and retire the old
+database (SA332). 0.89.0 is unpublished; a live 0.88.0 install moves
 to it on a fresh database. The property portal (SA153, SA154) starts only after production runs
 0.89.0 and it is on PyPI (see [Deferred — property portal](#deferred-property-portal)).
 
@@ -19,7 +20,7 @@ history.
 Tier 1 is one bounded low-risk concern within direct context fit; Tier 2-fast is a specified
 change with known targets, acceptance, and checks; Tier 2-full is one whose callers, mechanism,
 or environment still need discovery, or that carries an open strategic choice. Audit work is
-sliced to Tier 2, preferably Tier 2-full. Only SA191d (production) and (retire) stay Tier 3 with
+sliced to Tier 2, preferably Tier 2-full. Only SA330 (production) and SA332 (retire) stay Tier 3 with
 plan review: their risk is the irreversible operation itself.
 
 ## Schedule and parallel execution
@@ -28,22 +29,24 @@ plan review: their risk is the irreversible operation itself.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191d | Prove 0.89.0 on `bap-web` `develop`, then cut over production to it in place (delegated, operator-gated) | 2 | — | Required |
-| SA277 | Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt | 3 | SA191d | Optional |
+| SA328 | Fix the stale orgs-module action pins (F-004) before publication | 2 | — | Required |
+| SA329 | Prepare and review the production cutover plan | 2 | SA328 | Required |
+| SA330 | Cut over production to the regenerated `bap-web` in place (operator-gated) | 2 | SA329 | Required |
+| SA331 | Publish 0.89.0 to PyPI | 2 | SA330 | Required |
+| SA332 | Retire the old production database and exposed credentials | 2 | SA330 | Required |
+| SA277 | Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt | 3 | SA330 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: — (portal deferred)
-Track 2: SA191d (re-proof ─► production ─► retire, operator-gated)
-Track 3: SA277 (a) done ─► [SA191d (production)] ─► SA277 (b)
-     release path: re-cut 0.89.0 ─► bap-web adopts it ─► SA191d (re-proof) ─► SA191d (production)
-                   ─► publication ─► SA191d (retire)
+Track 2: SA328 (pins) ─► SA329 (plan) ─► SA330 (production) ─► SA331 (publish) ─► SA332 (retire)
+Track 3: SA277 (a) done ─► [SA330] ─► SA277 (b)
      portal (deferred): publication ─► SA153 ─► SA154
 ```
 
 Arrows are queue order; table dependencies gate ticket completion. SA277 (a) is complete; only
-(b) remains, waiting for SA191d (production). SA191d (production) ships exactly the tag re-proof passed; a
+(b) remains, waiting for SA330. SA330 ships exactly the bytes SA191d (re-proof) and SA328 proved; a
 defect found there follows the release re-entry loop (fix, re-cut, re-proof). Module migration
 history is frozen: a module schema change ships as a new migration, and SA153's tables live in
 the project-owned extension as `0002+` migrations.
@@ -53,14 +56,14 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA191d (production) — Tier 3, plan review required | yes: re-proof passed; operator gate | no: operator gate for (production), (retire) | yes |
-| 3 | SA277 (b) | no: SA191d (production) | no: SA191d (production) | yes |
+| 2 | SA328 | yes: SA191d re-proof passed | no: operator gate for the orgs seal tag | yes |
+| 3 | SA277 (b) | no: SA330 | no: SA330 | yes |
 
 ### Ownership and merge coordination
 
 - Track 1: generated-project templates, the theme and managed hooks, release workflows, and
   the deferred portal.
-- Track 2: `bap-web` cutover (SA191d), with joint publication and deployment; dependency
+- Track 2: `bap-web` cutover and 0.89.0 publication (SA328–SA332), with joint publication and deployment; dependency
   manifests, locks and advisory disposition; module runtime code and tests in billing, CRM, orgs,
   auth, storage, forms, listings and notifications.
 - Track 3: `website_migration/`, apply/update state and CLI commands, the contract-vintage gate,
@@ -84,7 +87,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 2 — cutover
 
-**SA191d context.** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
+**Cutover context (SA328–SA332).** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
 `bap-web` with no users and no production submissions. The regenerated `bap-web` (`~/code/bap-web`)
 declares `auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, and `storage`, the
 `properties` app, and the six BAP forms. The cutover runs **in place**: per environment, a new
@@ -95,37 +98,88 @@ old PostgreSQL 17 service stays as the rollback until acceptance, and DNS is nev
 live in `~/bap-cutover/` (mode 600), never printed or committed. After Railway's 2026-10-21
 incident every old variable is exposed: none is carried, and the old PostgreSQL 17 credentials
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
-defect is fixed in `bap-web`. The module fixes reach `bap-web` as one update to the re-cut
-0.89.0 tag before re-proof. `bap-web` keeps SA153 (h) (public
-property head, crawler summary, sitemap, robots); its `properties` models must be classified in
-the tenant contract, since the 2026-10-26 `develop` CI run failed the tenant isolation
-conformance check on `properties.PropertyAgent` and siblings.
+defect is fixed in `bap-web`. `bap-web` keeps SA153 (h) (public property head, crawler summary,
+sitemap, robots). **Operator decisions (2026-10-30):** production stores media on local disk
+(`QUICKSCALE_ALLOW_LOCAL_MEDIA=1`, ephemeral across redeploys; revisit when real uploads start);
+acceptance proves anonymous submissions only (a logged-in admin resolves its own organization,
+which owns no forms); F-004 is fixed before publication.
 
-- [ ] **SA191d — Cut over production to the regenerated `bap-web` in place (delegated, operator-gated).**
+**Execution model.** Each ticket is handed to an AI session from a cold context; the human only
+approves operator gates (every push, tag push, Railway change, restore, deletion, and PyPI
+upload). Each session starts by measuring state (branches, tags, `origin/develop`,
+`origin/main`, Railway deployment) rather than trusting this text, and ends with a handoff
+note in `bap-web/docs/` and an update to its ticket here.
 
-  One slice per session, each ending with a handoff note in `bap-web/docs/`. Every push, Railway
-  change, and restore is an operator gate. **Production acceptance:** on `https://buenosairesproperties.com`,
-  `/healthcheck/` prints `OK`, `/` and `/contact` render, a form submitted logged in and
-  anonymously reaches `info@buenosairesproperties.com` through Resend, `/admin/` lists it, and
-  the old PostgreSQL 17 service and legacy refs exist for rollback. Ticket completion also
-  requires (retire), after which the dump and legacy refs remain as recovery artifacts.
+- [x] **SA191d — Prove 0.89.0 on `bap-web` `develop` (re-proof).**
 
-  **Slices:**
-  - [x] (re-proof) `bap-web` adopted the re-cut splits and pushed `main` `34551d4f`
-    to `develop` (operator gate); CI `41103839564` passed the test, frontend-lint and
-    tenant-isolation jobs, and the develop acceptance passed. The 2026-10-30 advisory
-    refresh required `89da9a17` (`zod` 4.6.7, dev `undici` and
-    `postcss-selector-parser` patched); CI `41108598169` passed, the audits are clean
-    (the hosted CI has no audit jobs), and the acceptance re-passed with no W007.
-    `develop` runs `89da9a17` (Tier 2-full).
-  - [ ] (production) After re-proof and operator approval, ship the same commit and tag: execute `CUTOVER.md` § S4 steps 1–5;
-    pass the production acceptance above, retaining the old database and legacy refs.
-    **Tier 3: plan review required** — the production database/credential switch can lose data
-    or expose credentials; review restore validation and rollback before execution.
-  - [ ] (retire) After production acceptance and a separate operator gate, execute § S4 step 6:
-    delete the develop Resend webhook and old PostgreSQL 17 service, retire exposed credentials,
-    then rename the new service/volume after 48 hours; verify health and the retained dump/refs.
-    **Tier 3: plan review required** — deleting the old database irreversibly removes live rollback.
+  `bap-web` adopted the re-cut splits and pushed `main` `34551d4f`
+  to `develop` (operator gate); CI `41103839564` passed the test, frontend-lint and
+  tenant-isolation jobs, and the develop acceptance passed. The 2026-10-30 advisory
+  refresh required `89da9a17` (`zod` 4.6.7, dev `undici` and
+  `postcss-selector-parser` patched); CI `41108598169` passed, the audits are clean
+  (the hosted CI has no audit jobs), and the acceptance re-passed with no W007.
+  `develop` runs `89da9a17` (Tier 2-full).
+
+- [ ] **SA328 — Fix the stale orgs-module action pins (F-004) before publication.**
+
+  Fix F-004 in QuickScale: set the action pins in `quickscale_modules/orgs/module.yml`
+  `project_blocks` to the refreshed SHAs `bap-web` already carries, with a test that the
+  managed tenant job matches the canonical pins. Following the publish procedure's re-entry
+  loop: commit on `v89`, re-tag `0.89.0` locally at `HEAD`, `make publish-modules` (only orgs
+  should change), delete the stale orgs seal tag and `make seal-modules VERSION=0.89.0`
+  (operator gates for the remote tag delete and pushes), rebuild the core wheel, and run
+  `quickscale update` in `bap-web`. Expected result: the regenerated tenant region is
+  byte-identical to the current one, so only the module state SHA changes. If any served
+  byte changes, push to `develop` (operator gate) and re-pass the develop acceptance; if
+  nothing served changes, record the parity evidence instead. Done when `make seal-status
+  VERSION=0.89.0` reports 12/12 up to date and `bap-web` `main` records the new orgs SHA
+  (Tier 2-fast).
+
+- [ ] **SA329 — Prepare and review the production cutover plan.**
+
+  Revise `bap-web/CUTOVER.md` § S4 and Rollback for the re-cut stack, with no
+  Railway writes and no pushes: (1) replace the `start.sh`-era boot checks with the
+  `predeploy.sh` (migrate, forms seed) + `/ready/` deploy contract, with stop conditions taken
+  from the develop deploy logs; (2) rebuild the variables table from the develop `bap-web`
+  service's variable names (names only, never values), adding `QUICKSCALE_ALLOW_LOCAL_MEDIA=1`
+  and the production `ALLOWED_HOSTS`; (3) add a step 0 check that old production has no form
+  submissions newer than the 2026-10-22 dump, and a fresh `old-<date>.dump` export as the
+  rollback copy; (4) re-verify the step 3 lease (`782b11c3` must still be `origin/main`) and
+  name the exact `bap-web` commit to ship (the one `develop` proved, plus docs-only commits);
+  (5) align step 5 with SA330's production acceptance (anonymous only); (6) correct the
+  Rollback `dumpdata` app label and drop the stale `hashFiles` CI note. Then a fresh reviewer
+  session reviews the revised S4 against the develop evidence (the Tier 3 plan review); the
+  operator approves the reviewed plan (Tier 2-full).
+
+- [ ] **SA330 — Cut over production to the regenerated `bap-web` in place.**
+
+  **Production acceptance:** on `https://buenosairesproperties.com`,
+  `/healthcheck/` prints `OK`, `/ready/` passes, `/` and `/contact` render, the six form schemas
+  answer, an anonymous submission (private window) reaches `info@buenosairesproperties.com`
+  through Resend with `email.sent` and `email.delivered` webhook events, `/admin/` lists it under
+  the System organization, and the old PostgreSQL 17 service and legacy refs exist for rollback.
+
+  After SA329 is approved, execute the revised `CUTOVER.md` § S4 steps
+  0–5 exactly, each operator gate approved separately; pass the production acceptance,
+  retaining the old database and legacy refs. A failed stop condition goes to Rollback, not
+  improvisation. **Tier 3: plan review required** (done in SA329) — the production
+  database/credential switch can lose data or expose credentials.
+
+- [ ] **SA331 — Publish 0.89.0 to PyPI.**
+
+  After production acceptance, publish 0.89.0 per
+  [publish_procedure.md](publish_procedure.md) Phases 6–7 from the sealed state production
+  runs: confirm the `0.89.0` tag is at `HEAD` and matches the shipped wheel, finalize the
+  CHANGELOG line, push the tag (operator gate; this triggers PyPI), verify the PyPI release
+  and a clean install, then close out (merge `v89` to `main`). PyPI publication is
+  irreversible (Tier 2-full).
+
+- [ ] **SA332 — Retire the old production database and exposed credentials.**
+
+  After SA330 acceptance and a separate operator gate, execute § S4 step 6:
+  delete the develop Resend webhook and old PostgreSQL 17 service, retire exposed credentials,
+  then rename the new service/volume after 48 hours; verify health and the retained dump/refs.
+  **Tier 3: plan review required** — deleting the old database irreversibly removes live rollback.
 
 ### Track 3 — upgrade path
 
@@ -148,7 +202,7 @@ conformance check on `properties.PropertyAgent` and siblings.
   - [x] (a) Renamed "beta migration" to "website migration" (`website_migration` in code, CLI,
     docs and tests); recorded the two-stage path, boundary rule and revocation triggers in
     decisions; removed operator steps either stage covers (Tier 2-fast).
-  - [ ] (b) After SA191d (production), confirm them and the steps count against the cutover
+  - [ ] (b) After SA330, confirm them and the steps count against the cutover
     evidence; validate links and smoke instructions (Tier 1).
 
 ## Deferred constraints and references
@@ -162,7 +216,7 @@ and [validation policy](validation_policy.md#candidate-review-and-integration).
 
 ### Deferred — property portal (Track 1)
 
-Not scheduled. Resumes only when SA191d (production) has passed and 0.89.0 is published; it is then re-added to the
+Not scheduled. Resumes only when SA330 has passed and 0.89.0 is published; it is then re-added to the
 scheduling table on top of the deployed `bap-web`.
 
 **SA153 — Deliver the first property portal using project-owned extensions.**
