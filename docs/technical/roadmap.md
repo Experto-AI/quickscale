@@ -5,7 +5,8 @@
 ## Goal and finish line
 
 Ship 0.89.0 to production. The re-cut 0.89.0 is proven on `bap-web` `develop` (SA191d) and
-the orgs pins are fixed (SA328); review the cutover plan (SA329), cut over production (SA330),
+the orgs pins are fixed (SA328); re-prove the ship candidate on `develop` and review the
+cutover plan (SA329), cut over production (SA330),
 publish 0.89.0 to PyPI (SA331, [publish_procedure.md](publish_procedure.md)), and retire the
 old database (SA332). 0.89.0 is unpublished; a live 0.88.0 install moves
 to it on a fresh database. The property portal (SA153, SA154) starts only after production runs
@@ -55,7 +56,7 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA329 | yes: SA328 sealed and bap-web updated | no: operator approval of the reviewed plan | yes |
+| 2 | SA329 (§ S3b develop re-proof) | yes: SA328 sealed and bap-web updated | no: S3b on develop, then operator approval of the plan | yes |
 | 3 | SA277 (b) | no: SA330 | no: SA330 | yes |
 
 ### Ownership and merge coordination
@@ -129,11 +130,18 @@ note in `bap-web/docs/` and an update to its ticket here.
   with stop conditions from the develop deploy logs; the production variables table rebuilt
   from the develop service's names, with `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` and the production
   `ALLOWED_HOSTS`; a step 0 submission check plus a fresh `old-<date>.dump` rollback copy; the
-  lease re-verified (`782b11c3` is still `origin/main`) and the ship commit fixed at `89da9a17`;
-  step 5 aligned with SA330's anonymous-only acceptance; and the Rollback `dumpdata` label
-  (`quickscale_forms`) and stale `hashFiles` note corrected. Handoff:
-  `bap-web/docs/sa329-cutover-plan.md`. Remaining: operator approval of the reviewed plan, then
-  SA330 (Tier 2-full).
+  lease re-verified (`782b11c3` is still `origin/main`); step 5 aligned with SA330's
+  anonymous-only acceptance; and the Rollback `dumpdata` label (`quickscale_forms`) and stale
+  `hashFiles` note corrected. Handoff: `bap-web/docs/sa329-cutover-plan.md`.
+
+  **Production-shaped develop re-proof (operator decision 2026-10-31).** Production ships only
+  a tree `develop` has run the way production will. `89da9a17` lacks the never-deployed SA328
+  pin refresh on local `main`, so new `CUTOVER.md` § S3b freezes `main` as `SHIP_SHA`, checks
+  develop/production variable-name parity, pushes and deploys it to `develop` (operator gates),
+  passes CI and the SA330 acceptance on the develop host, and records the evidence; § S4 then
+  ships `$SHIP_SHA` (must equal `origin/develop`). A failure is fixed in `bap-web` or follows
+  the release re-entry loop, then S3b re-runs. Remaining: S3b, operator approval of the plan,
+  then SA330 (Tier 2-full).
 
 - [ ] **SA330 — Cut over production to the regenerated `bap-web` in place.**
 
