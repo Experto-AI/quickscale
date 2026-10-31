@@ -56,7 +56,7 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA329 (§ S3b re-proof complete; ship frozen) | yes: SA328 sealed and bap-web updated | no: operator approval of the plan, then SA330 | yes |
+| 2 | SA329 (§ S3b + listings-off re-proof complete; ship frozen) | yes: SA328 sealed and bap-web updated | no: operator approval of the plan, then SA330 | yes |
 | 3 | SA277 (b) | no: SA330 | no: SA330 | yes |
 
 ### Ownership and merge coordination
@@ -141,7 +141,16 @@ note in `bap-web/docs/` and an update to its ticket here.
   review ran two rounds and stopped clean. CI `41197270958` passed; deploy `bb37c3b6` is
   healthy with no W007; anonymous submission #5 (marker `SA329-S3B-20261031T113449Z`) is
   `delivered` with both webhook events, and the operator confirmed the email and the admin
-  listing. Remaining: operator approval of the plan, then SA330 (Tier 2-full).
+  listing.
+
+  **Public listings decision (operator decision 2026-10-31).** Public listings stay OFF via
+  `PUBLIC_LISTINGS_ENABLED=False` (variable only; no code change). Develop was set to the
+  13-name table and redeployed `86ba951b` (deploy `7d921cb7`); the acceptance passed with the
+  seam `false`, `/api/properties/` 404, no `/properties/<slug>/` sitemap details (the static
+  route remains), no "Propiedades" nav, and submission #6 delivered with both webhook events;
+  the operator confirmed the email and the admin listing. Post-cutover follow-ups: omit the
+  static `/properties/` sitemap entry while listings are disabled, and delete the 12 demo
+  listings (operator-gated). Remaining: operator approval of the plan, then SA330 (Tier 2-full).
 
 - [ ] **SA330 — Cut over production to the regenerated `bap-web` in place.**
 
