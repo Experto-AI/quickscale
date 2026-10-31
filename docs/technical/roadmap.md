@@ -148,6 +148,13 @@ note in `bap-web/docs/` and an update to its ticket here.
   then rename the new service/volume after 48 hours; verify health and the retained dump/refs.
   **Tier 3: plan review required** — deleting the old database irreversibly removes live rollback.
 
+  Progress (2026-10-31, operator-requested): production's old PostgreSQL 17 service `Postgres`
+  (`39a653de`) and its volume `postgres-volume` (`734689eb`) are deleted, after confirming
+  `bap-web` only points at `postgres-wzz.railway.internal` and that
+  `~/bap-cutover/old-2026-10-31.dump` is readable (23 tables of data). `/ready/` stayed 200.
+  Still to do: the develop Resend webhook, retiring the exposed credentials, any old
+  database on `develop`, and the 48-hour rename.
+
 ### Track 3 — upgrade path
 
 - [ ] **SA277 — Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt.**
@@ -186,6 +193,23 @@ Project-owned follow-ups after SA330 acceptance; they are not QuickScale tickets
 - Omit the static `/properties/` sitemap entry while public listings are disabled; it currently
   serves a not-found page with HTTP 200.
 - Delete the 12 demo listings from the production database (operator-gated).
+
+### Deferred — tenant admin default organization (QuickScale, orgs module)
+
+Found after SA330 (2026-10-31): production `/admin/` shows empty Forms and Form submissions
+changelists although the submission exists (`__system__`). Not a data defect: `TenantModelAdmin`
+(`quickscale_modules_orgs/admin.py`) resolves the organization from VIEW-AS, then the
+`organization__id__exact` filter, then the session, and otherwise fails closed (empty list,
+HTTP 200). `develop` showed rows only because that admin session had already picked an
+organization; a fresh production session had none. Workaround: choose **System** in the
+changelist's "organization" filter, or use VIEW-AS on System in Organizations.
+
+Fix (Tier 2-fast; a module change, so after SA331 per the frozen-release rule, or through the
+re-entry loop if the operator deems it blocking): when a platform operator has no resolved
+organization and exactly one non-personal organization exists, or the System organization
+exists, default to it, and show an "organization not selected" notice instead of a silent empty
+list. **Acceptance:** a fresh superuser session lists System forms and submissions under the
+restricted runtime role; non-operators still fail closed; tests cover both.
 
 <a id="deferred-property-portal"></a>
 
