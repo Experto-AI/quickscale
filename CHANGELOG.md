@@ -193,9 +193,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     longer carries the seal's tree, and refreshes `poetry.lock` once for the whole updated set;
     `make check-module-seals` also fails when a published split branch moved away from its seal.
   - **Generated tenant isolation runs under the restricted role.** A project with `orgs` gets a
-    `tenant-isolation` CI lane that creates a `NOSUPERUSER/NOBYPASSRLS` test role and runs a
-    two-organization isolation template; production settings refuse the
-    `QUICKSCALE_ALLOW_BYPASSRLS` serving escape hatch.
+    `tenant-isolation` CI lane that creates a `NOSUPERUSER/NOBYPASSRLS` test role, runs a
+    two-organization isolation template, and pins the same GitHub Action releases as the generated
+    workflow; production settings refuse the `QUICKSCALE_ALLOW_BYPASSRLS` serving escape hatch.
   - **Module updates are one journaled transaction.** `quickscale update` records the module set and
     its verified targets in `.quickscale/update-journal.yml` before the first pull, writes
     `.quickscale/state.yml` once for the set, and commits the set once; the next run resumes an

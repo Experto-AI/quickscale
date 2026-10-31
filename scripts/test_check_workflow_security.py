@@ -32,7 +32,7 @@ PINNED_ZIZMOR = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["po
     "dev"
 ]["dependencies"]["zizmor"]
 
-PINNED_CHECKOUT = "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0"
+PINNED_CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 
 
 def _run(arguments: list[str], path: str | None = None) -> subprocess.CompletedProcess[str]:

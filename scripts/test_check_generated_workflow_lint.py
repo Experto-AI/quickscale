@@ -25,7 +25,7 @@ import scripts.check_generated_workflow_lint as lint_gate
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKER = REPO_ROOT / "scripts" / "check_generated_workflow_lint.py"
 REAL_ACTIONLINT = shutil.which("actionlint")
-PINNED_CHECKOUT = "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0"
+PINNED_CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 
 
 def _run(
