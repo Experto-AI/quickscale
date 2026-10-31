@@ -5,12 +5,12 @@
 ## Goal and finish line
 
 Ship 0.89.0 to production. The re-cut 0.89.0 is proven on `bap-web` `develop` (SA191d), the
-orgs pins are fixed (SA328), and the cutover plan is approved (SA329); cut over production
-(SA330) at `SHIP_SHA` `86ba951b`,
-publish 0.89.0 to PyPI (SA331, [publish_procedure.md](publish_procedure.md)), and retire the
-old database (SA332). 0.89.0 is unpublished; a live 0.88.0 install moves
-to it on a fresh database. The property portal (SA153, SA154) starts only after production runs
-0.89.0 and it is on PyPI (see [Deferred — property portal](#deferred-property-portal)).
+orgs pins are fixed (SA328), the cutover plan is approved (SA329), and production runs it
+(SA330) at `SHIP_SHA` `86ba951b`; publish 0.89.0 to PyPI (SA331,
+[publish_procedure.md](publish_procedure.md)), and retire the old database (SA332). 0.89.0 is
+unpublished; a live 0.88.0 install moves to it on a fresh database. The property portal
+(SA153, SA154) starts only after production runs 0.89.0 and it is on PyPI (see
+[Deferred — property portal](#deferred-property-portal)).
 
 The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
 context, scope, acceptance, and each slice's tier; [CHANGELOG.md](../../CHANGELOG.md) preserves
@@ -21,8 +21,8 @@ history.
 Tier 1 is one bounded low-risk concern within direct context fit; Tier 2-fast is a specified
 change with known targets, acceptance, and checks; Tier 2-full is one whose callers, mechanism,
 or environment still need discovery, or that carries an open strategic choice. Audit work is
-sliced to Tier 2, preferably Tier 2-full. Only SA330 (production) and SA332 (retire) stay Tier 3 with
-plan review: their risk is the irreversible operation itself.
+sliced to Tier 2, preferably Tier 2-full. SA330 (production, done) and SA332 (retire) are the only
+Tier 3 slices with plan review: their risk is the irreversible operation itself.
 
 ## Schedule and parallel execution
 
@@ -30,24 +30,23 @@ plan review: their risk is the irreversible operation itself.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA330 | Cut over production to the regenerated `bap-web` in place (operator-gated) | 2 | — | Required |
-| SA331 | Publish 0.89.0 to PyPI | 2 | SA330 | Required |
-| SA332 | Retire the old production database and exposed credentials | 2 | SA330 | Required |
-| SA277 | Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt | 3 | SA330 | Optional |
+| SA331 | Publish 0.89.0 to PyPI | 2 | — | Required |
+| SA332 | Retire the old production database and exposed credentials | 2 | — | Required |
+| SA277 | Define the upgrade path for newer projects as `website_migration` code plus a maintained prompt | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: — (portal deferred)
-Track 2: SA330 (production) ─► SA331 (publish) ─► SA332 (retire)
-Track 3: SA277 (a) done ─► [SA330] ─► SA277 (b)
+Track 2: SA330 (production) done ─► SA331 (publish) ─► SA332 (retire)
+Track 3: SA277 (a) done ─► SA277 (b)
      portal (deferred): publication ─► SA153 ─► SA154
 ```
 
 Arrows are queue order; table dependencies gate ticket completion. SA277 (a) is complete; only
-(b) remains, waiting for SA330. SA330 ships exactly `SHIP_SHA` `86ba951b`, the tree § S3b proved
-on `develop` (including the SA328 pin refresh and the listings-off gate); a defect found there
-follows the release re-entry loop (fix, re-cut, re-proof). Module migration
+(b) remains, unblocked by SA330 acceptance. SA330 shipped exactly `SHIP_SHA` `86ba951b`, the
+tree § S3b proved on `develop` (including the SA328 pin refresh and the listings-off gate); a
+defect found there follows the release re-entry loop (fix, re-cut, re-proof). Module migration
 history is frozen: a module schema change ships as a new migration, and SA153's tables live in
 the project-owned extension as `0002+` migrations.
 
@@ -56,8 +55,8 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA330 | yes: SA329 approved; ship frozen at 86ba951b | no: production acceptance | yes |
-| 3 | SA277 (b) | no: SA330 | no: SA330 | yes |
+| 2 | SA331 | yes: SA330 accepted; 0.89.0 unpublished | no: PyPI upload | yes |
+| 3 | SA277 (b) | yes: SA330 accepted | yes: cutover evidence available | yes |
 
 ### Ownership and merge coordination
 
@@ -87,15 +86,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 2 — cutover
 
-**Cutover context (SA328–SA332).** Old `bap-web` (`~/code/bap-web-old`) serves production on Railway project
-`bap-web` with no users and no production submissions. The regenerated `bap-web` (`~/code/bap-web`)
-declares `auth`, `listings`, `forms`, `analytics`, `notifications`, `orgs`, and `storage`, the
-`properties` app, and the six BAP forms. The cutover runs **in place**: per environment, a new
-PostgreSQL 18 service restored from `~/bap-cutover/new-2026-10-22.dump`, new variables, and a
-force-push over the unrelated history (kept as `legacy-main`, `legacy-develop`, `v-legacy`); the
-old PostgreSQL 17 service stays as the rollback until acceptance, and DNS is never touched.
-`develop` runs `86ba951b` with public listings off (rehearsed 2026-10-23; re-proved 2026-10-31).
-The procedure and its run record are `bap-web/CUTOVER.md`. Secrets
+**Cutover context (SA328–SA332).** The old `bap-web` (`~/code/bap-web-old`) served production on
+Railway project `bap-web` with no users and no production submissions until the 2026-10-31 switch.
+The regenerated `bap-web` (`~/code/bap-web`) declares `auth`, `listings`, `forms`, `analytics`,
+`notifications`, `orgs`, and `storage`, the `properties` app, and the six BAP forms. The cutover
+ran **in place**: per environment, a new PostgreSQL 18 service restored from
+`~/bap-cutover/new-2026-10-22.dump`, new variables, and a force-push over the unrelated history
+(kept as `legacy-main`, `legacy-develop`, `v-legacy`); the old PostgreSQL 17 service stays as the
+rollback until SA332 retirement, and DNS is never touched. `develop` runs `86ba951b` with public
+listings off (rehearsed 2026-10-23; re-proved 2026-10-31). The procedure is
+`bap-web/CUTOVER.md`; the switch record is `bap-web/docs/sa330-cutover.md`. Secrets
 live in `~/bap-cutover/` (mode 600), never printed or committed. After Railway's 2026-10-21
 incident every old variable is exposed: none is carried, and the old PostgreSQL 17 credentials
 are retired after the cutover. A QuickScale defect follows the release re-entry loop; a project
@@ -130,34 +130,7 @@ note in `bap-web/docs/` and an update to its ticket here.
   Operator-approved 2026-10-31 at `SHIP_SHA` `86ba951b`. Handoff:
   `bap-web/docs/sa329-cutover-plan.md`.
 
-- [ ] **SA330 — Cut over production to the regenerated `bap-web` in place.**
-
-  **Ship exactly `SHIP_SHA` `86ba951b88e8db64d32c270f3d9282b2dac36493`; it must equal
-  `origin/develop`.** It is the tree `develop` proved in § S3b with the production-shaped
-  deploy and acceptance.
-
-  **bap-web docs.** The local-only docs commits after `86ba951b`, up to `4e559dc6`, are never
-  pushed to `main` before acceptance; they can follow later as a docs-only descendant.
-
-  **Production variables.** Use the 13-name § S4 step 2 table, including
-  `PUBLIC_LISTINGS_ENABLED=False`; delete the 10 legacy names (`EMAIL_*`,
-  `DEFAULT_FROM_EMAIL`, `DJANGO_SUPERUSER_*`).
-
-  **Acceptance.** The § S4 step 5 list, including the listings-off checks: the home seam
-  `publicListingsEnabled: false`, `/api/properties/` 404, no `/properties/<slug>/` sitemap
-  details (the static `/properties/` entry is an accepted exception), and no "Propiedades"
-  nav. `/healthcheck/` and `/ready/` `OK`; `/` and `/contact` render; the six form schemas
-  answer; an anonymous `consulta-general` submission (private window) reaches
-  `info@buenosairesproperties.com` through Resend with `email.sent` and `email.delivered`;
-  `/admin/` lists it under the System organization; the old PostgreSQL 17 service and legacy
-  refs exist for rollback.
-
-  **Lease.** `origin/main` must be `782b11c316b9255151596439fe6ce677c15d7680`.
-
-  Execute `CUTOVER.md` § S4 step 0 first, then each operator gate separately; a failed stop
-  condition goes to Rollback. Retain the old database and legacy refs. **Tier 3: plan review
-  approved in SA329** — the production database/credential switch can lose data or expose
-  credentials.
+- [x] **SA330 — Cut over production to the regenerated `bap-web` in place.**
 
 - [ ] **SA331 — Publish 0.89.0 to PyPI.**
 
