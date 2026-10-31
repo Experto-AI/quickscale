@@ -56,7 +56,7 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA329 (§ S3b develop re-proof) | yes: SA328 sealed and bap-web updated | no: S3b on develop, then operator approval of the plan | yes |
+| 2 | SA329 (§ S3b develop re-proof; ship frozen) | yes: SA328 sealed and bap-web updated | no: operator gates 3–5 (push, deploy, acceptance), then plan approval | yes |
 | 3 | SA277 (b) | no: SA330 | no: SA330 | yes |
 
 ### Ownership and merge coordination
@@ -135,13 +135,13 @@ note in `bap-web/docs/` and an update to its ticket here.
   `hashFiles` note corrected. Handoff: `bap-web/docs/sa329-cutover-plan.md`.
 
   **Production-shaped develop re-proof (operator decision 2026-10-31).** Production ships only
-  a tree `develop` has run the way production will. `89da9a17` lacks the never-deployed SA328
-  pin refresh on local `main`, so new `CUTOVER.md` § S3b freezes `main` as `SHIP_SHA`, checks
-  develop/production variable-name parity, pushes and deploys it to `develop` (operator gates),
-  passes CI and the SA330 acceptance on the develop host, and records the evidence; § S4 then
-  ships `$SHIP_SHA` (must equal `origin/develop`). A failure is fixed in `bap-web` or follows
-  the release re-entry loop, then S3b re-runs. Remaining: S3b, operator approval of the plan,
-  then SA330 (Tier 2-full).
+  a tree `develop` has run the way production will. `CUTOVER.md` § S3b now freezes `main` as
+  `SHIP_SHA`, checks develop/production variable-name parity, deploys it to `develop` (operator
+  gates) and passes the develop acceptance; § S4 then ships `$SHIP_SHA` (must equal
+  `origin/develop`). The S3b + S4 ship-commit delta review ran two rounds and stopped clean;
+  `SHIP_SHA` is frozen at `86ba951b` and the parity check passed (develop = the S4 table;
+  production differs only by the known S4 step 2 sets). Remaining: operator gates 3–5
+  (develop push, deploy, acceptance), then operator approval, then SA330 (Tier 2-full).
 
 - [ ] **SA330 — Cut over production to the regenerated `bap-web` in place.**
 
