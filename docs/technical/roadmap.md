@@ -123,19 +123,17 @@ note in `bap-web/docs/` and an update to its ticket here.
 
 - [ ] **SA329 — Prepare and review the production cutover plan.**
 
-  Revise `bap-web/CUTOVER.md` § S4 and Rollback for the re-cut stack, with no
-  Railway writes and no pushes: (1) replace the `start.sh`-era boot checks with the
-  `predeploy.sh` (migrate, forms seed) + `/ready/` deploy contract, with stop conditions taken
-  from the develop deploy logs; (2) rebuild the variables table from the develop `bap-web`
-  service's variable names (names only, never values), adding `QUICKSCALE_ALLOW_LOCAL_MEDIA=1`
-  and the production `ALLOWED_HOSTS`; (3) add a step 0 check that old production has no form
-  submissions newer than the 2026-10-22 dump, and a fresh `old-<date>.dump` export as the
-  rollback copy; (4) re-verify the step 3 lease (`782b11c3` must still be `origin/main`) and
-  name the exact `bap-web` commit to ship (the one `develop` proved, plus docs-only commits);
-  (5) align step 5 with SA330's production acceptance (anonymous only); (6) correct the
-  Rollback `dumpdata` app label and drop the stale `hashFiles` CI note. Then a fresh reviewer
-  session reviews the revised S4 against the develop evidence (the Tier 3 plan review); the
-  operator approves the reviewed plan (Tier 2-full).
+  Revised 2026-10-31 and reviewed against the develop evidence (the Tier 3 plan review; four
+  review rounds, clean): `bap-web/CUTOVER.md` § S4 + Rollback now carry the `predeploy.sh`
+  (migrate, cache table) + `start.sh` (runtime role, forms seed, Gunicorn) + `/ready/` contract
+  with stop conditions from the develop deploy logs; the production variables table rebuilt
+  from the develop service's names, with `QUICKSCALE_ALLOW_LOCAL_MEDIA=1` and the production
+  `ALLOWED_HOSTS`; a step 0 submission check plus a fresh `old-<date>.dump` rollback copy; the
+  lease re-verified (`782b11c3` is still `origin/main`) and the ship commit fixed at `89da9a17`;
+  step 5 aligned with SA330's anonymous-only acceptance; and the Rollback `dumpdata` label
+  (`quickscale_forms`) and stale `hashFiles` note corrected. Handoff:
+  `bap-web/docs/sa329-cutover-plan.md`. Remaining: operator approval of the reviewed plan, then
+  SA330 (Tier 2-full).
 
 - [ ] **SA330 — Cut over production to the regenerated `bap-web` in place.**
 
