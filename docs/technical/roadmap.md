@@ -29,8 +29,7 @@ plan review: their risk is the irreversible operation itself.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA328 | Fix the stale orgs-module action pins (F-004) before publication | 2 | — | Required |
-| SA329 | Prepare and review the production cutover plan | 2 | SA328 | Required |
+| SA329 | Prepare and review the production cutover plan | 2 | — | Required |
 | SA330 | Cut over production to the regenerated `bap-web` in place (operator-gated) | 2 | SA329 | Required |
 | SA331 | Publish 0.89.0 to PyPI | 2 | SA330 | Required |
 | SA332 | Retire the old production database and exposed credentials | 2 | SA330 | Required |
@@ -56,7 +55,7 @@ the project-owned extension as `0002+` migrations.
 | Track | Next ticket / slice | Can start | Can finish | Can merge |
 |---|---|---|---|---|
 | 1 | — (portal deferred) | no: nothing queued | no: nothing queued | yes |
-| 2 | SA328 | yes: SA191d re-proof passed | no: operator gate for the orgs seal tag | yes |
+| 2 | SA329 | yes: SA328 sealed and bap-web updated | no: operator approval of the reviewed plan | yes |
 | 3 | SA277 (b) | no: SA330 | no: SA330 | yes |
 
 ### Ownership and merge coordination
@@ -120,19 +119,7 @@ note in `bap-web/docs/` and an update to its ticket here.
   (the hosted CI has no audit jobs), and the acceptance re-passed with no W007.
   `develop` runs `89da9a17` (Tier 2-full).
 
-- [ ] **SA328 — Fix the stale orgs-module action pins (F-004) before publication.**
-
-  Fix F-004 in QuickScale: `quickscale_modules/orgs/module.yml` `project_blocks` now pins
-  checkout v7.0.1, setup-python v7.1.0 and cache v6.1.0, the refreshed SHAs `bap-web`
-  carries; `quickscale_core/tests/test_manifest_project_blocks.py` binds the managed tenant
-  job to the generated workflow's canonical pins. Rendering the region for `bap_web` is
-  byte-identical to the current one, so only the orgs module state SHA changes. Remaining
-  re-entry loop (operator gates for the remote tag delete and pushes): commit on `v89`,
-  re-tag `0.89.0` locally at `HEAD`, `make publish-modules` (only orgs should change),
-  delete the stale orgs seal tag and `make seal-modules VERSION=0.89.0`, rebuild the core
-  wheel, and run `quickscale update` in `bap-web`. If any served byte changes, push to
-  `develop` and re-pass the develop acceptance. Done when `make seal-status VERSION=0.89.0`
-  reports 12/12 up to date and `bap-web` `main` records the new orgs SHA (Tier 2-fast).
+- [x] **SA328 — Fix the stale orgs-module action pins (F-004) before publication.**
 
 - [ ] **SA329 — Prepare and review the production cutover plan.**
 
