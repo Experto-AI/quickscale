@@ -4,10 +4,10 @@
 
 ## Goal and finish line
 
-Ship 0.89.0 to production. The re-cut 0.89.0 is proven on `bap-web` `develop` (SA191d); fix
-the orgs pins (SA328), review the cutover plan (SA329), cut over production (SA330), publish
-0.89.0 to PyPI (SA331, [publish_procedure.md](publish_procedure.md)), and retire the old
-database (SA332). 0.89.0 is unpublished; a live 0.88.0 install moves
+Ship 0.89.0 to production. The re-cut 0.89.0 is proven on `bap-web` `develop` (SA191d) and
+the orgs pins are fixed (SA328); review the cutover plan (SA329), cut over production (SA330),
+publish 0.89.0 to PyPI (SA331, [publish_procedure.md](publish_procedure.md)), and retire the
+old database (SA332). 0.89.0 is unpublished; a live 0.88.0 install moves
 to it on a fresh database. The property portal (SA153, SA154) starts only after production runs
 0.89.0 and it is on PyPI (see [Deferred — property portal](#deferred-property-portal)).
 
