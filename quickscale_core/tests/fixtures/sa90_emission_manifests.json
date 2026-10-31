@@ -101,7 +101,8 @@
     "sa320": "Regenerated 2026-10-24 \u2014 the generated theme gains the managed frontend/src/quickscaleSeam.hooks.ts rendered from each active manifest's frontend_resources declaration; CrmPage.tsx imports CRM_RESOURCE_PATHS and CrmStats from it instead of declaring the five subpaths and the response interface, and the managed seam path list gains the hook file (SA320). All three variants gain 1 path (frontend/src/quickscaleSeam.hooks.ts) and change 1 hash (frontend/src/pages/CrmPage.tsx). All unrelated paths, hashes, and modes remain authoritative.",
     "sa320b": "Regenerated 2026-10-26 \u2014 the remaining theme module payload types and resource paths move onto the managed frontend/src/quickscaleSeam.hooks.ts (SA320 slice b): the manifest frontend_resources grammar gains parameterized paths rendered as typed builders and optional/nullable/array/reference/union type forms; orgs, billing, social and forms declare their contracts; the org, form and social hooks import the generated types and builders, and the social client no longer carries a fallback endpoint literal. 10 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgs.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/quickscaleSeam.hooks.ts, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/useApiErrors.test.ts, frontend/src/test/useOrgs.test.tsx. All unrelated paths, hashes, and modes remain authoritative.",
     "sa320c": "Regenerated 2026-10-26 \u2014 module-specific generated-project blocks move into module-declared managed regions (SA320 slice c): the Makefile, CI workflow, and docker-compose backend environment carry marker-paired regions rendered from each module declaration, the admin templates render a module-owned shortcut through a generic runtime tag, the notifications adapter writes ANYMAIL instead of the base settings template, and the generated admin templates name no module. All three variants re-hashed for the changed paths (Makefile, .github/workflows/ci.yml, docker-compose.yml, templates/admin/index.html, templates/admin/app_index.html, testproject/settings/base.py, README.md). All unrelated paths, hashes, and modes remain authoritative.",
-    "sa321": "Regenerated 2026-10-29 \u2014 the generated production deployment contract becomes an artifact (SA321): railway.json runs ./predeploy.sh as deploy.preDeployCommand and gates on /ready/; start.sh keeps runtime-role provisioning and no longer runs migrations or createcachetable; the new predeploy.sh owns both privileged schema commands. urls.py gains readiness (database reached, no pending migrations), production.py exempts /ready/ from the HTTPS redirect and refuses FileSystemStorage while serving unless QUICKSCALE_ALLOW_LOCAL_MEDIA=1, and README, OPERATIONS, .env.example, Dockerfile, and tests/test_example.py describe the contract. New generated path in all three variants: predeploy.sh. Re-hashed per variant: .env.example, Dockerfile, OPERATIONS.md, README.md, railway.json, start.sh, testproject/settings/production.py, testproject/urls.py, and tests/test_example.py. All unrelated paths, hashes, and modes remain authoritative."
+    "sa321": "Regenerated 2026-10-29 \u2014 the generated production deployment contract becomes an artifact (SA321): railway.json runs ./predeploy.sh as deploy.preDeployCommand and gates on /ready/; start.sh keeps runtime-role provisioning and no longer runs migrations or createcachetable; the new predeploy.sh owns both privileged schema commands. urls.py gains readiness (database reached, no pending migrations), production.py exempts /ready/ from the HTTPS redirect and refuses FileSystemStorage while serving unless QUICKSCALE_ALLOW_LOCAL_MEDIA=1, and README, OPERATIONS, .env.example, Dockerfile, and tests/test_example.py describe the contract. New generated path in all three variants: predeploy.sh. Re-hashed per variant: .env.example, Dockerfile, OPERATIONS.md, README.md, railway.json, start.sh, testproject/settings/production.py, testproject/urls.py, and tests/test_example.py. All unrelated paths, hashes, and modes remain authoritative.",
+    "sa328-action-pins": "Regenerated 2026-10-31 \u2014 the v0.89.0 release refreshed the generated CI action pins but left this fixture stale, and the orgs module's managed tenant-isolation job now pins the same refreshed actions (checkout v7.0.1, setup-python v7.1.0, cache v6.1.0). 1 fixture hash updated per variant: .github/workflows/ci.yml (react_empty and react_selected to the v0.89.0 template bytes; react_default additionally to the orgs tenant-job pins). All unrelated paths, hashes, and modes remain authoritative."
   },
   "react_default": {
     ".dockerignore": {
@@ -126,7 +127,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "a414f4879345123df13d2ed5724d4889c975eb894b44dd193ba0a2adb53555a4"
+      "sha256": "293683f1bf98fe1fdc02a9e193e62ddd4bc73d2edbcf753fb75a79b5f8ab9dc2"
     },
     ".gitignore": {
       "mode": "644",
@@ -708,7 +709,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "594ee804a694216a37e54284dfcec55c3ecfc735b35326dc510f2d65f3c4555c"
+      "sha256": "64db92833471ddfbde4ef102687de6d8e1e6b407aba4b74691ab632708c2e23d"
     },
     ".gitignore": {
       "mode": "644",
@@ -1290,7 +1291,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "594ee804a694216a37e54284dfcec55c3ecfc735b35326dc510f2d65f3c4555c"
+      "sha256": "64db92833471ddfbde4ef102687de6d8e1e6b407aba4b74691ab632708c2e23d"
     },
     ".gitignore": {
       "mode": "644",

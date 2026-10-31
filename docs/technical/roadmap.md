@@ -122,18 +122,17 @@ note in `bap-web/docs/` and an update to its ticket here.
 
 - [ ] **SA328 — Fix the stale orgs-module action pins (F-004) before publication.**
 
-  Fix F-004 in QuickScale: set the action pins in `quickscale_modules/orgs/module.yml`
-  `project_blocks` to the refreshed SHAs `bap-web` already carries, with a test that the
-  managed tenant job matches the canonical pins. Following the publish procedure's re-entry
-  loop: commit on `v89`, re-tag `0.89.0` locally at `HEAD`, `make publish-modules` (only orgs
-  should change), delete the stale orgs seal tag and `make seal-modules VERSION=0.89.0`
-  (operator gates for the remote tag delete and pushes), rebuild the core wheel, and run
-  `quickscale update` in `bap-web`. Expected result: the regenerated tenant region is
-  byte-identical to the current one, so only the module state SHA changes. If any served
-  byte changes, push to `develop` (operator gate) and re-pass the develop acceptance; if
-  nothing served changes, record the parity evidence instead. Done when `make seal-status
-  VERSION=0.89.0` reports 12/12 up to date and `bap-web` `main` records the new orgs SHA
-  (Tier 2-fast).
+  Fix F-004 in QuickScale: `quickscale_modules/orgs/module.yml` `project_blocks` now pins
+  checkout v7.0.1, setup-python v7.1.0 and cache v6.1.0, the refreshed SHAs `bap-web`
+  carries; `quickscale_core/tests/test_manifest_project_blocks.py` binds the managed tenant
+  job to the generated workflow's canonical pins. Rendering the region for `bap_web` is
+  byte-identical to the current one, so only the orgs module state SHA changes. Remaining
+  re-entry loop (operator gates for the remote tag delete and pushes): commit on `v89`,
+  re-tag `0.89.0` locally at `HEAD`, `make publish-modules` (only orgs should change),
+  delete the stale orgs seal tag and `make seal-modules VERSION=0.89.0`, rebuild the core
+  wheel, and run `quickscale update` in `bap-web`. If any served byte changes, push to
+  `develop` and re-pass the develop acceptance. Done when `make seal-status VERSION=0.89.0`
+  reports 12/12 up to date and `bap-web` `main` records the new orgs SHA (Tier 2-fast).
 
 - [ ] **SA329 — Prepare and review the production cutover plan.**
 

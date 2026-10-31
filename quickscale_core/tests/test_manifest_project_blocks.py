@@ -9,6 +9,7 @@ execute it directly.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -30,9 +31,23 @@ config:
       validation: {}
 """
 
+_ACTION_PIN = re.compile(
+    r"^\s*(?:-\s+)?uses:\s*(?P<action>[\w.-]+/[\w.-]+)@(?P<sha>[0-9a-f]{40})"
+    r"(?:\s+#\s*(?P<version>\S+))?\s*$",
+    re.MULTILINE,
+)
+
 
 def _load(project_blocks: str):
     return load_manifest(_BASE + project_blocks, "mymod")
+
+
+def _action_pins(text: str) -> dict[str, tuple[str, str | None]]:
+    """Return each action's ``(sha, version comment)`` from a workflow text."""
+    return {
+        match.group("action"): (match.group("sha"), match.group("version"))
+        for match in _ACTION_PIN.finditer(text)
+    }
 
 
 def test_absent_section_is_none() -> None:
@@ -219,3 +234,47 @@ def test_shipped_manifests_declare_the_expected_blocks() -> None:
         "resend_api_key_env_var",
         "webhook_secret_env_var",
     )
+
+
+def test_orgs_tenant_job_pins_match_the_generated_workflow() -> None:
+    """The managed tenant job carries the generated workflow's action pins."""
+    template = (
+        _REPO_ROOT
+        / "quickscale_core"
+        / "src"
+        / "quickscale_core"
+        / "generator"
+        / "templates"
+        / "github"
+        / "workflows"
+        / "ci.yml.j2"
+    ).read_text()
+    canonical = _action_pins(template)
+
+    orgs = load_manifest(
+        (_REPO_ROOT / "quickscale_modules/orgs/module.yml").read_text(),
+        "orgs",
+    )
+    assert orgs.project_blocks is not None
+    tenant_job = orgs.project_blocks.ci_jobs or ""
+    tenant = _action_pins(tenant_job)
+    uses_lines = [
+        line
+        for line in tenant_job.splitlines()
+        if re.match(r"^\s*(?:-\s+)?uses:", line)
+    ]
+
+    assert len(tenant) == len(uses_lines), "the tenant job carries an unpinned action"
+    assert set(tenant) == {
+        "actions/cache",
+        "actions/checkout",
+        "actions/setup-python",
+        "snok/install-poetry",
+    }
+    assert set(tenant) <= set(canonical), (
+        "the generated workflow does not pin an action the tenant job uses"
+    )
+    for action, pin in tenant.items():
+        assert pin == canonical[action], (
+            f"{action} is not pinned to the generated workflow"
+        )
