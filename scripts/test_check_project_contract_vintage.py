@@ -1499,6 +1499,18 @@ def test_environment_base_ref_override_is_honoured(
 
 def test_repository_head_range_is_clean() -> None:
     """The checked-in history satisfies the gate at its own HEAD."""
+    parent = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}^"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if parent.returncode != 0:
+        # Shallow checkouts have no HEAD^; the full-history CI job
+        # "Project Contract Vintage Gate" runs this range check instead.
+        pytest.skip("HEAD^ is unavailable in this (shallow) checkout")
     result = subprocess.run(
         [sys.executable, str(CHECKER), "--base-ref", "HEAD^"],
         cwd=REPO_ROOT,

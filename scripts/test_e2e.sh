@@ -294,7 +294,7 @@ print_provenance() {
     integration_ref="${QS_E2E_INTEGRATION_REF:-}"
     if [ -z "$integration_ref" ]; then
         integration_ref="$(git -C "$PROJECT_ROOT" for-each-ref --format='%(refname:short)' 'refs/heads/v[0-9]*' 2>/dev/null \
-            | grep -E '^v[0-9]+$' | sort -V | tail -n 1)"
+            | grep -E '^v[0-9]+$' | sort -V | tail -n 1 || true)"
     fi
 
     if ! git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then

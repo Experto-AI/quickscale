@@ -127,7 +127,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "293683f1bf98fe1fdc02a9e193e62ddd4bc73d2edbcf753fb75a79b5f8ab9dc2"
+      "sha256": "a6485d58345967558adfdd000ced4e19632ab10bbf95620d379b7ff56fcc02d2"
     },
     ".gitignore": {
       "mode": "644",
@@ -709,7 +709,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "64db92833471ddfbde4ef102687de6d8e1e6b407aba4b74691ab632708c2e23d"
+      "sha256": "6994743f66217cf0eedef1e32a508574606c7e2d1f4855bc3aecede7d51d8722"
     },
     ".gitignore": {
       "mode": "644",
@@ -1291,7 +1291,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "64db92833471ddfbde4ef102687de6d8e1e6b407aba4b74691ab632708c2e23d"
+      "sha256": "6994743f66217cf0eedef1e32a508574606c7e2d1f4855bc3aecede7d51d8722"
     },
     ".gitignore": {
       "mode": "644",

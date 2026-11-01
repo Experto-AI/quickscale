@@ -464,3 +464,9 @@ steps:
     title: "Adopt the refreshed generated CI action pins"
     adoption_steps:
       - "Compare and manually adopt the current .github/workflows/ci.yml action pins: actions/checkout v7.0.1, actions/setup-python v7.1.0, actions/setup-node v7.1.0, pnpm/action-setup v6.1.0, actions/cache v6.1.0, and codecov/codecov-action v7.1.1, each pinned to its commit SHA with the version comment. The job structure, inputs, and generated-project behavior are unchanged; this is a supply-chain pin refresh."
+
+  - id: release-2026-11-01-ci-env-quoting
+    minimum: "0.89.0"
+    title: "Adopt the shellcheck-clean generated CI pnpm store step"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml pnpm store step: quote the redirect target as >> \"$GITHUB_ENV\" (shellcheck SC2086). The job structure, inputs, and generated-project behavior are unchanged."
