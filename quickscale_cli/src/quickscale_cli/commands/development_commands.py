@@ -690,11 +690,18 @@ def manage(args: tuple) -> None:
     """Run Django management commands in the backend container.
 
     With no command or --help, list the project's Django management commands,
-    grouped by app, through manage.py help.
+    grouped by app, through manage.py help. Outside a project, --help shows
+    this command's own help.
     """
+    wants_help = not args or args in {("--help",), ("-h",)}
+    if wants_help and args and not is_in_quickscale_project():
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
+        return
+
     _validate_project_and_docker()
 
-    if not args or args in {("--help",), ("-h",)}:
+    if wants_help:
         list_django_commands(_run_docker_exec_command, get_backend_container_name())
         return
 

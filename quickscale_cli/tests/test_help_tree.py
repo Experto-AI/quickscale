@@ -109,6 +109,7 @@ def test_manage_lists_django_commands(
     monkeypatch.setattr(
         development_commands, "_validate_project_and_docker", lambda: True
     )
+    monkeypatch.setattr(development_commands, "is_in_quickscale_project", lambda: True)
     monkeypatch.setattr(
         development_commands, "get_backend_container_name", lambda: "proj_backend"
     )
@@ -126,6 +127,23 @@ def test_manage_lists_django_commands(
         (("proj_backend", ["python", "manage.py", "help"]), {"capture": True}),
         (("proj_backend", ["python", "manage.py", "help"]), {"capture": True}),
     ]
+
+
+def test_manage_help_outside_a_project_shows_command_help(
+    cli_runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(development_commands, "is_in_quickscale_project", lambda: False)
+    monkeypatch.setattr(
+        development_commands,
+        "_run_docker_exec_command",
+        lambda *args, **kwargs: pytest.fail("must not reach docker"),
+    )
+
+    result = _invoke(cli_runner, ["manage", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "Usage:" in result.output
+    assert "Run Django management commands" in result.output
 
 
 def test_manage_reports_a_stopped_stack(
