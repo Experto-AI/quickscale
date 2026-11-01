@@ -2882,7 +2882,13 @@ class TestGeneratedProjectRuntimeSmoke:
             )
             assert "QUICKSCALE_ALLOW_BYPASSRLS" not in migrate_environment
             assert "QUICKSCALE_LOCAL_WHEELHOUSE" not in migrate_environment
-            assert str(REPO_ROOT) not in "\n".join(migrate_environment.values())
+            # CI runners export their own workspace path (GITHUB_*, RUNNER_*);
+            # those are host metadata, not maintainer provenance.
+            assert str(REPO_ROOT) not in "\n".join(
+                value
+                for key, value in migrate_environment.items()
+                if not key.startswith(("GITHUB_", "RUNNER_"))
+            )
             migration_result = _run_migrations(
                 project_path,
                 project_name,

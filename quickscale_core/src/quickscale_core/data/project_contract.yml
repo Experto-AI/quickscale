@@ -470,3 +470,9 @@ steps:
     title: "Adopt the shellcheck-clean generated CI pnpm store step"
     adoption_steps:
       - "Compare and manually adopt the current .github/workflows/ci.yml pnpm store step: quote the redirect target as >> \"$GITHUB_ENV\" (shellcheck SC2086). The job structure, inputs, and generated-project behavior are unchanged."
+
+  - id: release-2026-11-01-tenant-isolation-unittest-skip
+    minimum: "0.89.0"
+    title: "Adopt the Django-runner-safe tenant-isolation skip"
+    adoption_steps:
+      - "Compare and manually adopt the current tests/test_tenant_isolation.py: when the orgs module is not installed, the module raises unittest.SkipTest instead of calling pytest.skip(allow_module_level=True), so `python manage.py test` (the Django unittest loader) skips the suite instead of reporting an import error. Pytest behavior is unchanged."

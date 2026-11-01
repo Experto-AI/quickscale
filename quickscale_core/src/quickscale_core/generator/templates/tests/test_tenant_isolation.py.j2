@@ -8,6 +8,7 @@ when the role is absent.
 
 import json
 import os
+import unittest
 
 import pytest
 from decouple import config as decouple_config
@@ -19,7 +20,9 @@ from django.test import RequestFactory
 pytestmark = pytest.mark.tenant_isolation
 
 if "quickscale_modules_orgs" not in settings.INSTALLED_APPS:
-    pytest.skip("the orgs module is not installed", allow_module_level=True)
+    # unittest.SkipTest is honored by both pytest collection and the Django
+    # (unittest) test loader; pytest.skip breaks ``manage.py test``.
+    raise unittest.SkipTest("the orgs module is not installed")
 
 orgs_models = pytest.importorskip("quickscale_modules_orgs.models")
 
