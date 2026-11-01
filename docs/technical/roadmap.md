@@ -211,6 +211,38 @@ exists, default to it, and show an "organization not selected" notice instead of
 list. **Acceptance:** a fresh superuser session lists System forms and submissions under the
 restricted runtime role; non-operators still fail closed; tests cover both.
 
+### Deferred — notifications webhook, admin and generated email defaults (QuickScale)
+
+Found after SA330 (2026-11-01) on production `bap-web`; hot-patched in `bap-web`'s copy of
+the notifications module (`b3d45589`), which the next module update overwrites, so the same fix
+must land upstream. Module changes, so after SA331 per the frozen-release rule. Three defects:
+
+1. **Admin 500.** `/admin/quickscale_notifications/notificationmessage/<id>/change/` raises
+   `FieldError: Unknown field(s) (recipient_count)`. `ReadOnlyAdminMixin.get_readonly_fields`
+   (`quickscale_core/runtime/admin.py`) returns model fields plus `_extra_readonly_fields` and
+   ignores `readonly_fields`, so the computed `recipient_count` in `NotificationMessageAdmin`'s
+   fieldsets is treated as an editable form field. Fix: declare it in `_extra_readonly_fields`
+   (and consider making the mixin honor `readonly_fields`, auditing every module admin that
+   uses it).
+2. **Webhook rejects mail it did not send.** Resend posts events for every email on the
+   account (Django error mail, auth mail) and any subscribed `contact.*` events.
+   `_resolve_webhook_delivery` raises `NotificationWebhookError` (400 `webhook_payload_invalid`)
+   when no `NotificationDelivery` matches, and non-email events fail field extraction, so
+   Resend retries and can eventually disable the endpoint. Fix: acknowledge correctly signed
+   unmatched or non-`email.*` events with 200 `{"status": "ignored"}`; keep 400 for signature
+   and malformed-payload errors.
+3. **Invented email domains in generated projects.**
+   `generator/templates/project_name/settings/production.py.j2` falls back to
+   `noreply@`/`server@`/`admin@{{ project_name }}.com`. On `bap-web` `ADMINS` went to
+   `admin@bap-web.com` (no DNS), so production error mail bounced unseen. Fix: derive the
+   fallbacks from the notifications sender when the module is present, otherwise require
+   `ADMIN_EMAIL` (or leave `ADMINS` empty) instead of inventing a domain.
+
+**Acceptance:** the message change view renders under test; signed unmatched and `contact.*`
+events return 200 `ignored` while bad signatures and malformed payloads still return 400; a
+generated project contains no `{{ project_name }}.com` address; `bap-web`'s local patch is
+replaced by the upstream module on its next update (Tier 2-fast).
+
 <a id="deferred-property-portal"></a>
 
 ### Deferred — property portal (Track 1)
