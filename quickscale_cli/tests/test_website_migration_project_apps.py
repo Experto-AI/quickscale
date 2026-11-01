@@ -1985,10 +1985,15 @@ def test_multiple_carried_migrations_chain_by_module_name(
     assert 'dependencies = [("properties", "0002_carried_first")]' in second.read_text()
 
     graph = MigrationGraph()
-    for path in (recipient / "properties" / "migrations").glob("*.py"):
-        if path.name == "__init__.py":
-            continue
+    # Add every node before any edge: glob order is filesystem-dependent.
+    migration_paths = sorted(
+        path
+        for path in (recipient / "properties" / "migrations").glob("*.py")
+        if path.name != "__init__.py"
+    )
+    for path in migration_paths:
         graph.add_node(("properties", path.stem), None)
+    for path in migration_paths:
         for app_label, dependency_name in _migration_dependency_edges(path):
             graph.add_dependency(
                 None,
