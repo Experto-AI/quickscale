@@ -52,7 +52,7 @@ pre-commit = "^4.6.1"
 # Advanced code quality analysis tools
 vulture = "^2.16"        # Dead code detection
 radon = "^6.0.1"         # Complexity metrics
-pylint = "^4.0.6"        # Code duplication detection
+pylint = "^4.0.9"        # Code duplication detection
 # Type stubs
 types-pyyaml = "^6.0.12.20260724"
 django-stubs = "^6.0.7"

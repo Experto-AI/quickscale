@@ -2992,7 +2992,16 @@ class TestGeneratedProjectRuntimeSmoke:
                 (migration["app"], migration["name"])
                 for migration in runtime["applied_migrations"]
             }
-            expected_migrations = {(label, "0001_initial") for label in model_labels}
+            expected_migrations = {
+                (expected_identities[name]["label"], migration.stem)
+                for name in model_modules
+                for migration in (REPO_ROOT / "quickscale_modules" / name).glob(
+                    "src/*/migrations/[0-9][0-9][0-9][0-9]_*.py"
+                )
+            }
+            assert {
+                (label, "0001_initial") for label in model_labels
+            } <= expected_migrations
             assert disk_migrations == expected_migrations
             assert applied_migrations == expected_migrations
             assert all(

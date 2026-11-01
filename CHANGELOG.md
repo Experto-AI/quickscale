@@ -23,7 +23,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 
 ## Releases
 
-- v0.89.0 — released 2026-10-18 — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
+- v0.89.0 — released 2026-11-01 — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
   - **One module convention.** Every first-party module follows the numbered rules in
     `docs/technical/module_conventions.md` — `QUICKSCALE_<MODULE>_<NAME>` settings, one
     `quickscale_<module>` identity stem, snake_case routes, one file layout and README outline —

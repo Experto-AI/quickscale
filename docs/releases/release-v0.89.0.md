@@ -1,6 +1,6 @@
 # Release v0.89.0 — Development Maintenance
 
-**Date:** 2026-10-18 · **Status:** Prepared release artifact — the local `0.89.0` tag is not pushed; its GitHub release and the PyPI distributions do not exist yet.
+**Date:** 2026-11-01
 
 ## Summary
 
