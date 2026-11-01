@@ -141,6 +141,19 @@ note in `bap-web/docs/` and an update to its ticket here.
   and a clean install, then close out (merge `v89` to `main`). PyPI publication is
   irreversible (Tier 2-full).
 
+  Progress (2026-11-01): the sealed state matches the shipped core and the recorded module
+  identities. The shipped core wheel (`sha256 952c6460…`) contains 286 files byte-identical
+  to `HEAD`; the 12 remote split branches equal their local branches and `0.89.0` seal tags,
+  and `bap-web`'s recorded module commits match those tips. The project-local notifications
+  hot-patch (`b3d45589`, recorded under *Deferred — notifications webhook, admin and generated
+  email defaults*) is not part of the seal and is excluded from this comparison. The
+  CHANGELOG line already reads as a published release; the release note stays "Prepared"
+  until the push. The local `0.89.0` tag is at `294ce230`, 11 commits behind `HEAD`; the
+  intervening commits change only this roadmap and its consistency test, so the product tree
+  matches. Remaining operator gates: finalize the release note, re-point the tag to `HEAD`,
+  push it (triggers PyPI), verify the release and a clean install, then merge `v89` to
+  `main`.
+
 - [ ] **SA332 — Retire the old production database and exposed credentials.**
 
   After SA330 acceptance and a separate operator gate, execute § S4 step 6:
