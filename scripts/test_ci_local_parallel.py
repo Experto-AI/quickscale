@@ -356,8 +356,21 @@ def _assert_pids_dead(events: list[str], *, target: str | None = None) -> None:
         if target is not None and parts[1] != target:
             continue
         pid = int(parts[-1])
-        with subprocess.Popen(["kill", "-0", str(pid)]) as probe:
-            assert probe.wait() != 0, f"{target or 'worker'} {pid} was left running"
+        # A signalled child can take a moment to exit, and a reparented zombie
+        # still answers `kill -0`; poll briefly and treat zombies as dead.
+        deadline = time.monotonic() + 5
+        while _pid_alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _pid_alive(pid), f"{target or 'worker'} {pid} was left running"
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        with subprocess.Popen(["kill", "-0", str(pid)], stderr=subprocess.DEVNULL) as probe:
+            return probe.wait() == 0
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
 
 
 def test_ci_lint_typecheck_sites_require_devtools() -> None:
