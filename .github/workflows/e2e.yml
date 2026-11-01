@@ -162,7 +162,8 @@ jobs:
       # the generated project resolves quickscale-core from this wheelhouse.
       run: |
         mkdir -p /tmp/qs_wheelhouse
-        (cd quickscale_core && poetry build --format wheel --output /tmp/qs_wheelhouse)
+        scripts/build_core_wheel.sh
+        cp quickscale_core/dist/quickscale_core-*.whl /tmp/qs_wheelhouse/
 
     - name: Generate test project
       run: |
