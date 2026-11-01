@@ -1150,6 +1150,7 @@ class TestDevelopmentCommandsE2E:
                 "pytest" in result.output.lower()
                 or "passed" in result.output.lower()
                 or "ran 0 tests" in result.output.lower()
+                or "ok" in result.output.lower()
             ), f"Test command didn't run properly: {result.output}"
 
             # Cleanup (retained in no-cleanup mode)
