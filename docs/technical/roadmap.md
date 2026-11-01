@@ -243,6 +243,22 @@ events return 200 `ignored` while bad signatures and malformed payloads still re
 generated project contains no `{{ project_name }}.com` address; `bap-web`'s local patch is
 replaced by the upstream module on its next update (Tier 2-fast).
 
+### Deferred — React shell route passes a positional argument (QuickScale, core runtime)
+
+Found after SA330 (2026-11-01): production `bap-web` `/settings` and `/profile` return 500
+`TypeError: react_shell_view() takes 1 positional argument but 2 were given`.
+`compose_managed_urlpatterns` (`quickscale_core/runtime/urls.py`) registers
+`re_path(r"^(profile|settings)/?$", react_shell_view)`; the capturing group passes the matched
+segment positionally. The generated `TemplateView.as_view()` shell tolerates it, but a project
+that owns a function view `def react_shell_view(request)` (as `bap-web` does) crashes. Core change,
+so after SA331 per the frozen-release rule.
+
+Fix (Tier 1): use a non-capturing group `r"^(?:profile|settings)/?$"` and audit the other shell
+`re_path` routes (core and manifest `spa_routes` emitted by `module_wiring.py`) for capturing
+groups. **Acceptance:** a test resolves `/settings` and `/profile` against a request-only function
+view and gets 200; no shell route passes positional arguments; `bap-web` picks up the fix by
+updating QuickScale, with no project-side change.
+
 <a id="deferred-property-portal"></a>
 
 ### Deferred — property portal (Track 1)
