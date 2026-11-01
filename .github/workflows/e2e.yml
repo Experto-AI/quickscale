@@ -157,12 +157,19 @@ jobs:
       run: |
         poetry install
 
+    - name: Build local quickscale-core wheel
+      # The release under test is unpublished until the tag's publish run, so
+      # the generated project resolves quickscale-core from this wheelhouse.
+      run: |
+        mkdir -p /tmp/qs_wheelhouse
+        (cd quickscale_core && poetry build --format wheel --output /tmp/qs_wheelhouse)
+
     - name: Generate test project
       run: |
         cd /tmp
         printf '\n1\n\ny\ny\nn\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale plan test_docker_project
         cd /tmp/test_docker_project
-        printf 'y\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale apply quickscale.yml --no-docker
+        printf 'y\ny\n' | QUICKSCALE_LOCAL_WHEELHOUSE=/tmp/qs_wheelhouse poetry -P $GITHUB_WORKSPACE run quickscale apply quickscale.yml --no-docker
 
     - name: Verify Dockerfile exists
       run: |
